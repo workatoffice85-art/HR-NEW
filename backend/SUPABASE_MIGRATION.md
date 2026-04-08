@@ -67,9 +67,13 @@ Set the frontend API URL in `assets/app-config.js`:
 
 ```js
 window.APP_CONFIG = {
-  API_URL: "https://<your-project-ref>.supabase.co/functions/v1/hr-api"
+  API_URL: "https://<your-project-ref>.supabase.co/functions/v1/hr-api",
+  SUPABASE_ANON_KEY: "<your-anon-key>"
 };
 ```
+
+If your function enforces JWT verification (default), missing this key will cause:
+`Missing authorization header`
 
 ## Important notes
 

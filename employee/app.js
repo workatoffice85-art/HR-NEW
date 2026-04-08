@@ -1,6 +1,26 @@
 const API_URL =
     (window.APP_CONFIG && window.APP_CONFIG.API_URL) ||
     'https://script.google.com/macros/s/AKfycbwNhaRKDP-7M4dXSQend8RbYPkXRgs5nzN0-BmNzxEO8IkBN9lt6KDtJCdOqpovhJEY1Q/exec';
+const SUPABASE_ANON_KEY =
+    (window.APP_CONFIG && window.APP_CONFIG.SUPABASE_ANON_KEY) ||
+    '';
+const HAS_SUPABASE_ANON_KEY =
+    !!SUPABASE_ANON_KEY && SUPABASE_ANON_KEY.indexOf('<') !== 0;
+const USE_SUPABASE_AUTH_HEADERS = API_URL.indexOf('supabase.co/functions/v1/') !== -1;
+
+function apiFetch(url, options) {
+    const requestOptions = options || {};
+    if (!USE_SUPABASE_AUTH_HEADERS || !HAS_SUPABASE_ANON_KEY) {
+        return fetch(url, requestOptions);
+    }
+
+    const headers = new Headers(requestOptions.headers || {});
+    if (!headers.has('apikey')) headers.set('apikey', SUPABASE_ANON_KEY);
+    if (!headers.has('Authorization')) headers.set('Authorization', `Bearer ${SUPABASE_ANON_KEY}`);
+
+    return fetch(url, { ...requestOptions, headers });
+}
+
 let currentUser = JSON.parse(localStorage.getItem('empSession'));
 let currentSite = null;
 let lastLocation = null;
@@ -43,7 +63,7 @@ async function login() {
     document.querySelector('#loginSection button').innerText = 'جاري التحقق...';
 
     try {
-        const response = await fetch(API_URL, {
+        const response = await apiFetch(API_URL, {
             method: 'POST',
             body: JSON.stringify({ action: 'login', identifier: email, password: pass }),
             headers: { 'Content-Type': 'text/plain' }
@@ -72,7 +92,7 @@ async function requestOTP() {
 
     document.getElementById('btnRequestOTP').innerText = 'جاري الإرسال...';
     try {
-       const res = await fetch(API_URL, {
+       const res = await apiFetch(API_URL, {
             method:'POST', body: JSON.stringify({action:'sendOTP', email: tempEmail, phone: tempPhone}), headers:{'Content-Type':'text/plain'}
        });
        const result = await res.json();
@@ -95,7 +115,7 @@ async function verifyOTP() {
     
     document.getElementById('btnVerifyOTP').innerText = 'جاري...';
     try {
-       const res = await fetch(API_URL, {
+       const res = await apiFetch(API_URL, {
             method:'POST', body: JSON.stringify({action:'verifyOTP', email: tempEmail, code: code}), headers:{'Content-Type':'text/plain'}
        });
        const result = await res.json();
@@ -161,7 +181,7 @@ async function completeRegistration() {
     };
 
     try {
-        const res = await fetch(API_URL, {
+        const res = await apiFetch(API_URL, {
             method:'POST', body: JSON.stringify(payload), headers:{'Content-Type':'text/plain'}
         });
         const result = await res.json();
@@ -196,7 +216,7 @@ async function initSystem() {
     
     // Step 1: Load Sites
     try {
-        const response = await fetch(`${API_URL}?action=getSites&employeeId=${encodeURIComponent(currentUser.id)}`);
+        const response = await apiFetch(`${API_URL}?action=getSites&employeeId=${encodeURIComponent(currentUser.id)}`);
         const result = await response.json();
         if (result.success) {
             sitesData = result.data;
@@ -239,7 +259,7 @@ async function initSystem() {
 
 async function checkCurrentStatus() {
     try {
-        const res = await fetch(`${API_URL}?action=getAttendance&employeeId=${currentUser.id}`);
+        const res = await apiFetch(`${API_URL}?action=getAttendance&employeeId=${currentUser.id}`);
         const result = await res.json();
         if (result.success && result.data.length > 0) {
             const lastRecord = result.data[result.data.length - 1];
@@ -428,7 +448,7 @@ async function handleCheckIn() {
     };
 
     try {
-        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'text/plain' } });
+        const res = await apiFetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'text/plain' } });
         const result = await res.json();
         if(result.success) {
             alert(result.message);
@@ -449,7 +469,7 @@ async function handleCheckOut() {
         faceDescriptor: JSON.stringify(currentFaceDescriptor)
     };
     try {
-        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'text/plain' } });
+        const res = await apiFetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'text/plain' } });
         const result = await res.json();
         if(result.success) {
             alert(result.message);
@@ -485,7 +505,7 @@ async function submitSiteRequest() {
     // Validate that the link matches the current location (within 700m)
     if (link) {
         try {
-            const res = await fetch(API_URL, {
+            const res = await apiFetch(API_URL, {
                 method: 'POST', body: JSON.stringify({ action: 'resolveMapLink', link: link }), headers:{'Content-Type':'text/plain'}
             });
             const result = await res.json();
@@ -510,7 +530,7 @@ async function submitSiteRequest() {
         note: note
     };
     try {
-        const res = await fetch(API_URL, {
+        const res = await apiFetch(API_URL, {
             method: 'POST',
             body: JSON.stringify(payload),
             headers: { 'Content-Type': 'text/plain' }
@@ -544,7 +564,7 @@ async function fetchMyReports() {
     document.getElementById('loader').classList.remove('hidden');
     try {
         // Fetch only this employee's attendance using GET param
-        const res = await fetch(`${API_URL}?action=getAttendance&employeeId=${currentUser.id}`);
+        const res = await apiFetch(`${API_URL}?action=getAttendance&employeeId=${currentUser.id}`);
         const result = await res.json();
         if(result.success) {
             renderMyReports(result.data, monthVal);
