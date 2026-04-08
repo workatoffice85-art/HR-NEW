@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>بوابة الموظف | الحضور والانصراف</title>
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/global.css?v=1.1">
+    <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <style>
+        .portal-container {
+            max-width: 500px;
+            width: 100%;
+            margin: auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .camera-container {
+            position: relative;
+            width: 100%;
+            border-radius: 16px;
+            overflow: hidden;
+            margin-bottom: 20px;
+            background: #000;
+            display: flex;
+            justify-content: center;
+        }
+
+        #videoElement,
+        #regVideo {
+            width: 100%;
+            max-height: 350px;
+            object-fit: cover;
+        }
+
+        #overlay,
+        #regCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        #statusMessage,
+        #regStatusMessage {
+            text-align: center;
+            margin-top: 15px;
+            font-weight: bold;
+            padding: 10px;
+            border-radius: 8px;
+        }
+
+        .success-text {
+            color: var(--secondary);
+            background: rgba(16, 185, 129, 0.1);
+        }
+
+        .error-text {
+            color: var(--danger);
+            background: rgba(239, 68, 68, 0.1);
+        }
+
+        .link-text {
+            color: var(--secondary);
+            cursor: pointer;
+            text-decoration: underline;
+            margin-top: 15px;
+            display: block;
+            text-align: center;
+        }
+
+        .action-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .action-btn {
+            padding: 15px;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            border: none;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .check-in-btn {
+            background: var(--secondary);
+        }
+
+        .check-out-btn {
+            background: var(--danger);
+        }
+
+        .check-in-btn:disabled,
+        .check-out-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="portal-container">
+        <!-- 1. Login Section -->
+        <div id="loginSection" class="glass-card fade-in">
+            <div class="header">
+                <h2>تسجيل الدخول للموظفين</h2>
+            </div>
+            <div class="input-group">
+                <label>البريد الإلكتروني أو رقم الهاتف</label>
+                <input type="text" id="loginIdentifier" placeholder="user@company.com أو 010xxxxxxxx">
+            </div>
+            <div class="input-group">
+                <label>كلمة المرور</label>
+                <input type="password" id="loginPass" placeholder="******">
+            </div>
+            <button class="btn-primary" onclick="login()">دخول</button>
+            <div id="loginError" class="error-text hidden" style="margin-top:15px; padding:10px; text-align:center;">
+            </div>
+            <span class="link-text" onclick="showSection('otpSection')">أنت موظف جديد؟ سجل حسابك الآن</span>
+        </div>
+
+        <!-- 2. Request OTP Section (For Registration) -->
+        <div id="otpSection" class="glass-card hidden fade-in">
+            <div class="header">
+                <h2>تسجيل مستخدم جديد</h2>
+                <p style="color:var(--text-muted)">أدخل بريدك الإلكتروني ليصلك كود التفعيل</p>
+            </div>
+            <div class="input-group">
+                <label>البريد الإلكتروني</label>
+                <input type="email" id="regEmail" placeholder="user@company.com">
+            </div>
+            <div class="input-group">
+                <label>رقم الهاتف</label>
+                <input type="text" id="regPhone" placeholder="010xxxxxxxx">
+            </div>
+            <button class="btn-primary" onclick="requestOTP()" id="btnRequestOTP">إرسال كود التحقق</button>
+            <div id="otpError" class="error-text hidden" style="margin-top:15px; padding:10px; text-align:center;">
+            </div>
+            <span class="link-text" onclick="showSection('loginSection')">لديك حساب بالفعل؟ سجل دخول</span>
+        </div>
+
+        <!-- 3. Verify OTP Section -->
+        <div id="verifyOTPSection" class="glass-card hidden fade-in">
+            <div class="header">
+                <h2>تأكيد الإيميل</h2>
+                <p style="color:var(--text-muted)">راجع بريدك الإلكتروني وأدخل الكود المكون من 4 أرقام</p>
+            </div>
+            <div class="input-group">
+                <label>رمز التحقق (OTP)</label>
+                <input type="text" id="otpCode" placeholder="1234">
+            </div>
+            <button class="btn-primary" onclick="verifyOTP()" id="btnVerifyOTP">تأكيد الرمز</button>
+            <div id="verifyError" class="error-text hidden" style="margin-top:15px; padding:10px; text-align:center;">
+            </div>
+        </div>
+
+        <!-- 4. Registration Details Section -->
+        <div id="registrationSection" class="glass-card hidden fade-in">
+            <div class="header">
+                <h2>استكمال بيانات الحساب</h2>
+            </div>
+            <div class="input-group">
+                <label>الاسم بالكامل</label>
+                <input type="text" id="regName" placeholder="أحمد محمد">
+            </div>
+            <div class="input-group">
+                <label>كلمة المرور (التي ستستخدمها لاحقاً)</label>
+                <input type="password" id="regPass" placeholder="******">
+            </div>
+
+            <div style="margin-bottom: 15px; text-align: center;">
+                <label style="display:block; margin-bottom:10px;">التقط بصمة الوجه <small>(هام جداً
+                        للحضور)</small></label>
+                <div class="camera-container" style="height: 250px;">
+                    <video id="regVideo" autoplay muted playsinline></video>
+                    <canvas id="regCanvas"></canvas>
+                </div>
+                <button class="btn-primary" style="background:var(--secondary); width:80%"
+                    onclick="captureFaceRegistration()">التقاط البصمة</button>
+                <p id="regStatusMessage" class="hidden"></p>
+            </div>
+
+            <button class="btn-primary" onclick="completeRegistration()" id="btnCompleteReg">حفظ وإنشاء الحساب</button>
+            <div id="regError" class="error-text hidden" style="margin-top:15px; padding:10px; text-align:center;">
+            </div>
+        </div>
+
+        <!-- 5. Dashboard Section -->
+        <div id="dashboardSection" class="glass-card hidden">
+            <div class="header">
+                <h2 id="welcomeText">مرحباً</h2>
+                <p id="siteText" style="color:var(--text-muted); font-size:0.9rem;"></p>
+            </div>
+
+            <div id="loader" class="loader hidden"></div>
+
+            <div class="camera-container">
+                <video id="videoElement" autoplay muted playsinline></video>
+                <canvas id="overlay"></canvas>
+            </div>
+
+            <div id="statusMessage">جاري تهيئة النظام...</div>
+
+            <!-- Timer Display -->
+            <div id="timerContainer" class="hidden"
+                style="margin-bottom: 20px; background: rgba(59, 130, 246, 0.1); padding: 15px; border-radius: 12px; border: 1px solid rgba(59, 130, 246, 0.3);">
+                <div style="font-size: 0.9rem; color: var(--secondary); margin-bottom: 5px;">وقت العمل الحالي</div>
+                <div id="workTimer"
+                    style="font-size: 2.2rem; font-weight: bold; font-family: monospace; letter-spacing: 2px;">00:00:00
+                </div>
+            </div>
+
+            <div class="action-buttons">
+                <button id="btnCheckIn" class="action-btn check-in-btn hidden" disabled onclick="handleCheckIn()">
+                    تسجيل حضور
+                </button>
+                <button id="btnCheckOut" class="action-btn check-out-btn hidden" disabled onclick="handleCheckOut()">
+                    تسجيل انصراف
+                </button>
+            </div>
+
+            <!-- Request Site Button (Hidden by default) -->
+            <button id="btnRequestSite" class="btn-primary hidden"
+                style="margin-top:15px; background:var(--warning); color:#000;" onclick="openRequestModal()">
+                📍 طلب تسجيل هذا الموقع كفرع عمل
+            </button>
+
+            <button class="btn-primary" style="margin-top:20px; background:var(--primary);"
+                onclick="showMyReports()">تقارير الحضور الخاصة بي</button>
+            <button class="btn-primary"
+                style="margin-top:10px; background:transparent; border:1px solid rgba(255,255,255,0.2)"
+                onclick="logout()">تسجيل خروج</button>
+        </div>
+
+        <div id="requestSiteModal" class="modal hidden"
+            style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); display:flex; align-items:center; justify-content:center; z-index:1000;">
+            <div id="requestSiteCard" class="glass-card" style="width:90%; max-width:400px; padding:25px;">
+                <h3 style="margin-bottom:15px;">طلب تسجيل موقع جديد</h3>
+                <p style="font-size:0.9rem; color:var(--text-muted); margin-bottom:15px;">سيتم إرسال إحداثياتك الحالية
+                    للإدارة للمراجعة.</p>
+                <div class="input-group">
+                    <label>اسم الموقع المقترح (مثال: موقع العميل X)</label>
+                    <input type="text" id="suggestedSiteName" placeholder="أدخل اسم الموقع...">
+                </div>
+                <div class="input-group">
+                    <label>رابط الموقع على الخريطة (اختياري)</label>
+                    <input type="text" id="suggestedSiteLink" placeholder="مثال: https://maps.app.goo.gl/...">
+                </div>
+                <div class="input-group">
+                    <label>ملاحظة الانتقالات (اختياري)</label>
+                    <textarea id="suggestedSiteNote" placeholder="اكتب تفاصيل الانتقالات أو سبب الطلب..." rows="3"></textarea>
+                </div>
+                <div style="display:flex; gap:10px;">
+                    <button class="btn-primary" onclick="submitSiteRequest()">إرسال الطلب</button>
+                    <button class="btn-danger" style="background:transparent; border:1px solid var(--danger);"
+                        onclick="closeRequestModal()">إلغاء</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 6. My Reports Section -->
+        <div id="myReportsSection" class="glass-card hidden fade-in">
+            <div class="header">
+                <h2>تقارير الحضور الخاصة بي</h2>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-bottom: 20px;">
+                <input type="month" id="empReportMonth"
+                    style="padding: 8px; border-radius: 6px; background: rgba(0,0,0,0.2); color: #fff; border: 1px solid var(--card-border);"
+                    onchange="fetchMyReports()">
+                <button class="btn-primary" style="width: auto; padding: 8px 15px;"
+                    onclick="showSection('dashboardSection')">عودة للرئيسية</button>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;">
+                <div style="background: rgba(30, 41, 59, 0.8); padding: 15px; border-radius: 8px; text-align: center;">
+                    <h4 style="margin:0; color:var(--text-muted)">أيام الحضور</h4>
+                    <h2 style="margin:5px 0; color:var(--secondary)" id="empTotalPresent">0</h2>
+                </div>
+                <div style="background: rgba(30, 41, 59, 0.8); padding: 15px; border-radius: 8px; text-align: center;">
+                    <h4 style="margin:0; color:var(--text-muted)">أيام الغياب</h4>
+                    <h2 style="margin:5px 0; color:var(--danger)" id="empTotalAbsent">0</h2>
+                </div>
+                <div style="background: rgba(30, 41, 59, 0.8); padding: 15px; border-radius: 8px; text-align: center;">
+                    <h4 style="margin:0; color:var(--text-muted)">مرات التأخير</h4>
+                    <h2 style="margin:5px 0; color:var(--primary)" id="empTotalLates">0</h2>
+                </div>
+                <div style="background: rgba(30, 41, 59, 0.8); padding: 15px; border-radius: 8px; text-align: center;">
+                    <h4 style="margin:0; color:var(--text-muted)">إجمالي الساعات</h4>
+                    <h2 style="margin:5px 0; color:#eab308" id="empTotalHours">0</h2>
+                </div>
+                <div style="background: rgba(79, 70, 229, 0.2); padding: 15px; border-radius: 8px; text-align: center; border:1px solid var(--primary);">
+                    <h4 style="margin:0; color:var(--primary)">إجمالي بدلات الانتقال</h4>
+                    <h2 style="margin:5px 0; color:#fff" id="empTotalTransport">0 ج.م</h2>
+                </div>
+            </div>
+
+            <div style="max-height: 300px; overflow-y: auto;">
+                <table style="width: 100%; border-collapse: collapse; text-align: right; font-size: 0.9rem;">
+                    <thead>
+                        <tr style="border-bottom: 1px solid var(--card-border);">
+                            <th style="padding: 10px;">التاريخ</th>
+                            <th style="padding: 10px;">حضور</th>
+                            <th style="padding: 10px;">انصراف</th>
+                            <th style="padding: 10px;">البدل</th>
+                            <th style="padding: 10px;">الحالة</th>
+                        </tr>
+                    </thead>
+                    <tbody id="myReportsTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="../assets/app-config.js"></script>
+    <script src="app.js?v=1.1"></script>
+</body>
+
+</html>

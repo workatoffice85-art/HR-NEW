@@ -1,0 +1,78 @@
+﻿# Supabase Backend Migration Guide
+
+This project originally used Google Apps Script as backend. A Supabase starter backend now exists in this repo.
+
+## What was added
+
+- `supabase/migrations/202604080001_init_hr_schema.sql`
+  - Creates the core tables: `employees`, `sites`, `attendance`, `settings`, `site_requests`, `otp_codes`.
+- `supabase/functions/hr-api/index.ts`
+  - Edge Function router that keeps the same `action` API contract used by the current frontend.
+
+## Supported actions in `hr-api`
+
+### GET
+
+- `getEmployees`
+- `getSites`
+- `getAttendance`
+- `getSettings`
+- `getSiteRequests`
+
+### POST
+
+- `login`
+- `sendOTP`
+- `verifyOTP`
+- `resolveMapLink`
+- `saveEmployee`
+- `updateEmployee`
+- `deleteEmployee`
+- `saveSite`
+- `updateSite`
+- `deleteSite`
+- `updateSettings`
+- `addSiteRequest`
+- `approveSiteRequest`
+- `rejectSiteRequest`
+- `addAttendance`
+- `checkoutAttendance`
+- `createTriggers` (stub)
+- `sendManualReport` (stub)
+- `sendEmployeeDetailedReport` (stub)
+
+## Deploy steps
+
+1. Create a Supabase project.
+2. Run SQL migration in Supabase SQL Editor:
+   - `supabase/migrations/202604080001_init_hr_schema.sql`
+3. Deploy the Edge Function:
+
+```bash
+supabase functions deploy hr-api
+```
+
+4. Set environment variables for the function:
+
+```bash
+supabase secrets set APP_TIMEZONE=Africa/Cairo
+supabase secrets set OTP_DEBUG_MODE=true
+```
+
+`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are provided automatically in Supabase Edge Functions.
+
+## Frontend endpoint config
+
+Set the frontend API URL in `assets/app-config.js`:
+
+```js
+window.APP_CONFIG = {
+  API_URL: "https://<your-project-ref>.supabase.co/functions/v1/hr-api"
+};
+```
+
+## Important notes
+
+- Passwords are currently handled in plain text to preserve compatibility with the existing frontend flow.
+- OTP delivery is currently a DB-based placeholder; in debug mode, code is returned in response.
+- Email report sending (`sendManualReport`, `sendEmployeeDetailedReport`) is not implemented yet in this starter.

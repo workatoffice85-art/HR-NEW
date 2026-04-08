@@ -1,0 +1,6 @@
+﻿# Optional local Supabase CLI config.
+# Fill project_id after running `supabase link`.
+project_id = ""
+
+[functions.hr-api]
+verify_jwt = false
