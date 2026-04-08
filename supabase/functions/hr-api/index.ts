@@ -17,6 +17,9 @@ const AUTO_MAX_METERS = 700;
 const AUTO_META = "auto_2min_700m";
 const APP_TIMEZONE = Deno.env.get("APP_TIMEZONE") ?? "Africa/Cairo";
 const OTP_DEBUG = (Deno.env.get("OTP_DEBUG_MODE") ?? "true").toLowerCase() === "true";
+const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
+const OTP_FROM_EMAIL = Deno.env.get("OTP_FROM_EMAIL") ?? "";
+const OTP_FROM_NAME = Deno.env.get("OTP_FROM_NAME") ?? "HR System";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -600,6 +603,44 @@ async function loginAction(payload: JsonRec): Promise<JsonRec> {
   };
 }
 
+async function sendOtpEmail(email: string, code: string): Promise<{ sent: boolean; warning?: string }> {
+  if (!RESEND_API_KEY || !OTP_FROM_EMAIL) {
+    return { sent: false, warning: "Email provider is not configured (RESEND_API_KEY / OTP_FROM_EMAIL)." };
+  }
+
+  const from = `${OTP_FROM_NAME} <${OTP_FROM_EMAIL}>`;
+  const subject = "Your OTP verification code";
+  const text = `Your OTP code is ${code}. It will expire in 10 minutes.`;
+  const html =
+    "<div style=\"font-family:Segoe UI,Arial,sans-serif;line-height:1.6;\">" +
+    "<h2 style=\"margin:0 0 12px;\">OTP Verification</h2>" +
+    `<p style=\"margin:0 0 8px;\">Your verification code is: <strong style=\"font-size:20px;\">${code}</strong></p>` +
+    "<p style=\"margin:0;color:#555;\">This code expires in 10 minutes.</p>" +
+    "</div>";
+
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from,
+      to: [email],
+      subject,
+      text,
+      html,
+    }),
+  });
+
+  if (!res.ok) {
+    const details = await res.text();
+    throw new Error(`OTP email send failed (${res.status}): ${details}`);
+  }
+
+  return { sent: true };
+}
+
 async function sendOtpAction(payload: JsonRec): Promise<JsonRec> {
   const email = emailNorm(payload.email);
   const phone = phoneNorm(payload.phone);
@@ -620,10 +661,26 @@ async function sendOtpAction(payload: JsonRec): Promise<JsonRec> {
   );
   if (upsertError) throw upsertError;
 
-  const out: JsonRec = {
-    success: true,
-    message: "OTP generated. Connect an email provider in this Edge Function to deliver it.",
-  };
+  let emailSent = false;
+  let warning = "";
+  try {
+    const emailResult = await sendOtpEmail(email, code);
+    emailSent = emailResult.sent;
+    warning = String(emailResult.warning || "");
+  } catch (e) {
+    warning = errText(e);
+    if (!OTP_DEBUG) throw e;
+  }
+
+  const out: JsonRec = { success: true, emailSent };
+  if (emailSent) {
+    out.message = "OTP has been sent to your email.";
+  } else {
+    out.message = OTP_DEBUG
+      ? "OTP generated (debug mode). Email delivery is not configured."
+      : "OTP generated but email delivery failed. Please contact support.";
+  }
+  if (warning) out.warning = warning;
   if (OTP_DEBUG) out.debugCode = code;
   return out;
 }

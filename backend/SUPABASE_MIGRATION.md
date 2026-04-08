@@ -57,6 +57,9 @@ supabase functions deploy hr-api
 ```bash
 supabase secrets set APP_TIMEZONE=Africa/Cairo
 supabase secrets set OTP_DEBUG_MODE=true
+supabase secrets set RESEND_API_KEY=<your_resend_api_key>
+supabase secrets set OTP_FROM_EMAIL=<verified_sender@your-domain.com>
+supabase secrets set OTP_FROM_NAME="HR System"
 ```
 
 `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are provided automatically in Supabase Edge Functions.
@@ -78,5 +81,6 @@ If your function enforces JWT verification (default), missing this key will caus
 ## Important notes
 
 - Passwords are currently handled in plain text to preserve compatibility with the existing frontend flow.
-- OTP delivery is currently a DB-based placeholder; in debug mode, code is returned in response.
+- OTP delivery now supports Resend from the Edge Function.
+- If `RESEND_API_KEY` / `OTP_FROM_EMAIL` are missing, OTP can still be generated and returned as `debugCode` when `OTP_DEBUG_MODE=true`.
 - Email report sending (`sendManualReport`, `sendEmployeeDetailedReport`) is not implemented yet in this starter.

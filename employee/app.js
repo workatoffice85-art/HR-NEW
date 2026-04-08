@@ -97,6 +97,12 @@ async function requestOTP() {
        });
        const result = await res.json();
        if(result.success) {
+           if (result.warning) {
+               console.warn('OTP warning:', result.warning);
+           }
+           if (result.debugCode) {
+               alert('Debug OTP code: ' + result.debugCode);
+           }
            showSection('verifyOTPSection');
        } else {
            showError('otpError', result.message);
