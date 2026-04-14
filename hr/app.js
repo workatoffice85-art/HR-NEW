@@ -1139,6 +1139,53 @@ async function saveSettings() {
     document.getElementById('loader').classList.add('hidden');
 }
 
+async function triggerSmartSync() {
+    const syncBtn = document.getElementById('btnSyncDB');
+    const loader = document.getElementById('loader');
+
+    if (!syncBtn) return;
+
+    const originalText = syncBtn.innerText;
+    syncBtn.disabled = true;
+    syncBtn.innerText = "Syncing...";
+    if (loader) loader.classList.remove('hidden');
+
+    try {
+        const res = await fetch('/api/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        let result = {};
+        try {
+            result = await res.json();
+        } catch (_) {
+            result = {};
+        }
+
+        if (!res.ok || !result.success) {
+            throw new Error(result.message || "Smart sync failed");
+        }
+
+        const stats = result.stats || {};
+        alert(
+            `Smart sync completed.\n` +
+            `Employees added: ${stats.employeesAdded || 0}\n` +
+            `Sites added: ${stats.sitesAdded || 0}\n` +
+            `Attendance rows added: ${stats.attendanceAdded || 0}`
+        );
+
+        await initDashboard(true);
+    } catch (e) {
+        console.error("Smart sync error:", e);
+        alert("Smart sync failed: " + (e.message || "Unexpected error"));
+    } finally {
+        syncBtn.disabled = false;
+        syncBtn.innerText = originalText;
+        if (loader) loader.classList.add('hidden');
+    }
+}
+
 async function setupTriggers() {
     if(!confirm("سيتم الآن تفعيل مواعيد إرسال التقارير التلقائية. هل أنت متأكد؟")) return;
     document.getElementById('loader').classList.remove('hidden');
