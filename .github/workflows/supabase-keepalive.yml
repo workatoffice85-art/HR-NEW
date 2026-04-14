@@ -1,0 +1,46 @@
+name: Supabase Keep Alive
+
+on:
+  schedule:
+    # Every 6 hours (UTC)
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Ping Supabase REST API
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEEPALIVE_KEY: ${{ secrets.SUPABASE_KEEPALIVE_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_KEEPALIVE_KEY:-}" ]; then
+            echo "Missing required secrets: SUPABASE_URL and/or SUPABASE_KEEPALIVE_KEY"
+            exit 1
+          fi
+
+          ENDPOINT="${SUPABASE_URL%/}/rest/v1/settings?select=key&limit=1"
+          echo "Pinging: ${ENDPOINT}"
+
+          STATUS_CODE=$(curl -sS -o /tmp/keepalive_response.txt -w "%{http_code}" \
+            -H "apikey: ${SUPABASE_KEEPALIVE_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_KEEPALIVE_KEY}" \
+            -H "Accept: application/json" \
+            "${ENDPOINT}")
+
+          echo "HTTP status: ${STATUS_CODE}"
+          echo "Response preview:"
+          head -c 500 /tmp/keepalive_response.txt || true
+          echo
+
+          if [ "${STATUS_CODE}" -lt 200 ] || [ "${STATUS_CODE}" -ge 300 ]; then
+            echo "Supabase keep-alive request failed"
+            exit 1
+          fi
+
+          echo "Supabase keep-alive successful"

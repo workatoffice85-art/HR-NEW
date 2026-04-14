@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://ofegdbbyanyglqewbdlm.supabase.co';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9mZWdkYmJ5YW55Z2xxZXdiZGxtIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjEzOTAzMywiZXhwIjoyMDkxNzE1MDMzfQ.lw2wyo5_U_hXZSebLScV1fqt7eRHPOfFi7Z4XKnswzU';
 const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwNhaRKDP-7M4dXSQend8RbYPkXRgs5nzN0-BmNzxEO8IkBN9lt6KDtJCdOqpovhJEY1Q/exec';
+const FACE_MATCH_THRESHOLD = 0.6;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -15,6 +16,61 @@ function getDistance(lat1, lon1, lat2, lon2) {
   const dl = (lon2-lon1) * Math.PI/180;
   const a = Math.sin(df/2)**2 + Math.cos(f1)*Math.cos(f2) * Math.sin(dl/2)**2;
   return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function parseFaceDescriptorValue(rawValue) {
+    if (rawValue === null || rawValue === undefined) return null;
+
+    const source = typeof rawValue === 'string' ? JSON.parse(rawValue) : rawValue;
+    if (!Array.isArray(source) || source.length === 0) {
+        throw new Error('Invalid face descriptor format');
+    }
+
+    const normalized = source.map((value) => Number(value));
+    if (normalized.some((value) => !Number.isFinite(value))) {
+        throw new Error('Invalid numeric values in face descriptor');
+    }
+
+    return normalized;
+}
+
+function getFaceDistance(descriptorA, descriptorB) {
+    if (!descriptorA || !descriptorB || descriptorA.length !== descriptorB.length) {
+        return Number.POSITIVE_INFINITY;
+    }
+
+    let sumSquares = 0;
+    for (let i = 0; i < descriptorA.length; i += 1) {
+        const diff = descriptorA[i] - descriptorB[i];
+        sumSquares += diff * diff;
+    }
+    return Math.sqrt(sumSquares);
+}
+
+async function assertEmployeeFaceMatch(employeeId, incomingDescriptorRaw) {
+    const normalizedEmployeeId = normalizeString(employeeId);
+    if (!normalizedEmployeeId) throw new Error('Employee ID is required');
+    if (!incomingDescriptorRaw) throw new Error('Face descriptor is required');
+
+    const { data: employee, error: employeeError } = await supabase
+        .from('employees')
+        .select('id, name, faceDescriptor')
+        .eq('id', normalizedEmployeeId)
+        .maybeSingle();
+
+    if (employeeError) throw employeeError;
+    if (!employee) throw new Error('Employee was not found');
+    if (!employee.faceDescriptor) throw new Error('No registered face descriptor for this employee');
+
+    const incomingDescriptor = parseFaceDescriptorValue(incomingDescriptorRaw);
+    const storedDescriptor = parseFaceDescriptorValue(employee.faceDescriptor);
+    const distance = getFaceDistance(incomingDescriptor, storedDescriptor);
+
+    if (!Number.isFinite(distance) || distance > FACE_MATCH_THRESHOLD) {
+        throw new Error('Face descriptor does not match');
+    }
+
+    return employee;
 }
 
 function normalizeString(value) {
@@ -228,6 +284,8 @@ export default async function handler(req, res) {
 
         // --- ADD ATTENDANCE (CHECK-IN) ---
         if (action === "addAttendance") {
+            const employee = await assertEmployeeFaceMatch(data.employeeId, data.faceDescriptor);
+
             // Check Location logic
             const { data: sites } = await supabase.from('sites').select('*');
             let matchedSite = null;
@@ -265,7 +323,7 @@ export default async function handler(req, res) {
 
             const payload = {
                 employeeId: data.employeeId,
-                employeeName: data.employeeName,
+                employeeName: employee.name,
                 siteId: matchedSite.id,
                 siteName: matchedSite.name,
                 checkIn: data.checkIn,
@@ -282,6 +340,8 @@ export default async function handler(req, res) {
 
         // --- CHECK OUT ---
         if (action === "checkoutAttendance") {
+            await assertEmployeeFaceMatch(data.employeeId, data.faceDescriptor);
+
             const { data: existing, error: errExist } = await supabase.from('attendance')
                 .select('*')
                 .eq('employeeId', data.employeeId)

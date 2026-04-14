@@ -13,6 +13,17 @@ let lastDetectedSite = null;
 let tempEmail = ""; // used during registration
 let tempPhone = ""; // used during registration
 const MODEL_URL = '../models';
+const FACE_DETECTION_INTERVAL_MS = 350;
+const EYE_AR_THRESHOLD = 0.2;
+const LIVENESS_REQUIRED_BLINKS = 1;
+const LIVENESS_MIN_CLOSED_FRAMES = 1;
+const MAX_MISSING_FRAMES_BEFORE_RESET = 3;
+let faceDetectionInterval = null;
+let isFaceDetectionBusy = false;
+let livenessBlinkCount = 0;
+let livenessClosedFrames = 0;
+let isLivenessVerified = false;
+let faceMissingFrames = 0;
 
 document.addEventListener('DOMContentLoaded', () => {
     checkSession();
@@ -351,46 +362,138 @@ function setStatus(msg, className) {
     if(el) { el.innerText = msg; el.className = className; }
 }
 
+function resetLivenessState() {
+    livenessBlinkCount = 0;
+    livenessClosedFrames = 0;
+    isLivenessVerified = false;
+    faceMissingFrames = 0;
+}
+
+function getPointDistance(p1, p2) {
+    const dx = p1.x - p2.x;
+    const dy = p1.y - p2.y;
+    return Math.sqrt((dx * dx) + (dy * dy));
+}
+
+function calculateEyeAspectRatio(eyePoints) {
+    if (!eyePoints || eyePoints.length < 6) return null;
+
+    const verticalA = getPointDistance(eyePoints[1], eyePoints[5]);
+    const verticalB = getPointDistance(eyePoints[2], eyePoints[4]);
+    const horizontal = getPointDistance(eyePoints[0], eyePoints[3]);
+
+    if (!horizontal) return null;
+    return (verticalA + verticalB) / (2 * horizontal);
+}
+
+function updateLivenessFromLandmarks(landmarks) {
+    if (!landmarks) return;
+
+    const leftEye = landmarks.getLeftEye();
+    const rightEye = landmarks.getRightEye();
+
+    const leftEAR = calculateEyeAspectRatio(leftEye);
+    const rightEAR = calculateEyeAspectRatio(rightEye);
+    if (leftEAR === null || rightEAR === null) return;
+
+    const avgEAR = (leftEAR + rightEAR) / 2;
+    if (avgEAR < EYE_AR_THRESHOLD) {
+        livenessClosedFrames += 1;
+        return;
+    }
+
+    if (livenessClosedFrames >= LIVENESS_MIN_CLOSED_FRAMES) {
+        livenessBlinkCount += 1;
+        if (livenessBlinkCount >= LIVENESS_REQUIRED_BLINKS) {
+            isLivenessVerified = true;
+        }
+    }
+    livenessClosedFrames = 0;
+}
+
 function startVideo() {
     const video = document.getElementById('videoElement');
+    resetLivenessState();
+
+    if (faceDetectionInterval) {
+        clearInterval(faceDetectionInterval);
+        faceDetectionInterval = null;
+    }
+
     navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
         .then(stream => { video.srcObject = stream; })
-        .catch(err => setStatus('لم نتمكن من الوصول للكاميرا', 'error-text'));
+        .catch(err => setStatus('Unable to access the camera', 'error-text'));
     
     video.addEventListener('play', () => {
         const canvas = document.getElementById('overlay');
         const displaySize = { width: video.clientWidth, height: video.clientHeight };
         faceapi.matchDimensions(canvas, displaySize);
-        
-        setInterval(async () => {
-            if(!faceMatcher) return;
-            const options = new faceapi.SsdMobilenetv1Options({ minConfidence: 0.3 });
-            const detections = await faceapi.detectSingleFace(video, options).withFaceLandmarks().withFaceDescriptor();
-            
-            const ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            if (detections) {
-                const resizeDetections = faceapi.resizeResults(detections, displaySize);
-                faceapi.draw.drawDetections(canvas, resizeDetections);
+
+        if (faceDetectionInterval) {
+            clearInterval(faceDetectionInterval);
+            faceDetectionInterval = null;
+        }
+
+        faceDetectionInterval = setInterval(async () => {
+            if (isFaceDetectionBusy) return;
+            isFaceDetectionBusy = true;
+
+            try {
+                if(!faceMatcher) return;
+                const options = new faceapi.SsdMobilenetv1Options({ minConfidence: 0.3 });
+                const detections = await faceapi.detectSingleFace(video, options).withFaceLandmarks().withFaceDescriptor();
                 
-                const bestMatch = faceMatcher.findBestMatch(detections.descriptor);
-                if (bestMatch.label !== 'unknown') {
-                    setStatus('تم التحقق من الوجه بنجاح ✓', 'success-text');
-                    currentFaceDescriptor = Array.from(detections.descriptor);
-                    isFaceVerified = true;
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                if (detections) {
+                    faceMissingFrames = 0;
+                    const resizeDetections = faceapi.resizeResults(detections, displaySize);
+                    faceapi.draw.drawDetections(canvas, resizeDetections);
+                    
+                    const bestMatch = faceMatcher.findBestMatch(detections.descriptor);
+                    if (bestMatch.label !== 'unknown') {
+                        updateLivenessFromLandmarks(detections.landmarks);
+
+                        if (!isLivenessVerified) {
+                            setStatus('Face matched. Please blink to confirm liveness', 'text-muted');
+                            currentFaceDescriptor = null;
+                            isFaceVerified = false;
+                            updateActionButtonsState();
+                            return;
+                        }
+
+                        setStatus('Face and liveness verified successfully', 'success-text');
+                        currentFaceDescriptor = Array.from(detections.descriptor);
+                        isFaceVerified = true;
+                    } else {
+                        setStatus('Face does not match', 'error-text');
+                        currentFaceDescriptor = null;
+                        isFaceVerified = false;
+                        resetLivenessState();
+                    }
                 } else {
-                    setStatus('الوجه غير متطابق', 'error-text');
+                    faceMissingFrames += 1;
+                    setStatus('Look directly at the camera', 'text-muted');
                     currentFaceDescriptor = null;
                     isFaceVerified = false;
+
+                    if (faceMissingFrames >= MAX_MISSING_FRAMES_BEFORE_RESET) {
+                        resetLivenessState();
+                    }
                 }
-            } else {
-                setStatus('وجه الكاميرا إليك', 'text-muted');
+                updateActionButtonsState();
+            } catch (error) {
+                console.error('Face detection failed:', error);
+                setStatus('Face scan failed. Please try again', 'error-text');
                 currentFaceDescriptor = null;
                 isFaceVerified = false;
+                resetLivenessState();
+                updateActionButtonsState();
+            } finally {
+                isFaceDetectionBusy = false;
             }
-            updateActionButtonsState();
-        }, 1000);
+        }, FACE_DETECTION_INTERVAL_MS);
     });
 }
 
@@ -450,6 +553,7 @@ function getDistanceFromLatLonInM(lat1, lon1, lat2, lon2) {
 function deg2rad(deg) { return deg * (Math.PI/180) }
 
 async function handleCheckIn() {
+    if(!isFaceVerified || !isLivenessVerified) return alert('يجب تأكيد حيوية الوجه (الرمش) قبل تسجيل الحضور');
     if(!currentFaceDescriptor) return alert('بصمة الوجه غير ملتقطة الحين');
     if(!lastLocation) return alert('يجب تفعيل الـ GPS');
 
@@ -472,6 +576,7 @@ async function handleCheckIn() {
 }
 
 async function handleCheckOut() {
+    if(!isFaceVerified || !isLivenessVerified) return alert('يجب تأكيد حيوية الوجه (الرمش) قبل تسجيل الانصراف');
     if(!currentFaceDescriptor) return alert('بصمة الوجه غير ملتقطة الحين');
     if(!lastLocation) return alert('يجب تفعيل الـ GPS');
 
