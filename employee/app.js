@@ -7,12 +7,24 @@ let lastDetection = null;
 let sitesData = [];
 let faceMatcher = null;
 let currentFaceDescriptor = null;
-let timerInterval = null; 
+let registeredFaceDescriptor = null;
+let timerInterval = null;
+let faceDetectionInterval = null;
 let isFaceVerified = false;
 let lastDetectedSite = null;
 let tempEmail = ""; // used during registration
 let tempPhone = ""; // used during registration
 const MODEL_URL = '../models';
+const FACE_MATCH_DISTANCE_THRESHOLD = 0.5;
+const LIVENESS_CONFIG = {
+    scanIntervalMs: 400,
+    eyeClosedThreshold: 0.21,
+    minClosedFramesForBlink: 1,
+    minHeadShiftRatio: 0.08,
+    maxProofAgeMs: 15000,
+    registrationTimeoutMs: 10000
+};
+let livenessState = createLivenessState();
 
 document.addEventListener('DOMContentLoaded', () => {
     checkSession();
@@ -33,6 +45,136 @@ function checkSession() {
     } else {
         showSection('loginSection');
     }
+}
+
+function createLivenessState() {
+    return {
+        step: 'move',
+        blinkCount: 0,
+        closedFrames: 0,
+        baseNoseRatio: null,
+        maxHeadShift: 0,
+        verifiedAt: 0
+    };
+}
+
+function resetLivenessState() {
+    livenessState = createLivenessState();
+}
+
+function delay(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function distanceBetweenPoints(pointA, pointB) {
+    return Math.hypot((pointA.x || 0) - (pointB.x || 0), (pointA.y || 0) - (pointB.y || 0));
+}
+
+function computeEyeAspectRatio(eyePoints) {
+    if (!eyePoints || eyePoints.length < 6) return 0;
+
+    const horizontal = distanceBetweenPoints(eyePoints[0], eyePoints[3]);
+    if (!horizontal) return 0;
+
+    const verticalA = distanceBetweenPoints(eyePoints[1], eyePoints[5]);
+    const verticalB = distanceBetweenPoints(eyePoints[2], eyePoints[4]);
+    return (verticalA + verticalB) / (2 * horizontal);
+}
+
+function isLivenessFresh() {
+    return livenessState.step === 'done' && (Date.now() - livenessState.verifiedAt) <= LIVENESS_CONFIG.maxProofAgeMs;
+}
+
+function getLivenessPayload() {
+    return {
+        isLive: isLivenessFresh(),
+        step: livenessState.step,
+        blinkCount: livenessState.blinkCount,
+        headShiftScore: Number(livenessState.maxHeadShift.toFixed(4)),
+        verifiedAt: livenessState.verifiedAt ? new Date(livenessState.verifiedAt).toISOString() : null
+    };
+}
+
+function updateLivenessStateFromDetection(detection) {
+    const landmarks = detection?.landmarks;
+    const box = detection?.detection?.box;
+    if (!landmarks || !box || !box.width) {
+        return { isLive: false, message: 'ثبّت وجهك أمام الكاميرا' };
+    }
+
+    if (livenessState.step === 'done' && !isLivenessFresh()) {
+        resetLivenessState();
+    }
+
+    const leftEye = landmarks.getLeftEye();
+    const rightEye = landmarks.getRightEye();
+    const averageEar = (computeEyeAspectRatio(leftEye) + computeEyeAspectRatio(rightEye)) / 2;
+
+    const nosePoints = landmarks.getNose();
+    const noseTip = nosePoints[3] || nosePoints[Math.floor(nosePoints.length / 2)];
+    if (noseTip) {
+        const noseRatio = (noseTip.x - box.x) / box.width;
+        if (livenessState.baseNoseRatio === null) {
+            livenessState.baseNoseRatio = noseRatio;
+        }
+        const headShift = Math.abs(noseRatio - livenessState.baseNoseRatio);
+        livenessState.maxHeadShift = Math.max(livenessState.maxHeadShift, headShift);
+
+        if (livenessState.step === 'move' && headShift >= LIVENESS_CONFIG.minHeadShiftRatio) {
+            livenessState.step = 'blink';
+        }
+    }
+
+    if (averageEar < LIVENESS_CONFIG.eyeClosedThreshold) {
+        livenessState.closedFrames += 1;
+    } else {
+        if (livenessState.closedFrames >= LIVENESS_CONFIG.minClosedFramesForBlink) {
+            livenessState.blinkCount += 1;
+            if (livenessState.step === 'blink') {
+                livenessState.step = 'done';
+                livenessState.verifiedAt = Date.now();
+            }
+        }
+        livenessState.closedFrames = 0;
+    }
+
+    if (isLivenessFresh()) {
+        return { isLive: true, message: 'تم التحقق من الحيوية ✓' };
+    }
+
+    if (livenessState.step === 'move') {
+        return { isLive: false, message: 'للتأكد من أنك شخص حقيقي: حرّك رأسك يمينًا أو يسارًا' };
+    }
+
+    return { isLive: false, message: 'ممتاز، الآن ارمش مرة واحدة لإكمال التحقق' };
+}
+
+async function captureLiveDescriptor(videoEl, statusEl) {
+    resetLivenessState();
+    const options = new faceapi.SsdMobilenetv1Options({ minConfidence: 0.35 });
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt <= LIVENESS_CONFIG.registrationTimeoutMs) {
+        const detection = await faceapi.detectSingleFace(videoEl, options).withFaceLandmarks().withFaceDescriptor();
+        if (!detection) {
+            statusEl.innerText = 'وجّه وجهك للكاميرا بشكل واضح';
+            await delay(LIVENESS_CONFIG.scanIntervalMs);
+            continue;
+        }
+
+        const liveProgress = updateLivenessStateFromDetection(detection);
+        statusEl.innerText = liveProgress.message;
+        if (liveProgress.isLive) {
+            return { success: true, descriptor: Array.from(detection.descriptor) };
+        }
+
+        await delay(LIVENESS_CONFIG.scanIntervalMs);
+    }
+
+    return {
+        success: false,
+        message: 'تعذّر التحقق من الحيوية. حاول مرة أخرى مع إضاءة أفضل وحركة طبيعية.'
+    };
 }
 
 // 1. Normal Login
@@ -127,18 +269,20 @@ async function startRegistrationVideo() {
 
 async function captureFaceRegistration() {
     const video = document.getElementById('regVideo');
-    document.getElementById('regStatusMessage').classList.remove('hidden');
-    document.getElementById('regStatusMessage').innerText = 'جاري مسح الوجه...';
-    
-    const options = new faceapi.SsdMobilenetv1Options({ minConfidence: 0.3 });
-    const detections = await faceapi.detectSingleFace(video, options).withFaceLandmarks().withFaceDescriptor();
-    if(detections) {
-        registeredFaceDescriptor = Array.from(detections.descriptor);
-        document.getElementById('regStatusMessage').innerText = 'تم التقاط البصمة بنجاح ✓';
-        document.getElementById('regStatusMessage').className = 'success-text';
+    const statusEl = document.getElementById('regStatusMessage');
+    statusEl.classList.remove('hidden');
+    statusEl.className = '';
+    statusEl.innerText = 'جاري التقاط البصمة مع فحص الحيوية...';
+
+    const result = await captureLiveDescriptor(video, statusEl);
+    if (result.success) {
+        registeredFaceDescriptor = result.descriptor;
+        statusEl.innerText = 'تم التقاط البصمة والتحقق من الحيوية بنجاح ✓';
+        statusEl.className = 'success-text';
     } else {
-        document.getElementById('regStatusMessage').innerText = 'لم يتم التعرف على وجه للأسف، دقق في الإضاءة.';
-        document.getElementById('regStatusMessage').className = 'error-text';
+        registeredFaceDescriptor = null;
+        statusEl.innerText = result.message;
+        statusEl.className = 'error-text';
     }
 }
 
@@ -229,13 +373,13 @@ async function initSystem() {
         try {
             const descArray = new Float32Array(JSON.parse(currentUser.faceDescriptor));
             const labeledDescriptor = new faceapi.LabeledFaceDescriptors(currentUser.name, [descArray]);
-            faceMatcher = new faceapi.FaceMatcher([labeledDescriptor], 0.6);
-            setStatus('✅ النظام جاهز. وجّه الكاميرا إليك...', 'success-text');
+            faceMatcher = new faceapi.FaceMatcher([labeledDescriptor], FACE_MATCH_DISTANCE_THRESHOLD);
+            setStatus('✅ النظام جاهز. حرّك رأسك ثم ارمش لإكمال التحقق.', 'success-text');
         } catch(e) {
             setStatus('⚠️ خطأ في قراءة بصمة الوجه المسجلة', 'error-text');
         }
     } else {
-        setStatus('⚠️ لم يتم تسجيل بصمة وجه. وجّه الكاميرا إليك...', 'text-muted');
+        setStatus('⚠️ لم يتم تسجيل بصمة وجه. يرجى تحديث بياناتك أولًا.', 'text-muted');
     }
 
     startVideo();
@@ -355,42 +499,76 @@ function startVideo() {
     const video = document.getElementById('videoElement');
     navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
         .then(stream => { video.srcObject = stream; })
-        .catch(err => setStatus('لم نتمكن من الوصول للكاميرا', 'error-text'));
-    
+        .catch(() => setStatus('لم نتمكن من الوصول للكاميرا', 'error-text'));
+
     video.addEventListener('play', () => {
         const canvas = document.getElementById('overlay');
         const displaySize = { width: video.clientWidth, height: video.clientHeight };
         faceapi.matchDimensions(canvas, displaySize);
-        
-        setInterval(async () => {
-            if(!faceMatcher) return;
-            const options = new faceapi.SsdMobilenetv1Options({ minConfidence: 0.3 });
-            const detections = await faceapi.detectSingleFace(video, options).withFaceLandmarks().withFaceDescriptor();
-            
-            const ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            if (detections) {
-                const resizeDetections = faceapi.resizeResults(detections, displaySize);
-                faceapi.draw.drawDetections(canvas, resizeDetections);
-                
-                const bestMatch = faceMatcher.findBestMatch(detections.descriptor);
-                if (bestMatch.label !== 'unknown') {
-                    setStatus('تم التحقق من الوجه بنجاح ✓', 'success-text');
-                    currentFaceDescriptor = Array.from(detections.descriptor);
-                    isFaceVerified = true;
-                } else {
-                    setStatus('الوجه غير متطابق', 'error-text');
+        resetLivenessState();
+
+        if (faceDetectionInterval) {
+            clearInterval(faceDetectionInterval);
+        }
+
+        let isProcessingFrame = false;
+        faceDetectionInterval = setInterval(async () => {
+            if (!faceMatcher || isProcessingFrame) return;
+            isProcessingFrame = true;
+
+            try {
+                const options = new faceapi.SsdMobilenetv1Options({ minConfidence: 0.35 });
+                const detection = await faceapi
+                    .detectSingleFace(video, options)
+                    .withFaceLandmarks()
+                    .withFaceDescriptor();
+
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                if (!detection) {
+                    resetLivenessState();
                     currentFaceDescriptor = null;
                     isFaceVerified = false;
+                    setStatus('وجّه الكاميرا إلى وجهك مباشرة', 'text-muted');
+                    updateActionButtonsState();
+                    return;
                 }
-            } else {
-                setStatus('وجه الكاميرا إليك', 'text-muted');
+
+                const resizedDetection = faceapi.resizeResults(detection, displaySize);
+                faceapi.draw.drawDetections(canvas, resizedDetection);
+
+                const bestMatch = faceMatcher.findBestMatch(detection.descriptor);
+                if (bestMatch.label === 'unknown') {
+                    resetLivenessState();
+                    currentFaceDescriptor = null;
+                    isFaceVerified = false;
+                    setStatus('الوجه غير متطابق مع الحساب', 'error-text');
+                    updateActionButtonsState();
+                    return;
+                }
+
+                const liveProgress = updateLivenessStateFromDetection(detection);
+                if (liveProgress.isLive) {
+                    currentFaceDescriptor = Array.from(detection.descriptor);
+                    isFaceVerified = true;
+                    setStatus('تم التحقق من الوجه والحيوية بنجاح ✓', 'success-text');
+                } else {
+                    currentFaceDescriptor = null;
+                    isFaceVerified = false;
+                    setStatus(liveProgress.message, 'text-muted');
+                }
+
+                updateActionButtonsState();
+            } catch (e) {
+                console.error('Face detection loop error:', e);
                 currentFaceDescriptor = null;
                 isFaceVerified = false;
+                updateActionButtonsState();
+            } finally {
+                isProcessingFrame = false;
             }
-            updateActionButtonsState();
-        }, 1000);
+        }, LIVENESS_CONFIG.scanIntervalMs);
     });
 }
 
@@ -450,14 +628,16 @@ function getDistanceFromLatLonInM(lat1, lon1, lat2, lon2) {
 function deg2rad(deg) { return deg * (Math.PI/180) }
 
 async function handleCheckIn() {
-    if(!currentFaceDescriptor) return alert('بصمة الوجه غير ملتقطة الحين');
+    if(!currentFaceDescriptor) return alert('بصمة الوجه غير ملتقطة الآن');
+    if(!isLivenessFresh()) return alert('يجب إكمال فحص الحيوية (حركة الرأس + الرمش) أولًا');
     if(!lastLocation) return alert('يجب تفعيل الـ GPS');
 
     document.getElementById('loader').classList.remove('hidden');
     const payload = {
         action: 'addAttendance', employeeId: currentUser.id, employeeName: currentUser.name,
         checkIn: new Date().toISOString(), latitude: lastLocation.lat, longitude: lastLocation.lng,
-        faceDescriptor: JSON.stringify(currentFaceDescriptor)
+        faceDescriptor: JSON.stringify(currentFaceDescriptor),
+        liveness: getLivenessPayload()
     };
 
     try {
@@ -466,20 +646,26 @@ async function handleCheckIn() {
         if(result.success) {
             alert(result.message);
             setAppState('in', payload.checkIn);
+            resetLivenessState();
+            currentFaceDescriptor = null;
+            isFaceVerified = false;
+            updateActionButtonsState();
         } else alert('خطأ: ' + result.message);
     } catch(e) { console.error(e); alert('حدث خطأ في الاتصال'); }
     document.getElementById('loader').classList.add('hidden');
 }
 
 async function handleCheckOut() {
-    if(!currentFaceDescriptor) return alert('بصمة الوجه غير ملتقطة الحين');
+    if(!currentFaceDescriptor) return alert('بصمة الوجه غير ملتقطة الآن');
+    if(!isLivenessFresh()) return alert('يجب إكمال فحص الحيوية (حركة الرأس + الرمش) أولًا');
     if(!lastLocation) return alert('يجب تفعيل الـ GPS');
 
     document.getElementById('loader').classList.remove('hidden');
     const payload = { 
         action: 'checkoutAttendance', employeeId: currentUser.id, 
         checkOut: new Date().toISOString(), latitude: lastLocation.lat, longitude: lastLocation.lng,
-        faceDescriptor: JSON.stringify(currentFaceDescriptor)
+        faceDescriptor: JSON.stringify(currentFaceDescriptor),
+        liveness: getLivenessPayload()
     };
     try {
         const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'text/plain' } });
@@ -487,6 +673,10 @@ async function handleCheckOut() {
         if(result.success) {
             alert(result.message);
             setAppState('out');
+            resetLivenessState();
+            currentFaceDescriptor = null;
+            isFaceVerified = false;
+            updateActionButtonsState();
         }
         else alert('خطأ: ' + result.message);
     } catch(e) { console.error(e); alert('حدث خطأ في الشبكة: ' + e.message); }
@@ -727,4 +917,3 @@ function renderMyReports(data, monthStr) {
     document.getElementById('empTotalHours').innerText = totalHours.toFixed(2);
     document.getElementById('empTotalTransport').innerText = totalTransport.toFixed(2) + " ج.م";
 }
-

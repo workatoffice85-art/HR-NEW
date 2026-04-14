@@ -3,6 +3,11 @@ import { createClient } from '@supabase/supabase-js';
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://ofegdbbyanyglqewbdlm.supabase.co';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9mZWdkYmJ5YW55Z2xxZXdiZGxtIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjEzOTAzMywiZXhwIjoyMDkxNzE1MDMzfQ.lw2wyo5_U_hXZSebLScV1fqt7eRHPOfFi7Z4XKnswzU';
 const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwNhaRKDP-7M4dXSQend8RbYPkXRgs5nzN0-BmNzxEO8IkBN9lt6KDtJCdOqpovhJEY1Q/exec';
+const FACE_MATCH_THRESHOLD = 0.5;
+const LIVENESS_MAX_AGE_MS = 45000;
+const LIVENESS_MAX_FUTURE_SKEW_MS = 120000;
+const MIN_LIVENESS_BLINKS = 1;
+const MIN_LIVENESS_HEAD_SHIFT = 0.05;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -79,6 +84,102 @@ function buildPhoneCandidates(value) {
 
     return Array.from(candidates).filter(Boolean);
 }
+
+function parseFaceDescriptor(rawDescriptor) {
+    if (!rawDescriptor) return null;
+
+    let parsed = rawDescriptor;
+    if (typeof parsed === 'string') {
+        try {
+            parsed = JSON.parse(parsed);
+        } catch (_) {
+            return null;
+        }
+    }
+
+    if (!Array.isArray(parsed) || parsed.length !== 128) return null;
+
+    const vector = parsed.map((value) => Number(value));
+    if (vector.some((value) => !Number.isFinite(value))) return null;
+    return vector;
+}
+
+function getFaceDistance(vectorA, vectorB) {
+    if (!vectorA || !vectorB || vectorA.length !== 128 || vectorB.length !== 128) return Number.POSITIVE_INFINITY;
+
+    let sum = 0;
+    for (let i = 0; i < 128; i++) {
+        const diff = vectorA[i] - vectorB[i];
+        sum += diff * diff;
+    }
+    return Math.sqrt(sum);
+}
+
+function validateLivenessProof(livenessProof) {
+    if (!livenessProof || typeof livenessProof !== 'object') {
+        return { success: false, message: 'فشل التحقق من الحيوية. حاول مرة أخرى أمام الكاميرا.' };
+    }
+
+    const isLive = livenessProof.isLive === true || String(livenessProof.isLive).toLowerCase() === 'true';
+    const blinkCount = Number(livenessProof.blinkCount || 0);
+    const headShiftScore = Number(livenessProof.headShiftScore || 0);
+    const verifiedAtMs = Date.parse(livenessProof.verifiedAt || '');
+
+    if (!isLive) {
+        return { success: false, message: 'التحقق الحيوي غير مكتمل. رجاءً أعد حركة الرأس والرمش.' };
+    }
+    if (!Number.isFinite(verifiedAtMs)) {
+        return { success: false, message: 'بيانات التحقق الحيوي غير صالحة.' };
+    }
+
+    const ageMs = Date.now() - verifiedAtMs;
+    if (ageMs > LIVENESS_MAX_AGE_MS || ageMs < -LIVENESS_MAX_FUTURE_SKEW_MS) {
+        return { success: false, message: 'انتهت صلاحية التحقق الحيوي. أعد المحاولة.' };
+    }
+    if (!Number.isFinite(blinkCount) || blinkCount < MIN_LIVENESS_BLINKS) {
+        return { success: false, message: 'لم يتم رصد رمشة كافية للتحقق الحيوي.' };
+    }
+    if (!Number.isFinite(headShiftScore) || headShiftScore < MIN_LIVENESS_HEAD_SHIFT) {
+        return { success: false, message: 'لم يتم رصد حركة رأس كافية للتحقق الحيوي.' };
+    }
+
+    return { success: true };
+}
+
+async function validateFaceForEmployee(employeeId, incomingDescriptorRaw) {
+    const normalizedEmployeeId = normalizeString(employeeId);
+    if (!normalizedEmployeeId) {
+        return { success: false, message: 'بيانات الموظف غير مكتملة.' };
+    }
+
+    const incomingDescriptor = parseFaceDescriptor(incomingDescriptorRaw);
+    if (!incomingDescriptor) {
+        return { success: false, message: 'لم يتم إرسال بصمة وجه صالحة.' };
+    }
+
+    const { data: employee, error } = await supabase
+        .from('employees')
+        .select('id, faceDescriptor')
+        .eq('id', normalizedEmployeeId)
+        .maybeSingle();
+
+    if (error) throw error;
+    if (!employee) {
+        return { success: false, message: 'تعذر العثور على بيانات الموظف.' };
+    }
+
+    const storedDescriptor = parseFaceDescriptor(employee.faceDescriptor);
+    if (!storedDescriptor) {
+        return { success: false, message: 'لا توجد بصمة وجه محفوظة لهذا الموظف.' };
+    }
+
+    const distance = getFaceDistance(incomingDescriptor, storedDescriptor);
+    if (distance > FACE_MATCH_THRESHOLD) {
+        return { success: false, message: 'الوجه غير مطابق لصاحب الحساب.' };
+    }
+
+    return { success: true, distance };
+}
 // Background sync to Google Sheets (Backup)
 async function syncToGoogleSheet(body) {
     try {
@@ -117,7 +218,7 @@ export default async function handler(req, res) {
 
         // DUAL WRITING / BACKUP SYNC:
         // For writing actions, we asynchronously broadcast the exact request to your existing Google Apps Script
-        const writeActions = ["saveEmployee", "updateEmployee", "deleteEmployee", "saveSite", "updateSite", "deleteSite", "addSiteRequest", "approveSiteRequest", "rejectSiteRequest", "addAttendance", "checkoutAttendance", "updateSettings"];
+        const writeActions = ["saveEmployee", "updateEmployee", "deleteEmployee", "saveSite", "updateSite", "deleteSite", "addSiteRequest", "approveSiteRequest", "rejectSiteRequest", "updateSettings"];
         if (writeActions.includes(action)) {
             syncToGoogleSheet(data);
         }
@@ -228,6 +329,12 @@ export default async function handler(req, res) {
 
         // --- ADD ATTENDANCE (CHECK-IN) ---
         if (action === "addAttendance") {
+            const livenessValidation = validateLivenessProof(data.liveness);
+            if (!livenessValidation.success) throw new Error(livenessValidation.message);
+
+            const faceValidation = await validateFaceForEmployee(data.employeeId, data.faceDescriptor);
+            if (!faceValidation.success) throw new Error(faceValidation.message);
+
             // Check Location logic
             const { data: sites } = await supabase.from('sites').select('*');
             let matchedSite = null;
@@ -277,11 +384,18 @@ export default async function handler(req, res) {
 
             const { error } = await supabase.from('attendance').insert([payload]);
             if (error) throw error;
+            syncToGoogleSheet(data);
             return res.status(200).json({ success: true, message: "تم تسجيل الحضور بنجاح" });
         }
 
         // --- CHECK OUT ---
         if (action === "checkoutAttendance") {
+            const livenessValidation = validateLivenessProof(data.liveness);
+            if (!livenessValidation.success) throw new Error(livenessValidation.message);
+
+            const faceValidation = await validateFaceForEmployee(data.employeeId, data.faceDescriptor);
+            if (!faceValidation.success) throw new Error(faceValidation.message);
+
             const { data: existing, error: errExist } = await supabase.from('attendance')
                 .select('*')
                 .eq('employeeId', data.employeeId)
@@ -299,6 +413,7 @@ export default async function handler(req, res) {
                 .update({ checkOut: data.checkOut, totalHours: hours })
                 .eq('id', existing[0].id);
             if (error) throw error;
+            syncToGoogleSheet(data);
             return res.status(200).json({ success: true, message: "تم تسجيل الانصراف الساعات: " + hours });
         }
         
