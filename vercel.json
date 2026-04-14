@@ -2,5 +2,11 @@
   "version": 2,
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/exec.js" }
+  ],
+  "crons": [
+    {
+      "path": "/api/sync",
+      "schedule": "0 0 * * *"
+    }
   ]
 }
