@@ -17,6 +17,68 @@ function getDistance(lat1, lon1, lat2, lon2) {
   return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
+function normalizeString(value) {
+    if (value === null || value === undefined) return '';
+    return String(value).trim();
+}
+
+function normalizeDigits(value) {
+    return String(value)
+        .replace(/[\u0660-\u0669]/g, (ch) => String(ch.charCodeAt(0) - 0x0660))
+        .replace(/[\u06F0-\u06F9]/g, (ch) => String(ch.charCodeAt(0) - 0x06F0));
+}
+
+function normalizeEmailValue(value) {
+    return normalizeString(value).toLowerCase();
+}
+
+function normalizePhoneValue(value) {
+    let phone = normalizeDigits(normalizeString(value));
+    if (!phone) return '';
+
+    phone = phone.replace(/[\u200f\u200e\s-]/g, '');
+    phone = phone.replace(/[()]/g, '');
+
+    if (phone.indexOf('00') === 0) {
+        phone = `+${phone.substring(2)}`;
+    }
+
+    if (phone.indexOf('+') === 0) {
+        phone = `+${phone.substring(1).replace(/[^\d]/g, '')}`;
+    } else {
+        phone = phone.replace(/[^\d]/g, '');
+    }
+
+    if (/^01\d{9}$/.test(phone)) {
+        phone = `+2${phone}`;
+    } else if (/^20\d{10}$/.test(phone)) {
+        phone = `+${phone}`;
+    }
+
+    return phone;
+}
+
+function buildPhoneCandidates(value) {
+    const raw = normalizeString(value);
+    const candidates = new Set();
+    if (raw) candidates.add(raw);
+
+    const onlyDigits = normalizeDigits(raw).replace(/[^\d]/g, '');
+    if (onlyDigits) candidates.add(onlyDigits);
+
+    const normalized = normalizePhoneValue(raw);
+    if (normalized) {
+        candidates.add(normalized);
+        candidates.add(normalized.replace(/^\+/, ''));
+
+        const localMatch = normalized.match(/^\+20(1\d{9})$/);
+        if (localMatch) {
+            candidates.add(`0${localMatch[1]}`);
+        }
+    }
+
+    return Array.from(candidates).filter(Boolean);
+}
 // Background sync to Google Sheets (Backup)
 async function syncToGoogleSheet(body) {
     try {
@@ -59,30 +121,70 @@ export default async function handler(req, res) {
         if (writeActions.includes(action)) {
             syncToGoogleSheet(data);
         }
-
         // --- AUTH ---
         if (action === "login") {
-            const { data: users, error } = await supabase
-                .from('employees')
-                .select('*')
-                .or(`email.eq.${data.identifier},phone.eq.${data.identifier}`);
-            
-            if (error || !users || users.length === 0) throw new Error("بيانات الدخول غير صحيحة");
-            const user = users.find(u => u.password === data.password);
+            const identifier = normalizeString(data.identifier);
+            const password = normalizeString(data.password);
+            const role = normalizeString(data.role).toLowerCase();
+            const usersById = new Map();
+            const addUsers = (rows) => {
+                for (const row of (rows || [])) {
+                    const key = normalizeString(row.id) || normalizeString(row.email) || normalizeString(row.phone);
+                    if (key) usersById.set(key, row);
+                }
+            };
+            if (identifier.includes('@')) {
+                const { data: emailUsers, error: emailError } = await supabase
+                    .from('employees')
+                    .select('*')
+                    .eq('email', normalizeEmailValue(identifier));
+                if (emailError) throw emailError;
+                addUsers(emailUsers);
+            }
+            const phoneCandidates = buildPhoneCandidates(identifier);
+            if (phoneCandidates.length) {
+                const { data: phoneUsers, error: phoneError } = await supabase
+                    .from('employees')
+                    .select('*')
+                    .in('phone', phoneCandidates);
+                if (phoneError) throw phoneError;
+                addUsers(phoneUsers);
+            }
+            if (usersById.size === 0) {
+                const normalizedInputPhone = normalizePhoneValue(identifier);
+                if (normalizedInputPhone) {
+                    const { data: allUsers, error: allUsersError } = await supabase
+                        .from('employees')
+                        .select('*');
+                    if (allUsersError) throw allUsersError;
+                    const fallbackMatches = (allUsers || []).filter(
+                        (u) => normalizePhoneValue(u.phone) === normalizedInputPhone
+                    );
+                    addUsers(fallbackMatches);
+                }
+            }
+            const users = Array.from(usersById.values());
+            if (users.length === 0) throw new Error("بيانات الدخول غير صحيحة");
+            const user = users.find((u) => normalizeString(u.password) === password);
             if (!user) throw new Error("كلمة المرور غير صحيحة");
-            if (data.role && user.role !== data.role) throw new Error("لا تملك صلاحية الدخول");
-
+            if (role && normalizeString(user.role).toLowerCase() !== role) {
+                throw new Error("لا تملك صلاحية الدخول");
+            }
             return res.status(200).json({
                 success: true,
                 message: "تم تسجيل الدخول بنجاح",
                 data: {
-                    id: user.id, name: user.name, email: user.email, phone: user.phone, role: user.role,
-                    assignedSites: user.assignedSites ? user.assignedSites.split(',') : [],
-                    faceDescriptor: user.faceDescriptor, transportPrice: user.transportPrice
+                    id: user.id,
+                    name: user.name,
+                    email: user.email,
+                    phone: user.phone,
+                    role: user.role,
+                    assignedSites: user.assignedSites ? String(user.assignedSites).split(',').map((s) => s.trim()).filter(Boolean) : [],
+                    faceDescriptor: user.faceDescriptor,
+                    transportPrice: user.transportPrice
                 }
             });
         }
-
         // --- DASHBOARD DATA (GET) ---
         if (action === "getDashboardData") {
             const [empRes, siteRes, attRes, reqRes, setRes] = await Promise.all([
