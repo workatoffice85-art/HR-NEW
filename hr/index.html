@@ -84,7 +84,7 @@
                     <div style="display:flex; gap:10px; align-items:center;">
                         <label>تاريخ اليوم:</label>
                         <input type="date" id="attendanceDateFilter" onchange="renderAttendanceTable(allAttendanceData)">
-                        <button class="btn-primary" style="width:auto;" onclick="fetchAttendance()">تحديث 🔄</button>
+                        <button class="btn-primary" style="width:auto;" onclick="refreshData()">تحديث مجمع 🔄</button>
                     </div>
                 </div>
                 <div class="table-container">
@@ -226,7 +226,10 @@
             <div id="tab-employees" class="tab-content hidden">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                     <h2>قائمة الموظفين</h2>
-                    <button class="btn-primary" style="width:auto; background:var(--secondary);" onclick="openEmployeeModal()">+ إضافة موظف</button>
+                    <div style="display:flex; gap:10px;">
+                        <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="refreshData()">تحديث مجمع 🔄</button>
+                        <button class="btn-primary" style="width:auto; background:var(--secondary);" onclick="openEmployeeModal()">+ إضافة موظف</button>
+                    </div>
                 </div>
                 <div class="table-container">
                     <table>
@@ -236,7 +239,6 @@
                                 <th style="padding: 15px;">البريد</th>
                                 <th style="padding: 15px;">الهاتف</th>
                                 <th style="padding: 15px;">الصلاحية</th>
-                                <th style="padding: 15px;">البدل</th>
                                 <th style="padding: 15px;">البصمة</th>
                                 <th style="padding: 15px;">الإجراءات</th>
                             </tr>
@@ -250,7 +252,10 @@
             <div id="tab-sites" class="tab-content hidden">
                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                     <h2>مواقع العمل</h2>
-                    <button class="btn-primary" style="width:auto; background:var(--secondary);" onclick="openSiteModal()">+ إضافة موقع (سجل بشيت جوجل)</button>
+                    <div style="display:flex; gap:10px;">
+                        <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="refreshData()">تحديث مجمع 🔄</button>
+                        <button class="btn-primary" style="width:auto; background:var(--secondary);" onclick="openSiteModal()">+ إضافة موقع (سجل بشيت جوجل)</button>
+                    </div>
                 </div>
                 <div class="table-container">
                     <table>
@@ -260,7 +265,7 @@
                                 <th style="padding: 15px;">خط العرض (Lat)</th>
                                 <th style="padding: 15px;">خط الطول (Lng)</th>
                                 <th style="padding: 15px;">النطاق (متر)</th>
-                                <th style="padding: 15px;">البدل</th>
+                                <th style="padding: 15px;">رابط الموقع</th>
                                 <th style="padding: 15px;">الإجراءات</th>
                             </tr>
                         </thead>
@@ -271,9 +276,12 @@
 
             <!-- Site Requests Tab -->
             <div id="tab-siteRequests" class="tab-content hidden">
-                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                     <h2>طلبات تسجيل المواقع الجديدة</h2>
-                    <button class="btn-primary" style="width:auto;" onclick="fetchSiteRequests()">تحديث</button>
+                    <div style="display:flex; gap:10px;">
+                        <button class="btn-primary" style="width:auto; padding:8px 15px; background:var(--danger);" onclick="clearProcessedRequests()">مسح الطلبات المنتهية 🗑️</button>
+                        <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="refreshData()">تحديث مجمع 🔄</button>
+                    </div>
                 </div>
                 <div class="table-container">
                     <table>
@@ -357,19 +365,30 @@
                 <input type="text" id="empPass">
             </div>
             <div class="input-group">
-                <label>معرف المواقع (مفصولة بفاصلة)</label>
-                <input type="text" id="empSites" placeholder="مثال: site1,site2">
+                <label>تحديد المواقع والبدلات المخصصة</label>
+                <div id="empSitesContainer" style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; max-height: 200px; overflow-y: auto; border: 1px solid var(--card-border);">
+                    <div style="color: var(--text-muted); font-size: 0.85rem; text-align: center;">جاري تحميل المواقع...</div>
+                </div>
+                <input type="hidden" id="empSites">
             </div>
-            <div class="input-group">
-                <label>الدور</label>
-                <select id="empRole">
-                    <option value="employee">موظف (Employee)</option>
-                    <option value="hr">إدارة (HR)</option>
-                </select>
+
+            <div style="margin: 15px 0;">
+                <button type="button" class="btn-primary" style="background:transparent; border:1px solid var(--card-border); color:var(--text-muted); font-size:0.8rem; width:auto; padding:5px 10px;" onclick="toggleAdvancedEmpOptions()">خيارات إضافية +</button>
             </div>
-            <div class="input-group">
-                <label>سعر الانقال الافتراضي (ج.م)</label>
-                <input type="number" id="empTransportPrice" value="0">
+
+            <div id="advancedEmpOptions" class="hidden">
+                 <div class="input-group">
+                    <label>الصلاحية</label>
+                    <select id="empRole">
+                        <option value="employee">موظف (Employee)</option>
+                        <option value="hr">إدارة (HR)</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label>سعر الانتقال الافتراضي (ج.م)</label>
+                    <input type="number" id="empTransportPrice" value="0">
+                    <small style="color: var(--text-muted);">يستخدم كخيار احتياطي فقط في حال عدم تحديد سعر للموقع أعلاه.</small>
+                </div>
             </div>
             
             <div style="display:flex; gap:10px;">
@@ -430,10 +449,6 @@
                 <label>نطاق الحضور المسموح (الـ Radius بالمتر)</label>
                 <input type="number" id="siteRadius" value="20">
             </div>
-            <div class="input-group">
-                <label>سعر الانتقال لهذا الموقع (ج.م)</label>
-                <input type="number" id="siteTransportPrice" value="120">
-            </div>
             
             <div style="display:flex; gap:10px; margin-top:10px;">
                 <button class="btn-primary" onclick="saveSite()">حفظ الموقع</button>
@@ -442,7 +457,6 @@
         </div>
     </div>
 
-    <script src="../assets/app-config.js?v=1.1"></script>
-    <script src="app.js?v=1.5"></script>
+    <script src="app.js?v=1.4"></script>
 </body>
 </html>

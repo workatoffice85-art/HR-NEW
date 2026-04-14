@@ -1,34 +1,16 @@
-const API_URL =
-    (window.APP_CONFIG && window.APP_CONFIG.API_URL) ||
-    'https://script.google.com/macros/s/AKfycbwNhaRKDP-7M4dXSQend8RbYPkXRgs5nzN0-BmNzxEO8IkBN9lt6KDtJCdOqpovhJEY1Q/exec';
-const SUPABASE_ANON_KEY =
-    (window.APP_CONFIG && window.APP_CONFIG.SUPABASE_ANON_KEY) ||
-    '';
-const HAS_SUPABASE_ANON_KEY =
-    !!SUPABASE_ANON_KEY && SUPABASE_ANON_KEY.indexOf('<') !== 0;
-const USE_SUPABASE_AUTH_HEADERS = API_URL.indexOf('supabase.co/functions/v1/') !== -1;
-
-function apiFetch(url, options) {
-    const requestOptions = options || {};
-    if (!USE_SUPABASE_AUTH_HEADERS || !HAS_SUPABASE_ANON_KEY) {
-        return fetch(url, requestOptions);
-    }
-
-    const headers = new Headers(requestOptions.headers || {});
-    if (!headers.has('apikey')) headers.set('apikey', SUPABASE_ANON_KEY);
-    if (!headers.has('Authorization')) headers.set('Authorization', `Bearer ${SUPABASE_ANON_KEY}`);
-
-    return fetch(url, { ...requestOptions, headers });
-}
-
+const API_URL = '/api/exec';
+// const OLD_BACKUP_API = 'https://script.google.com/macros/s/AKfycbwNhaRKDP-7M4dXSQend8RbYPkXRgs5nzN0-BmNzxEO8IkBN9lt6KDtJCdOqpovhJEY1Q/exec';
 let hrSession = null;
 let allAttendanceData = [];
-let allEmployees = []; // Added here
-let allSites = [];    // Added here
+let allEmployees = [];
+let allSites = [];
+let allSiteRequests = [];
+let appSettings = {};
 let hoursChartInstance = null;
 let latesChartInstance = null;
 let parseMapLinkTimer = null;
 let parseMapLinkRequestId = 0;
+let isInitialDataLoaded = false;
 
 document.addEventListener('DOMContentLoaded', () => {
     // Set default dates
@@ -70,7 +52,7 @@ async function loginHR() {
     if (btn) btn.innerText = 'جاري التحقق...';
 
     try {
-        const response = await apiFetch(API_URL, {
+        const response = await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify({ action: 'login', identifier: email, password: pass, role: 'hr' }),
             headers: { 'Content-Type': 'text/plain' }
@@ -129,14 +111,49 @@ function showTab(tabName) {
     }
 }
 
-async function initDashboard() {
-    fetchAttendance();
-}
-
-async function fetchAttendance() {
+async function initDashboard(forceRefresh = false) {
+    if (isInitialDataLoaded && !forceRefresh) return;
+    
     document.getElementById('loader').classList.remove('hidden');
     try {
-        const res = await apiFetch(`${API_URL}?action=getAttendance`);
+        const res = await fetch(`${API_URL}?action=getDashboardData`);
+        const result = await res.json();
+        
+        if (result.success) {
+            allAttendanceData = result.attendance || [];
+            allEmployees = result.employees || [];
+            allSites = result.sites || [];
+            allSiteRequests = result.siteRequests || [];
+            appSettings = result.settings || {};
+            
+            isInitialDataLoaded = true;
+            
+            // Render the current active tab
+            const activeTab = localStorage.getItem('hrActiveTab') || 'attendance';
+            renderActiveTab(activeTab);
+        }
+    } catch (e) {
+        console.error("Initial load failed", e);
+    }
+    document.getElementById('loader').classList.add('hidden');
+}
+
+function renderActiveTab(tabName) {
+    if (tabName === 'attendance') renderAttendanceTable(allAttendanceData);
+    if (tabName === 'employees') renderEmployeesTable(allEmployees);
+    if (tabName === 'sites') renderSitesTable(allSites);
+    if (tabName === 'siteRequests') renderRequestsTable(allSiteRequests);
+    if (tabName === 'settings') renderSettings(appSettings);
+}
+
+async function fetchAttendance(force = false) {
+    if (!force && allAttendanceData.length) {
+        renderAttendanceTable(allAttendanceData);
+        return;
+    }
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(`${API_URL}?action=getAttendance`);
         const result = await res.json();
         if(result.success) {
             allAttendanceData = result.data;
@@ -144,6 +161,10 @@ async function fetchAttendance() {
         }
     } catch(e) { console.error(e); }
     document.getElementById('loader').classList.add('hidden');
+}
+
+async function refreshData() {
+    await initDashboard(true);
 }
 
 function renderAttendanceTable(data) {
@@ -188,7 +209,7 @@ function renderAttendanceTable(data) {
                 <td data-label="الموقع">${record.siteName}</td>
                 <td data-label="وقت الحضور" dir="ltr">${checkInTime}</td>
                 <td data-label="وقت الانصراف" dir="ltr">${checkOutTime}</td>
-                <td data-label="إجمالي الساعات">${record.totalHours ? record.totalHours + ' ساعات' : '-'}</td>
+                <td data-label="إجمالي الساعات">${record.totalHours && !isNaN(parseFloat(record.totalHours)) ? parseFloat(record.totalHours).toFixed(2) + ' ساعات' : '-'}</td>
                 <td data-label="بدل الانتقال">${record.transportPrice || 0} ج.م</td>
                 <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
             </tr>
@@ -428,7 +449,7 @@ async function sendEmployeeDetailedReport() {
 
     document.getElementById('loader').classList.remove('hidden');
     try {
-        const res = await apiFetch(API_URL, {
+        const res = await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify({
                 action: 'sendEmployeeDetailedReport',
@@ -571,7 +592,7 @@ async function sendCustomReport() {
 
     document.getElementById('loader').classList.remove('hidden');
     try {
-        const res = await apiFetch(API_URL, {
+        const res = await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify({ 
                 action: 'sendManualReport', 
@@ -635,81 +656,91 @@ function updateCharts(labels, hoursData, latesData) {
     });
 }
 
-async function fetchEmployees() {
+async function fetchEmployees(force = false) {
+    if (!force && allEmployees.length) {
+        renderEmployeesTable(allEmployees);
+        return;
+    }
     document.getElementById('loader').classList.remove('hidden');
     try {
-        const res = await apiFetch(`${API_URL}?action=getEmployees`);
+        const res = await fetch(`${API_URL}?action=getEmployees`);
         const result = await res.json();
         if(result.success) {
-            allEmployees = result.data; // Store for editing
+            allEmployees = result.data;
             populateEmployeeDetailEmployees();
-            const tbody = document.getElementById('employeesTableBody');
-            tbody.innerHTML = '';
-            result.data.forEach(record => {
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td data-label="الاسم">${record.name}</td>
-                    <td data-label="البريد">${record.email}</td>
-                    <td data-label="الهاتف">${record.phone || '-'}</td>
-                    <td data-label="الصلاحية">${record.role}</td>
-                    <td data-label="البدل">${record.transportPrice || 0} ج.م</td>
-                    <td data-label="البصمة">${record.faceDescriptor ? '✅ مسجل' : '❌ لا يوجد'}</td>
-                    <td data-label="الإجراءات" style="display:flex; gap:8px; justify-content:center; padding:10px;">
-                        <button class="btn-primary" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="editEmployee('${record.id}')">تعديل ✏️</button>
-                        <button class="btn-danger" style="padding:5px 12px; font-size:0.85rem; width:auto; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" onclick="deleteEntity('deleteEmployee', '${record.id}', '${record.name}')">حذف 🗑️</button>
-                    </td>
-                `;
-                tbody.appendChild(row);
-            });
+            renderEmployeesTable(allEmployees);
         }
     } catch(e) { console.error(e); }
     document.getElementById('loader').classList.add('hidden');
 }
 
-async function fetchSites() {
-    console.log("Fetching sites...");
+function renderEmployeesTable(data) {
+    const tbody = document.getElementById('employeesTableBody');
+    tbody.innerHTML = '';
+    data.forEach(record => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td data-label="الاسم">${record.name}</td>
+            <td data-label="البريد">${record.email}</td>
+            <td data-label="الهاتف">${record.phone || '-'}</td>
+            <td data-label="الصلاحية">${record.role}</td>
+            <td data-label="البصمة">${record.faceDescriptor ? '✅ مسجل' : '❌ لا يوجد'}</td>
+            <td data-label="الإجراءات" style="display:flex; gap:8px; justify-content:center; padding:10px;">
+                <button class="btn-primary" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="editEmployee('${record.id}')">تعديل ✏️</button>
+                <button class="btn-danger" style="padding:5px 12px; font-size:0.85rem; width:auto; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" onclick="deleteEntity('deleteEmployee', '${record.id}', '${record.name}')">حذف 🗑️</button>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+async function fetchSites(force = false) {
+    if (!force && allSites.length) {
+        renderSitesTable(allSites);
+        return;
+    }
     document.getElementById('loader').classList.remove('hidden');
     try {
-        const res = await apiFetch(`${API_URL}?action=getSites`);
+        const res = await fetch(`${API_URL}?action=getSites`);
         const result = await res.json();
-        console.log("Sites result:", result);
         if(result.success) {
             allSites = result.data;
-            const tbody = document.getElementById('sitesTableBody');
-            tbody.innerHTML = '';
-            result.data.forEach(record => {
-                console.log("Rendering site record:", record);
-                const isTemporary = Boolean(record.isTemporary);
-                const siteName = isTemporary
-                    ? `${record.name} <small style="color:#f59e0b;">(مؤقت - اليوم فقط)</small>`
-                    : record.name;
-                const actions = isTemporary
-                    ? '<span style="color:var(--text-muted);">-</span>'
-                    : `
-                        <button class="btn-primary" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="editSite('${record.id}')">تعديل ✏️</button>
-                        <button class="btn-danger" style="padding:5px 12px; font-size:0.85rem; width:auto; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" onclick="deleteEntity('deleteSite', '${record.id}', '${record.name}')">حذف 🗑️</button>
-                    `;
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td data-label="اسم الموقع">${siteName}</td>
-                    <td data-label="خط العرض">${record.latitude}</td>
-                    <td data-label="خط الطول">${record.longitude}</td>
-                    <td data-label="النطاق">${record.radius} متر</td>
-                    <td data-label="البدل">${record.transportPrice || 0} ج.م</td>
-                    <td data-label="الإجراءات" style="display:flex; gap:8px; justify-content:center; padding:10px;">
-                        ${actions}
-                    </td>
-                `;
-                tbody.appendChild(row);
-            });
+            renderSitesTable(allSites);
         }
-    } catch(e) { 
-        console.error("Fetch Sites Error:", e);
-    }
+    } catch(e) { console.error("Fetch Sites Error:", e); }
     document.getElementById('loader').classList.add('hidden');
 }
 
-function editEmployee(id) {
+function renderSitesTable(data) {
+    const tbody = document.getElementById('sitesTableBody');
+    tbody.innerHTML = '';
+    data.forEach(record => {
+        const isTemporary = Boolean(record.isTemporary);
+        const siteName = isTemporary
+            ? `${record.name} <small style="color:#f59e0b;">(مؤقت - اليوم فقط)</small>`
+            : record.name;
+        const actions = isTemporary
+            ? '<span style="color:var(--text-muted);">-</span>'
+            : `
+                <button class="btn-primary" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="editSite('${record.id}')">تعديل ✏️</button>
+                <button class="btn-danger" style="padding:5px 12px; font-size:0.85rem; width:auto; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" onclick="deleteEntity('deleteSite', '${record.id}', '${record.name}')">حذف 🗑️</button>
+            `;
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td data-label="اسم الموقع">${siteName}</td>
+            <td data-label="خط العرض">${record.latitude}</td>
+            <td data-label="خط الطول">${record.longitude}</td>
+            <td data-label="النطاق">${record.radius} متر</td>
+            <td data-label="رابط الموقع">${record.mapLink ? `<a href="${record.mapLink}" target="_blank" style="color:var(--primary); text-decoration:underline;">فتح الرابط 📍</a>` : '-'}</td>
+            <td data-label="الإجراءات" style="display:flex; gap:8px; justify-content:center; padding:10px;">
+                ${actions}
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+async function editEmployee(id) {
     const emp = allEmployees.find(e => String(e.id) === String(id));
     if(!emp) return;
     document.getElementById('editEmpId').value = emp.id;
@@ -720,9 +751,14 @@ function editEmployee(id) {
     document.getElementById('empPass').value = ''; // Don't show password for security
     document.getElementById('empPass').placeholder = 'اتركها فارغة للاحتفاظ بكلمة المرور الحالية';
     document.getElementById('empRole').value = emp.role;
+    document.getElementById('empRole').value = emp.role;
     document.getElementById('empTransportPrice').value = emp.transportPrice || 0;
-    document.getElementById('empSites').value = Array.isArray(emp.assignedSites) ? emp.assignedSites.join(',') : emp.assignedSites;
-    openEmployeeModal('edit');
+    
+    // Assigned sites (can keep for compatibility or just use for initialization)
+    const assigned = Array.isArray(emp.assignedSites) ? emp.assignedSites : (emp.assignedSites ? String(emp.assignedSites).split(',') : []);
+    document.getElementById('empSites').value = assigned.join(',');
+    
+    await openEmployeeModal('edit', emp);
 }
 
 function editSite(id) {
@@ -735,12 +771,16 @@ function editSite(id) {
     document.getElementById('editSiteId').value = site.id;
     document.getElementById('siteModalTitle').innerText = 'تعديل بيانات الموقع';
     document.getElementById('siteName').value = site.name;
-    document.getElementById('siteMapLink').value = '';
+    document.getElementById('siteMapLink').value = site.mapLink || '';
     document.getElementById('siteLat').value = site.latitude;
     document.getElementById('siteLng').value = site.longitude;
     document.getElementById('siteRadius').value = site.radius;
-    document.getElementById('siteTransportPrice').value = site.transportPrice || 120;
     openSiteModal();
+}
+
+function toggleAdvancedEmpOptions() {
+    const el = document.getElementById('advancedEmpOptions');
+    el.classList.toggle('hidden');
 }
 
 async function deleteEntity(action, id, name) {
@@ -748,7 +788,7 @@ async function deleteEntity(action, id, name) {
     
     document.getElementById('loader').classList.remove('hidden');
     try {
-        const res = await apiFetch(API_URL, { method: 'POST', body: JSON.stringify({ action, id }), headers:{'Content-Type':'text/plain'} });
+        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action, id }), headers:{'Content-Type':'text/plain'} });
         const result = await res.json();
         if(result.success) {
             if(action === 'deleteEmployee') fetchEmployees();
@@ -758,7 +798,7 @@ async function deleteEntity(action, id, name) {
     document.getElementById('loader').classList.add('hidden');
 }
 
-function openEmployeeModal(mode = 'add') {
+async function openEmployeeModal(mode = 'add', emp = null) {
     if (mode !== 'edit') {
         document.getElementById('editEmpId').value = '';
         document.getElementById('empModalTitle').innerText = 'إضافة موظف جديد';
@@ -770,7 +810,56 @@ function openEmployeeModal(mode = 'add') {
         document.getElementById('empRole').value = 'employee';
         document.getElementById('empTransportPrice').value = 0;
         document.getElementById('empSites').value = '';
+        document.getElementById('advancedEmpOptions').classList.add('hidden');
     }
+
+    // Render Sites List
+    const container = document.getElementById('empSitesContainer');
+    container.innerHTML = '<div style="color: var(--text-muted); font-size: 0.85rem; text-align: center;">جاري تحميل المواقع...</div>';
+    
+    if (!allSites.length) {
+        await fetchSites();
+    }
+
+    container.innerHTML = '';
+    allSites.filter(s => !s.isTemporary).forEach(site => {
+        const isAssigned = emp && emp.assignedSites && emp.assignedSites.includes(String(site.id));
+        const allowance = emp && emp.siteAllowances ? emp.siteAllowances.find(a => String(a.siteId) === String(site.id)) : null;
+        const price = allowance ? allowance.transportPrice : (site.transportPrice || 0);
+
+        const div = document.createElement('div');
+        div.style.display = 'flex';
+        div.style.alignItems = 'center';
+        div.style.gap = '10px';
+        div.style.marginBottom = '8px';
+        div.style.padding = '5px';
+        div.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
+
+        div.innerHTML = `
+            <input type="checkbox" class="site-checkbox" value="${site.id}" ${isAssigned ? 'checked' : ''} style="width:18px; height:18px;">
+            <span style="flex:1; font-size:0.9rem;">${site.name}</span>
+            <div style="display:flex; align-items:center; gap:5px;">
+                <input type="number" class="site-price-input" data-site-id="${site.id}" value="${price}" 
+                    style="width:70px; padding:4px; border-radius:4px; background:rgba(0,0,0,0.3); border:1px solid var(--card-border); color:white; font-size:0.85rem;"
+                    ${!isAssigned ? 'disabled' : ''}>
+                <span style="font-size:0.75rem; color:var(--text-muted);">ج.م</span>
+            </div>
+        `;
+
+        // Toggle price input based on checkbox
+        const checkbox = div.querySelector('.site-checkbox');
+        const priceInput = div.querySelector('.site-price-input');
+        checkbox.addEventListener('change', () => {
+            priceInput.disabled = !checkbox.checked;
+        });
+
+        container.appendChild(div);
+    });
+
+    if (!allSites.length) {
+        container.innerHTML = '<div style="color: var(--danger); font-size: 0.85rem; text-align: center;">لم يتم العثور على مواقع.</div>';
+    }
+
     document.getElementById('employeeModal').classList.remove('hidden');
 }
 function closeEmployeeModal() { document.getElementById('employeeModal').classList.add('hidden'); }
@@ -782,9 +871,23 @@ async function saveEmployee() {
     const phone = document.getElementById('empPhone').value.trim();
     const pass = document.getElementById('empPass').value.trim();
     const role = document.getElementById('empRole').value;
-    const sites = document.getElementById('empSites').value.trim();
-    if(!phone) return alert("أدخل رقم الهاتف");
     
+    // Collect sites and allowances
+    const selectedSites = [];
+    const siteAllowances = [];
+    
+    document.querySelectorAll('#empSitesContainer > div').forEach(div => {
+        const checkbox = div.querySelector('.site-checkbox');
+        const priceInput = div.querySelector('.site-price-input');
+        if (checkbox.checked) {
+            const siteId = checkbox.value;
+            const price = parseFloat(priceInput.value) || 0;
+            selectedSites.push(siteId);
+            siteAllowances.push({ siteId, transportPrice: price });
+        }
+    });
+
+    if(!phone) return alert("أدخل رقم الهاتف");
     if(!name || !email) return alert("أكمل البيانات");
     
     const autoGeneratedPassword = (!editId && !pass)
@@ -794,13 +897,19 @@ async function saveEmployee() {
     const payload = {
         action: editId ? 'updateEmployee' : 'saveEmployee',
         id: editId || ('EMP' + Math.floor(1000 + Math.random() * 9000)),
-        name: name, email: email, password: pass || autoGeneratedPassword, phone: phone, role: role, assignedSites: sites,
+        name: name, 
+        email: email, 
+        password: pass || autoGeneratedPassword, 
+        phone: phone, 
+        role: role, 
+        assignedSites: selectedSites.join(','),
+        siteAllowances: siteAllowances,
         transportPrice: document.getElementById('empTransportPrice').value || 0
     };
     
     document.getElementById('loader').classList.remove('hidden');
     try {
-        const res = await apiFetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers:{'Content-Type':'text/plain'} });
+        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers:{'Content-Type':'text/plain'} });
         const result = await res.json();
         if(result.success) {
             if (autoGeneratedPassword) {
@@ -846,7 +955,7 @@ async function runParseMapLink() {
 
     if (!extracted && shouldAskBackend) {
         try {
-            const res = await apiFetch(API_URL, {
+            const res = await fetch(API_URL, {
                 method: 'POST', body: JSON.stringify({ action: 'resolveMapLink', link: link }), headers:{'Content-Type':'text/plain'}
             });
             const result = await res.json();
@@ -927,12 +1036,12 @@ async function saveSite() {
         action: editId ? 'updateSite' : 'saveSite',
         id: editId || Math.floor(10000 + Math.random() * 90000), 
         name: name, latitude: lat, longitude: lng, radius: radius,
-        transportPrice: document.getElementById('siteTransportPrice').value || 120
+        mapLink: document.getElementById('siteMapLink').value.trim()
     };
     
     document.getElementById('loader').classList.remove('hidden');
     try {
-        const res = await apiFetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers:{'Content-Type':'text/plain'} });
+        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers:{'Content-Type':'text/plain'} });
         const result = await res.json();
         if(result.success) {
             closeSiteModal();
@@ -956,32 +1065,39 @@ function toggleSidebar() {
     overlay.classList.toggle('show');
 }
 
-async function fetchSettings() {
+async function fetchSettings(force = false) {
+    if (!force && Object.keys(appSettings).length) {
+        renderSettings(appSettings);
+        return;
+    }
     document.getElementById('loader').classList.remove('hidden');
     try {
-        const res = await apiFetch(`${API_URL}?action=getSettings`);
+        const res = await fetch(`${API_URL}?action=getSettings`);
         const result = await res.json();
         if (result.success) {
-            // Ensure time values are in HH:mm format for input[type="time"]
-            let start = result.data.workStartTime || "09:00";
-            let end = result.data.workEndTime || "17:00";
-            
-            // Basic normalization just in case
-            if (start.match(/^\d:\d\d$/)) start = "0" + start;
-            if (end.match(/^\d:\d\d$/)) end = "0" + end;
-
-            document.getElementById('setWorkStartTime').value = start;
-            document.getElementById('setWorkEndTime').value = end;
-            
-            // Reports settings
-            document.getElementById('setReportEmails').value = result.data.reportEmails || "";
-            document.getElementById('setDailyReport').checked = result.data.dailyReportEnabled === "true";
-            document.getElementById('setMonthlyReport').checked = result.data.monthlyReportEnabled === "true";
+            appSettings = result.data;
+            renderSettings(appSettings);
         }
-    } catch (e) {
-        console.error("Fetch Settings error", e);
-    }
+    } catch (e) { console.error("Fetch Settings error", e); }
     document.getElementById('loader').classList.add('hidden');
+}
+
+function renderSettings(data) {
+    // Ensure time values are in HH:mm format for input[type="time"]
+    let start = data.workStartTime || "09:00";
+    let end = data.workEndTime || "17:00";
+    
+    // Basic normalization just in case
+    if (start.match(/^\d:\d\d$/)) start = "0" + start;
+    if (end.match(/^\d:\d\d$/)) end = "0" + end;
+
+    document.getElementById('setWorkStartTime').value = start;
+    document.getElementById('setWorkEndTime').value = end;
+    
+    // Reports settings
+    document.getElementById('setReportEmails').value = data.reportEmails || "";
+    document.getElementById('setDailyReport').checked = data.dailyReportEnabled === "true";
+    document.getElementById('setMonthlyReport').checked = data.monthlyReportEnabled === "true";
 }
 
 async function saveSettings() {
@@ -1004,7 +1120,7 @@ async function saveSettings() {
             }
         };
 
-        const res = await apiFetch(API_URL, {
+        const res = await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify(payload),
             headers: { 'Content-Type': 'text/plain' }
@@ -1027,7 +1143,7 @@ async function setupTriggers() {
     if(!confirm("سيتم الآن تفعيل مواعيد إرسال التقارير التلقائية. هل أنت متأكد؟")) return;
     document.getElementById('loader').classList.remove('hidden');
     try {
-        const res = await apiFetch(API_URL, {
+        const res = await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify({ action: 'createTriggers' }),
             headers: { 'Content-Type': 'text/plain' }
@@ -1039,13 +1155,18 @@ async function setupTriggers() {
 }
 
 // ------ SITE REQUESTS LOGIC ------ //
-async function fetchSiteRequests() {
+async function fetchSiteRequests(force = false) {
+    if (!force && allSiteRequests.length) {
+        renderSiteRequestsTable(allSiteRequests);
+        return;
+    }
     document.getElementById('loader').classList.remove('hidden');
     try {
-        const res = await apiFetch(`${API_URL}?action=getSiteRequests`);
+        const res = await fetch(`${API_URL}?action=getSiteRequests`);
         const result = await res.json();
         if(result.success) {
-            renderSiteRequestsTable(result.data);
+            allSiteRequests = result.data;
+            renderSiteRequestsTable(allSiteRequests);
         }
     } catch(e) { console.error("Fetch Site Requests error:", e); }
     document.getElementById('loader').classList.add('hidden');
@@ -1069,7 +1190,9 @@ function renderSiteRequestsTable(data) {
             statusColor = 'var(--danger)';
         }
 
-        const actions = req.status === 'pending' ? `
+        const canOverrideAutoApprovedToday = req.status === 'approved_today' && req.isAutoApproved && req.isActiveToday;
+        const canManageRequest = req.status === 'pending' || canOverrideAutoApprovedToday;
+        const actions = canManageRequest ? `
             <div style="display:flex; gap:8px;">
                 <button class="btn-primary" style="padding:5px 12px; font-size:0.85rem; width:auto; background:var(--secondary);" onclick="approveRequest('${req.id}', '${req.suggestedName}')">موافقة ✓</button>
                 <button class="btn-danger" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="rejectRequest('${req.id}')">رفض ✕</button>
@@ -1106,10 +1229,14 @@ function renderSiteRequestsTable(data) {
     });
 }
 async function approveRequest(id, suggestedName) {
+    const matchedRequest = allSiteRequests.find(req => String(req.id) === String(id));
+    const currentTransportPrice = matchedRequest ? parseFloat(matchedRequest.transportPrice) : NaN;
+    const currentRadius = matchedRequest ? parseFloat(matchedRequest.tempRadius) : NaN;
+
     document.getElementById('approveReqId').value = id;
     document.getElementById('approveSiteName').value = suggestedName;
-    document.getElementById('approveTransportPrice').value = 120;
-    document.getElementById('approveRadius').value = 100;
+    document.getElementById('approveTransportPrice').value = Number.isFinite(currentTransportPrice) ? currentTransportPrice : 120;
+    document.getElementById('approveRadius').value = Number.isFinite(currentRadius) ? currentRadius : 100;
     document.getElementById('approveRequestModal').classList.remove('hidden');
 }
 
@@ -1125,7 +1252,7 @@ async function confirmApproval(mode) {
 
     document.getElementById('loader').classList.remove('hidden');
     try {
-        const res = await apiFetch(API_URL, {
+        const res = await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify({ 
                 action: 'approveSiteRequest', 
@@ -1141,8 +1268,7 @@ async function confirmApproval(mode) {
         if(result.success) {
             alert(result.message);
             closeApproveModal();
-            fetchSiteRequests();
-            fetchSites();
+            await Promise.all([fetchSiteRequests(true), fetchSites(true)]);
         } else alert("خطأ: " + result.message);
     } catch(e) { console.error(e); alert("خطأ في الاتصال"); }
     document.getElementById('loader').classList.add('hidden');
@@ -1153,7 +1279,7 @@ async function rejectRequest(id) {
 
     document.getElementById('loader').classList.remove('hidden');
     try {
-        const res = await apiFetch(API_URL, {
+        const res = await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify({ action: 'rejectSiteRequest', id: id }),
             headers: { 'Content-Type': 'text/plain' }
@@ -1161,9 +1287,27 @@ async function rejectRequest(id) {
         const result = await res.json();
         if(result.success) {
             alert(result.message);
-            fetchSiteRequests();
+            await fetchSiteRequests(true);
         } else alert("خطأ: " + result.message);
     } catch(e) { console.error(e); alert("خطأ في الاتصال"); }
     document.getElementById('loader').classList.add('hidden');
 }
 
+async function clearProcessedRequests() {
+    if(!confirm("هل أنت متأكد من مسح جميع الطلبات التي تمت الموافقة عليها أو رفضها أو انتهت صلاحتها؟ هذا الإجراء لا يمكن التراجع عنه.")) return;
+
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'clearProcessedRequests' }),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+        if(result.success) {
+            alert(result.message);
+            await initDashboard(true); // Refresh all data to sync
+        } else alert("خطأ: " + result.message);
+    } catch(e) { console.error(e); alert("خطأ في الاتصال"); }
+    document.getElementById('loader').classList.add('hidden');
+}

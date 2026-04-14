@@ -1,26 +1,5 @@
-const API_URL =
-    (window.APP_CONFIG && window.APP_CONFIG.API_URL) ||
-    'https://script.google.com/macros/s/AKfycbwNhaRKDP-7M4dXSQend8RbYPkXRgs5nzN0-BmNzxEO8IkBN9lt6KDtJCdOqpovhJEY1Q/exec';
-const SUPABASE_ANON_KEY =
-    (window.APP_CONFIG && window.APP_CONFIG.SUPABASE_ANON_KEY) ||
-    '';
-const HAS_SUPABASE_ANON_KEY =
-    !!SUPABASE_ANON_KEY && SUPABASE_ANON_KEY.indexOf('<') !== 0;
-const USE_SUPABASE_AUTH_HEADERS = API_URL.indexOf('supabase.co/functions/v1/') !== -1;
-
-function apiFetch(url, options) {
-    const requestOptions = options || {};
-    if (!USE_SUPABASE_AUTH_HEADERS || !HAS_SUPABASE_ANON_KEY) {
-        return fetch(url, requestOptions);
-    }
-
-    const headers = new Headers(requestOptions.headers || {});
-    if (!headers.has('apikey')) headers.set('apikey', SUPABASE_ANON_KEY);
-    if (!headers.has('Authorization')) headers.set('Authorization', `Bearer ${SUPABASE_ANON_KEY}`);
-
-    return fetch(url, { ...requestOptions, headers });
-}
-
+const API_URL = '/api/exec';
+// const OLD_BACKUP_API = 'https://script.google.com/macros/s/AKfycbwNhaRKDP-7M4dXSQend8RbYPkXRgs5nzN0-BmNzxEO8IkBN9lt6KDtJCdOqpovhJEY1Q/exec';
 let currentUser = JSON.parse(localStorage.getItem('empSession'));
 let currentSite = null;
 let lastLocation = null;
@@ -28,7 +7,9 @@ let lastDetection = null;
 let sitesData = [];
 let faceMatcher = null;
 let currentFaceDescriptor = null;
-let timerInterval = null; // Added for live counter // Stored during video match
+let timerInterval = null; 
+let isFaceVerified = false;
+let lastDetectedSite = null;
 let tempEmail = ""; // used during registration
 let tempPhone = ""; // used during registration
 const MODEL_URL = '../models';
@@ -63,7 +44,7 @@ async function login() {
     document.querySelector('#loginSection button').innerText = 'جاري التحقق...';
 
     try {
-        const response = await apiFetch(API_URL, {
+        const response = await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify({ action: 'login', identifier: email, password: pass }),
             headers: { 'Content-Type': 'text/plain' }
@@ -92,17 +73,11 @@ async function requestOTP() {
 
     document.getElementById('btnRequestOTP').innerText = 'جاري الإرسال...';
     try {
-       const res = await apiFetch(API_URL, {
+       const res = await fetch(API_URL, {
             method:'POST', body: JSON.stringify({action:'sendOTP', email: tempEmail, phone: tempPhone}), headers:{'Content-Type':'text/plain'}
        });
        const result = await res.json();
        if(result.success) {
-           if (result.warning) {
-               console.warn('OTP warning:', result.warning);
-           }
-           if (result.debugCode) {
-               alert('Debug OTP code: ' + result.debugCode);
-           }
            showSection('verifyOTPSection');
        } else {
            showError('otpError', result.message);
@@ -121,7 +96,7 @@ async function verifyOTP() {
     
     document.getElementById('btnVerifyOTP').innerText = 'جاري...';
     try {
-       const res = await apiFetch(API_URL, {
+       const res = await fetch(API_URL, {
             method:'POST', body: JSON.stringify({action:'verifyOTP', email: tempEmail, code: code}), headers:{'Content-Type':'text/plain'}
        });
        const result = await res.json();
@@ -187,7 +162,7 @@ async function completeRegistration() {
     };
 
     try {
-        const res = await apiFetch(API_URL, {
+        const res = await fetch(API_URL, {
             method:'POST', body: JSON.stringify(payload), headers:{'Content-Type':'text/plain'}
         });
         const result = await res.json();
@@ -220,27 +195,32 @@ function logout() {
 async function initSystem() {
     setStatus('🔄 جاري بدء النظام (النسخة المحدثة)...', 'text-muted');
     
-    // Step 1: Load Sites
+    // Step 1: Load Data & AI Models in Parallel
     try {
-        const response = await apiFetch(`${API_URL}?action=getSites&employeeId=${encodeURIComponent(currentUser.id)}`);
-        const result = await response.json();
-        if (result.success) {
-            sitesData = result.data;
-            setStatus(`📡 تم تحميل ${sitesData.length} موقع. جاري تحميل الذكاء الاصطناعي...`, 'text-muted');
+        const dataPromise = fetch(`${API_URL}?action=getPortalInitialData&employeeId=${encodeURIComponent(currentUser.id)}`).then(r => r.json());
+        const modelPromise = Promise.all([
+            faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
+            faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+            faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+        ]);
+
+        const [dataResult, _] = await Promise.all([dataPromise, modelPromise]);
+
+        if (dataResult.success) {
+            sitesData = dataResult.sites || [];
+            allAttendanceData = dataResult.attendance || [];
+            
+            // Process initial status
+            processAttendanceStatus(allAttendanceData);
+            
+            setStatus(`📡 تم تحميل ${sitesData.length} موقع. النظام جاهز...`, 'text-muted');
         } else {
-            setStatus('⚠️ فشل في تحميل المواقع من السيرفر', 'error-text');
+            console.error("Data load failed", dataResult);
+            setStatus('⚠️ فشل في تحميل البيانات من السيرفر', 'error-text');
         }
     } catch(e) {
-        setStatus('❌ خطأ في الاتصال بالسيرفر', 'error-text');
-    }
-
-    // Step 2: Load Face Models
-    try {
-        await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
-        await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-        await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
-    } catch(e) {
-        setStatus('❌ مشكلة في تحميل ملفات الذكاء الاصطناعي من السيرفر', 'error-text');
+        console.error("Initial load error", e);
+        setStatus('❌ خطأ في الاتصال أو تحميل ملفات الذكاء الاصطناعي', 'error-text');
         return;
     }
 
@@ -260,12 +240,29 @@ async function initSystem() {
 
     startVideo();
     getLocation();
-    checkCurrentStatus(); // Initial status check after login
+}
+
+function processAttendanceStatus(data) {
+    if (data && data.length > 0) {
+        const lastRecord = data[data.length - 1];
+        const isCheckedIn = (lastRecord.checkIn && !lastRecord.checkOut);
+        
+        const checkInDate = new Date(lastRecord.checkIn).toDateString();
+        const today = new Date().toDateString();
+
+        if (isCheckedIn && checkInDate === today) {
+            setAppState('in', lastRecord.checkIn);
+        } else {
+            setAppState('out');
+        }
+    } else {
+        setAppState('out');
+    }
 }
 
 async function checkCurrentStatus() {
     try {
-        const res = await apiFetch(`${API_URL}?action=getAttendance&employeeId=${currentUser.id}`);
+        const res = await fetch(`${API_URL}?action=getAttendance&employeeId=${currentUser.id}`);
         const result = await res.json();
         if (result.success && result.data.length > 0) {
             const lastRecord = result.data[result.data.length - 1];
@@ -304,6 +301,21 @@ function setAppState(state, startTime) {
         btnOut.classList.add('hidden');
         timerContainer.classList.add('hidden');
         stopWorkTimer();
+    }
+    updateActionButtonsState();
+}
+
+function updateActionButtonsState() {
+    const btnIn = document.getElementById('btnCheckIn');
+    const btnOut = document.getElementById('btnCheckOut');
+    
+    const shouldBeEnabled = isFaceVerified && lastDetectedSite;
+    
+    if (btnIn && btnIn.disabled !== !shouldBeEnabled) {
+        btnIn.disabled = !shouldBeEnabled;
+    }
+    if (btnOut && btnOut.disabled !== !shouldBeEnabled) {
+        btnOut.disabled = !shouldBeEnabled;
     }
 }
 
@@ -363,23 +375,21 @@ function startVideo() {
                 faceapi.draw.drawDetections(canvas, resizeDetections);
                 
                 const bestMatch = faceMatcher.findBestMatch(detections.descriptor);
-                if (bestMatch.label !== 'unknown' && lastLocation) {
+                if (bestMatch.label !== 'unknown') {
                     setStatus('تم التحقق من الوجه بنجاح ✓', 'success-text');
                     currentFaceDescriptor = Array.from(detections.descriptor);
-                    document.getElementById('btnCheckIn').disabled = false;
-                    document.getElementById('btnCheckOut').disabled = false;
-                } else if(bestMatch.label === 'unknown') {
+                    isFaceVerified = true;
+                } else {
                     setStatus('الوجه غير متطابق', 'error-text');
                     currentFaceDescriptor = null;
-                    document.getElementById('btnCheckIn').disabled = true;
-                    document.getElementById('btnCheckOut').disabled = true;
+                    isFaceVerified = false;
                 }
             } else {
-                setStatus('وجه الكاميرا إاليك', 'text-muted');
+                setStatus('وجه الكاميرا إليك', 'text-muted');
                 currentFaceDescriptor = null;
-                document.getElementById('btnCheckIn').disabled = true;
-                document.getElementById('btnCheckOut').disabled = true;
+                isFaceVerified = false;
             }
+            updateActionButtonsState();
         }, 1000);
     });
 }
@@ -421,17 +431,14 @@ function verifyLocation() {
     if (detectedSite) {
         document.getElementById('siteText').innerText = `✅ أنت في موقع: ${detectedSite.name}`;
         document.getElementById('btnRequestSite').classList.add('hidden');
-        if(currentFaceDescriptor) {
-            document.getElementById('btnCheckIn').disabled = false;
-            document.getElementById('btnCheckOut').disabled = false;
-        }
+        lastDetectedSite = detectedSite;
     } else {
         const distText = minDistance === Infinity ? "" : `(أقرب موقع لك هو ${closestSiteName} ويبعد ${(minDistance/1000).toFixed(2)} كم)`;
         document.getElementById('siteText').innerText = `❌ أنت خارج النطاق. ${distText}`;
         document.getElementById('btnRequestSite').classList.remove('hidden');
-        document.getElementById('btnCheckIn').disabled = true;
-        document.getElementById('btnCheckOut').disabled = true;
+        lastDetectedSite = null;
     }
+    updateActionButtonsState();
 }
 
 function getDistanceFromLatLonInM(lat1, lon1, lat2, lon2) {
@@ -454,7 +461,7 @@ async function handleCheckIn() {
     };
 
     try {
-        const res = await apiFetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'text/plain' } });
+        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'text/plain' } });
         const result = await res.json();
         if(result.success) {
             alert(result.message);
@@ -475,7 +482,7 @@ async function handleCheckOut() {
         faceDescriptor: JSON.stringify(currentFaceDescriptor)
     };
     try {
-        const res = await apiFetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'text/plain' } });
+        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'text/plain' } });
         const result = await res.json();
         if(result.success) {
             alert(result.message);
@@ -511,7 +518,7 @@ async function submitSiteRequest() {
     // Validate that the link matches the current location (within 700m)
     if (link) {
         try {
-            const res = await apiFetch(API_URL, {
+            const res = await fetch(API_URL, {
                 method: 'POST', body: JSON.stringify({ action: 'resolveMapLink', link: link }), headers:{'Content-Type':'text/plain'}
             });
             const result = await res.json();
@@ -536,7 +543,7 @@ async function submitSiteRequest() {
         note: note
     };
     try {
-        const res = await apiFetch(API_URL, {
+        const res = await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify(payload),
             headers: { 'Content-Type': 'text/plain' }
@@ -570,7 +577,7 @@ async function fetchMyReports() {
     document.getElementById('loader').classList.remove('hidden');
     try {
         // Fetch only this employee's attendance using GET param
-        const res = await apiFetch(`${API_URL}?action=getAttendance&employeeId=${currentUser.id}`);
+        const res = await fetch(`${API_URL}?action=getAttendance&employeeId=${currentUser.id}`);
         const result = await res.json();
         if(result.success) {
             renderMyReports(result.data, monthVal);

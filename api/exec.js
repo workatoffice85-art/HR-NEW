@@ -1,0 +1,218 @@
+import { createClient } from '@supabase/supabase-js';
+
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://ofegdbbyanyglqewbdlm.supabase.co';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9mZWdkYmJ5YW55Z2xxZXdiZGxtIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjEzOTAzMywiZXhwIjoyMDkxNzE1MDMzfQ.lw2wyo5_U_hXZSebLScV1fqt7eRHPOfFi7Z4XKnswzU';
+const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwNhaRKDP-7M4dXSQend8RbYPkXRgs5nzN0-BmNzxEO8IkBN9lt6KDtJCdOqpovhJEY1Q/exec';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+// Helper: Distance calculation in meters
+function getDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371e3;
+  const f1 = lat1 * Math.PI/180;
+  const f2 = lat2 * Math.PI/180;
+  const df = (lat2-lat1) * Math.PI/180;
+  const dl = (lon2-lon1) * Math.PI/180;
+  const a = Math.sin(df/2)**2 + Math.cos(f1)*Math.cos(f2) * Math.sin(dl/2)**2;
+  return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// Background sync to Google Sheets (Backup)
+async function syncToGoogleSheet(body) {
+    try {
+        await fetch(GOOGLE_SCRIPT_URL, {
+            method: 'POST',
+            body: JSON.stringify(body),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+    } catch (e) {
+        console.error("Google Sync Failed:", e);
+    }
+}
+
+export default async function handler(req, res) {
+    // Add CORS headers
+    res.setHeader('Access-Control-Allow-Credentials', true);
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+    res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
+
+    if (req.method === 'OPTIONS') {
+        res.status(200).end();
+        return;
+    }
+
+    try {
+        // Parse the body if POST, or query if GET
+        let data = {};
+        if (req.method === 'POST') {
+            data = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+        } else {
+            data = req.query;
+        }
+
+        const action = data.action;
+
+        // DUAL WRITING / BACKUP SYNC:
+        // For writing actions, we asynchronously broadcast the exact request to your existing Google Apps Script
+        const writeActions = ["saveEmployee", "updateEmployee", "deleteEmployee", "saveSite", "updateSite", "deleteSite", "addSiteRequest", "approveSiteRequest", "rejectSiteRequest", "addAttendance", "checkoutAttendance", "updateSettings"];
+        if (writeActions.includes(action)) {
+            syncToGoogleSheet(data);
+        }
+
+        // --- AUTH ---
+        if (action === "login") {
+            const { data: users, error } = await supabase
+                .from('employees')
+                .select('*')
+                .or(`email.eq.${data.identifier},phone.eq.${data.identifier}`);
+            
+            if (error || !users || users.length === 0) throw new Error("بيانات الدخول غير صحيحة");
+            const user = users.find(u => u.password === data.password);
+            if (!user) throw new Error("كلمة المرور غير صحيحة");
+            if (data.role && user.role !== data.role) throw new Error("لا تملك صلاحية الدخول");
+
+            return res.status(200).json({
+                success: true,
+                message: "تم تسجيل الدخول بنجاح",
+                data: {
+                    id: user.id, name: user.name, email: user.email, phone: user.phone, role: user.role,
+                    assignedSites: user.assignedSites ? user.assignedSites.split(',') : [],
+                    faceDescriptor: user.faceDescriptor, transportPrice: user.transportPrice
+                }
+            });
+        }
+
+        // --- DASHBOARD DATA (GET) ---
+        if (action === "getDashboardData") {
+            const [empRes, siteRes, attRes, reqRes, setRes] = await Promise.all([
+                supabase.from('employees').select('*'),
+                supabase.from('sites').select('*').eq('isTemporary', false),
+                supabase.from('attendance').select('*'),
+                supabase.from('siteRequests').select('*'),
+                supabase.from('settings').select('*')
+            ]);
+            let settings = {};
+            if (setRes.data) {
+                setRes.data.forEach(s => settings[s.key] = s.value);
+            }
+            return res.status(200).json({
+                success: true,
+                employees: empRes.data || [],
+                sites: siteRes.data || [],
+                attendance: attRes.data || [],
+                siteRequests: reqRes.data || [],
+                settings: settings
+            });
+        }
+
+        // --- EMPLOYEE DASHBOARD INIT ---
+        if (action === "getPortalInitialData") {
+            const empId = data.employeeId;
+            const [siteRes, attRes] = await Promise.all([
+                supabase.from('sites').select('*'),
+                supabase.from('attendance').select('*').eq('employeeId', empId)
+            ]);
+            return res.status(200).json({ success: true, sites: siteRes.data || [], attendance: attRes.data || [] });
+        }
+
+        if (action === "getAttendance") {
+            let query = supabase.from('attendance').select('*');
+            if (data.employeeId) query = query.eq('employeeId', data.employeeId);
+            const { data: att, error } = await query;
+            if (error) throw error;
+            return res.status(200).json({ success: true, data: att });
+        }
+
+        // --- ADD ATTENDANCE (CHECK-IN) ---
+        if (action === "addAttendance") {
+            // Check Location logic
+            const { data: sites } = await supabase.from('sites').select('*');
+            let matchedSite = null;
+            if (sites) {
+                for (let s of sites) {
+                    let d = getDistance(data.latitude, data.longitude, s.latitude, s.longitude);
+                    if (d <= s.radius) { matchedSite = s; break; }
+                }
+            }
+            if (!matchedSite) {
+                // Check if any auto-approved temp site matches
+                const { data: reqs } = await supabase.from('siteRequests').select('*').eq('employeeId', data.employeeId).eq('status', 'approved_today');
+                if (reqs) {
+                    for (let r of reqs) {
+                        let d = getDistance(data.latitude, data.longitude, r.latitude, r.longitude);
+                        if (d <= (r.tempRadius || 100)) { 
+                            matchedSite = { id: r.id, name: r.suggestedName, transportPrice: r.transportPrice }; break; 
+                        }
+                    }
+                }
+            }
+            if (!matchedSite) throw new Error("أنت خارج نطاق جميع مواقع العمل المسجلة");
+
+            // Calculate status
+            let checkInDate = new Date(data.checkIn);
+            let dayOfWeek = checkInDate.getDay();
+            let status = "present";
+            
+            const { data: setRows } = await supabase.from('settings').select('*').eq('key', 'workStartTime');
+            let workStart = (setRows && setRows.length > 0) ? setRows[0].value : "09:00";
+            let checkInTimeStr = checkInDate.toLocaleTimeString('en-US', {hour12:false, hour:'2-digit', minute:'2-digit'});
+
+            if (dayOfWeek === 5 || dayOfWeek === 6) status = "overtime";
+            else if (checkInTimeStr > workStart) status = "late";
+
+            const payload = {
+                employeeId: data.employeeId,
+                employeeName: data.employeeName,
+                siteId: matchedSite.id,
+                siteName: matchedSite.name,
+                checkIn: data.checkIn,
+                latitude: data.latitude,
+                longitude: data.longitude,
+                status: status,
+                transportPrice: matchedSite.transportPrice || 0
+            };
+
+            const { error } = await supabase.from('attendance').insert([payload]);
+            if (error) throw error;
+            return res.status(200).json({ success: true, message: "تم تسجيل الحضور بنجاح" });
+        }
+
+        // --- CHECK OUT ---
+        if (action === "checkoutAttendance") {
+            const { data: existing, error: errExist } = await supabase.from('attendance')
+                .select('*')
+                .eq('employeeId', data.employeeId)
+                .is('checkOut', null)
+                .order('checkIn', { ascending: false })
+                .limit(1);
+            
+            if (errExist || !existing || existing.length === 0) throw new Error("لا يوجد عملية حضور مفتوحة لنسجل الانصراف");
+
+            let cIn = new Date(existing[0].checkIn);
+            let cOut = new Date(data.checkOut);
+            let hours = ((cOut - cIn) / 36e5).toFixed(2);
+
+            const { error } = await supabase.from('attendance')
+                .update({ checkOut: data.checkOut, totalHours: hours })
+                .eq('id', existing[0].id);
+            if (error) throw error;
+            return res.status(200).json({ success: true, message: "تم تسجيل الانصراف الساعات: " + hours });
+        }
+        
+        // Basic proxy fallback for anything else (or we can just implement the rest quickly)
+        // If action is none of the above, we can just proxy entirely to Google!
+        
+        // Proxy Fallback
+        const proxyRes = await fetch(GOOGLE_SCRIPT_URL, {
+            method: req.method === 'POST' ? 'POST' : 'GET',
+            body: req.method === 'POST' ? JSON.stringify(data) : undefined,
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const proxyJson = await proxyRes.json();
+        return res.status(200).json(proxyJson);
+
+    } catch (e) {
+        return res.status(200).json({ success: false, message: e.message || e.toString() });
+    }
+}

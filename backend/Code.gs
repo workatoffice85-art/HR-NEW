@@ -474,13 +474,49 @@ function ensureEmployeeContactsUnique(rows, email, phone, ignoreEmployeeId) {
 }
 
 function getSiteTransportMap() {
-  var sheet = getOrCreateSheet("sites", ["id","name","latitude","longitude","radius","transportPrice"]);
+  var sheet = getOrCreateSheet("sites", ["id","name","latitude","longitude","radius","transportPrice","mapLink"]);
   var rows = sheet.getDataRange().getValues();
   var map = {};
   for (var i = 1; i < rows.length; i++) {
     map[String(rows[i][0])] = toNumberSafe(rows[i][5], 0);
   }
   return map;
+}
+
+function getSiteAllowancesForEmployee(employeeId) {
+  var sheet = getOrCreateSheet("siteAllowances", ["employeeId", "siteId", "transportPrice"]);
+  var rows = sheet.getDataRange().getValues();
+  var allowances = [];
+  var empIdStr = String(employeeId);
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][0]) === empIdStr) {
+      allowances.push({
+        siteId: String(rows[i][1]),
+        transportPrice: toNumberSafe(rows[i][2], 0)
+      });
+    }
+  }
+  return allowances;
+}
+
+function saveSiteAllowances(employeeId, allowances) {
+  var sheet = getOrCreateSheet("siteAllowances", ["employeeId", "siteId", "transportPrice"]);
+  var rows = sheet.getDataRange().getValues();
+  var empIdStr = String(employeeId);
+  
+  // Remove existing
+  for (var i = rows.length - 1; i >= 1; i--) {
+    if (String(rows[i][0]) === empIdStr) {
+      sheet.deleteRow(i + 1);
+    }
+  }
+  
+  // Add new
+  if (allowances && allowances.length) {
+    allowances.forEach(function(item) {
+      sheet.appendRow([empIdStr, item.siteId, toNumberSafe(item.transportPrice, 0)]);
+    });
+  }
 }
 
 function getEmployeeTransportMap() {
@@ -517,11 +553,22 @@ function isRequestSiteId(siteId) {
   return /^REQ/i.test(String(siteId || ""));
 }
 
+
+
 function resolveTransportPrice(rawTransport, employeeId, siteId, context) {
-  var attendanceTransport = toNumberSafe(rawTransport, null);
   var normalizedSiteId = String(siteId || "");
   var normalizedEmployeeId = String(employeeId || "");
 
+  // 1. Check Site Allowances Sheet (Custom mapping)
+  var allowanceSheet = getOrCreateSheet("siteAllowances", ["employeeId", "siteId", "transportPrice"]);
+  var allowanceRows = allowanceSheet.getDataRange().getValues();
+  for (var i = 1; i < allowanceRows.length; i++) {
+    if (String(allowanceRows[i][0]) === normalizedEmployeeId && String(allowanceRows[i][1]) === normalizedSiteId) {
+      return toNumberSafe(allowanceRows[i][2], 0);
+    }
+  }
+
+  // 2. Check Temporary site requests
   if (isRequestSiteId(normalizedSiteId)) {
     var requestTransport = context && context.requestMap
       ? toNumberSafe(context.requestMap[normalizedSiteId], null)
@@ -529,13 +576,13 @@ function resolveTransportPrice(rawTransport, employeeId, siteId, context) {
     if (requestTransport !== null) return requestTransport;
   }
 
+  // 3. Check Employee Default
   var employeeTransport = context && context.employeeMap
     ? toNumberSafe(context.employeeMap[normalizedEmployeeId], null)
     : null;
   if (employeeTransport !== null) return employeeTransport;
 
-  if (attendanceTransport !== null) return attendanceTransport;
-
+  // 4. Check Site Default
   var siteTransport = context && context.siteMap
     ? toNumberSafe(context.siteMap[normalizedSiteId], null)
     : null;
@@ -624,7 +671,7 @@ function validateAll(ss, data) {
   if (!data.latitude || !data.longitude) throw new Error("يجب توفير إحداثيات الموقع (GPS)");
 
   var sitesSheet = getOrCreateSheet("sites",
-    ["id","name","latitude","longitude","radius","transportPrice"]
+    ["id","name","latitude","longitude","radius","transportPrice","mapLink"]
   );
 
   var sites = sitesSheet.getDataRange().getValues();
@@ -738,6 +785,29 @@ function doGet(e) {
 
   try {
 
+    if (action === "getDashboardData") {
+      var ss = getSpreadsheet();
+      return json({
+        success: true,
+        employees: _getEmployeesData(ss),
+        sites: _getSitesData(ss),
+        attendance: _getAttendanceData(ss),
+        settings: _getSettingsData(ss),
+        siteRequests: _getSiteRequestsData(ss)
+      });
+    }
+
+    if (action === "getPortalInitialData") {
+      var empId = e.parameter.employeeId;
+      if (!empId) throw new Error("Employee ID is required");
+      var ss = getSpreadsheet();
+      return json({
+        success: true,
+        sites: _getSitesData(ss, empId),
+        attendance: _getAttendanceData(ss, empId)
+      });
+    }
+
     if (action === "getEmployees") {
       var s = getOrCreateSheet("employees",
         ["id","name","email","password","phone","role","assignedSites","faceDescriptor","transportPrice"]
@@ -748,15 +818,26 @@ function doGet(e) {
 
       return json({
         success:true,
-        data:d.map(function(r) { return {
-          id:r[0], name:r[1], email:r[2], phone:r[4], role:r[5], assignedSites:r[6]?r[6].toString().split(','):[], faceDescriptor:r[7], transportPrice:toNumberSafe(r[8], 0)
-        };})
+        data:d.map(function(r) { 
+          var empId = r[0];
+          return {
+            id:empId, 
+            name:r[1], 
+            email:r[2], 
+            phone:r[4], 
+            role:r[5], 
+            assignedSites:r[6]?r[6].toString().split(','):[], 
+            faceDescriptor:r[7], 
+            transportPrice:toNumberSafe(r[8], 0),
+            siteAllowances: getSiteAllowancesForEmployee(empId)
+          };
+        })
       });
     }
 
     if (action === "getSites") {
       var sitesSheet = getOrCreateSheet("sites",
-        ["id","name","latitude","longitude","radius","transportPrice"]
+        ["id","name","latitude","longitude","radius","transportPrice","mapLink"]
       );
       var employeeFilter = String(e.parameter.employeeId || "");
       var sitesRows = sitesSheet.getDataRange().getValues();
@@ -770,9 +851,27 @@ function doGet(e) {
           longitude: parseFloat(r[3]),
           radius: toNumberSafe(r[4], 20),
           transportPrice: toNumberSafe(r[5], 0),
+          mapLink: r[6] || "",
           isTemporary: false
         };
       });
+
+      // Filter by assigned sites if employeeFilter is provided
+      if (employeeFilter) {
+        var empSheet = getOrCreateSheet("employees", ["id","name","email","password","phone","role","assignedSites"]);
+        var empRows = empSheet.getDataRange().getValues();
+        var assignedStr = "";
+        for (var k = 1; k < empRows.length; k++) {
+          if (String(empRows[k][0]) === employeeFilter) {
+            assignedStr = String(empRows[k][6] || "");
+            break;
+          }
+        }
+        if (assignedStr) {
+          var assignedArray = assignedStr.split(',').map(function(s) { return s.trim(); });
+          siteData = siteData.filter(function(s) { return assignedArray.indexOf(s.id) !== -1; });
+        }
+      }
 
       var reqSheet = getSiteRequestsSheet();
       var reqRows = reqSheet.getDataRange().getValues();
@@ -780,20 +879,36 @@ function doGet(e) {
 
       for (var i = 0; i < reqRows.length; i++) {
         var req = reqRows[i];
-        if (!isApprovedTodayRequestActive(req)) continue;
+        var isApprovedToday = isApprovedTodayRequestActive(req);
+        
+        // 🚀 AUTO-APPROVAL VISIBILITY FIX:
+        // Also include pending requests that meet the auto-approval criteria
+        // so the employee can actually see the site and trigger the check-in.
+        var isAutoApprovable = false;
+        if (String(req[SITE_REQUEST_COL.STATUS]) === "pending" && employeeFilter && String(req[SITE_REQUEST_COL.EMPLOYEE_ID]) === employeeFilter) {
+          var createdAt = new Date(req[SITE_REQUEST_COL.CREATED_AT]);
+          var now = new Date();
+          if (!isNaN(createdAt.getTime()) && (now - createdAt >= AUTO_APPROVAL_WAIT_MS)) {
+             // Check distance if we have current location (approximated or just show it to let them try)
+             // We'll show it if it's old enough, and let validateAll handle the actual distance check.
+             isAutoApprovable = true;
+          }
+        }
+
+        if (!isApprovedToday && !isAutoApprovable) continue;
         if (employeeFilter && String(req[SITE_REQUEST_COL.EMPLOYEE_ID]) !== employeeFilter) continue;
 
         siteData.push({
           id: String(req[SITE_REQUEST_COL.ID]),
-          name: req[SITE_REQUEST_COL.SUGGESTED_NAME],
+          name: (isAutoApprovable ? "[موافقة تلقائية] " : "") + req[SITE_REQUEST_COL.SUGGESTED_NAME],
           latitude: parseFloat(req[SITE_REQUEST_COL.LATITUDE]),
           longitude: parseFloat(req[SITE_REQUEST_COL.LONGITUDE]),
-          radius: toNumberSafe(req[SITE_REQUEST_COL.TEMP_RADIUS], 100),
-          transportPrice: toNumberSafe(req[SITE_REQUEST_COL.TRANSPORT_PRICE], 0),
+          radius: isAutoApprovable ? AUTO_APPROVAL_MAX_DISTANCE_METERS : toNumberSafe(req[SITE_REQUEST_COL.TEMP_RADIUS], 100),
+          transportPrice: toNumberSafe(req[SITE_REQUEST_COL.TRANSPORT_PRICE], 120),
           isTemporary: true,
           temporaryForEmployeeId: String(req[SITE_REQUEST_COL.EMPLOYEE_ID]),
           approvedAt: req[SITE_REQUEST_COL.APPROVED_AT] || "",
-          approvalMode: "today"
+          approvalMode: isAutoApprovable ? "auto" : "today"
         });
       }
 
@@ -812,9 +927,24 @@ function doGet(e) {
 
       var records = d.map(function(r) {
         var transport = resolveTransportPrice(r[10], r[0], r[2], transportContext);
+        var rawHours = r[9];
+        var hoursNum = toNumberSafe(rawHours, null);
+        
+        // If hours are missing or invalid but user has checked out, calculate on the fly
+        if ((hoursNum === null || hoursNum === 0) && r[4] && r[5]) {
+          try {
+             var cIn = new Date(r[4]);
+             var cOut = new Date(r[5]);
+             if (!isNaN(cIn.getTime()) && !isNaN(cOut.getTime())) {
+               hoursNum = parseFloat(((cOut - cIn) / 36e5).toFixed(2));
+             }
+          } catch(e) { hoursNum = 0; }
+        }
+
         return {
           employeeId:r[0], employeeName:r[1], siteId:r[2], siteName:r[3],
-          checkIn:r[4], checkOut:r[5], latitude:r[6], longitude:r[7], status:r[8], totalHours:r[9], transportPrice:transport
+          checkIn:r[4], checkOut:r[5], latitude:r[6], longitude:r[7], status:r[8], 
+          totalHours: hoursNum || 0, transportPrice:transport
         };
       });
       
@@ -915,6 +1045,25 @@ function doPost(e) {
         return json({success:false, message: "خطأ في إرسال التقرير التفصيلي: " + e.toString()});
       }
     }
+
+    if (action === "clearProcessedRequests") {
+      var s = getSiteRequestsSheet();
+      var rows = s.getDataRange().getValues();
+      var deletedCount = 0;
+      var todayKey = getTodayKey();
+      
+      for (var i = rows.length - 1; i >= 1; i--) {
+        var status = String(rows[i][SITE_REQUEST_COL.STATUS] || "");
+        var approvedAt = rows[i][SITE_REQUEST_COL.APPROVED_AT] || rows[i][SITE_REQUEST_COL.CREATED_AT];
+        var isOldToday = (status === "approved_today" && toDateKey(approvedAt) !== todayKey);
+        
+        if (status === "approved" || status === "rejected" || isOldToday) {
+          s.deleteRow(i + 1);
+          deletedCount++;
+        }
+      }
+      return json({ success: true, message: "تم مسح " + deletedCount + " طلب تمت معالجته بنجاح." });
+    }
     
     // LOGIN
     if (action === "login") {
@@ -1003,6 +1152,10 @@ function doPost(e) {
         normalizedContacts.phone,data.role,data.assignedSites,data.faceDescriptor,toNumberSafe(data.transportPrice, 0)
       ]);
 
+      if (data.siteAllowances) {
+        saveSiteAllowances(data.id, data.siteAllowances);
+      }
+
       return json({success:true, message: "تم حفظ بيانات الموظف بنجاح"});
     }
 
@@ -1019,6 +1172,11 @@ function doPost(e) {
           s.getRange(i + 1, 2, 1, 6).setValues([[data.name, normalizedContacts.email, finalPassword, normalizedContacts.phone, data.role, data.assignedSites]]);
           var normalizedEmployeeTransport = toNumberSafe(data.transportPrice, 0);
           s.getRange(i+1, 9).setValue(normalizedEmployeeTransport);
+          
+          if (data.siteAllowances) {
+            saveSiteAllowances(data.id, data.siteAllowances);
+          }
+          
           syncAttendanceTransportForEmployee(data.id, normalizedEmployeeTransport);
           return json({success:true, message: "تم تحديث بيانات الموظف بنجاح"});
         }
@@ -1042,12 +1200,13 @@ function doPost(e) {
     // ADD SITE
     if (data.action === "saveSite") {
       var s = getOrCreateSheet("sites",
-        ["id","name","latitude","longitude","radius","transportPrice"]
+        ["id","name","latitude","longitude","radius","transportPrice","mapLink"]
       );
 
       s.appendRow([
         data.id,data.name,
-        data.latitude,data.longitude,data.radius,toNumberSafe(data.transportPrice, 0)
+        data.latitude,data.longitude,data.radius,toNumberSafe(data.transportPrice, 0),
+        data.mapLink || ""
       ]);
 
       return json({success:true, message: "تم إضافة الموقع بنجاح"});
@@ -1055,11 +1214,11 @@ function doPost(e) {
 
     // UPDATE SITE
     if (data.action === "updateSite") {
-      var s = getOrCreateSheet("sites", ["id","name","latitude","longitude","radius","transportPrice"]);
+      var s = getOrCreateSheet("sites", ["id","name","latitude","longitude","radius","transportPrice","mapLink"]);
       var rows = s.getDataRange().getValues();
       for (var i = 1; i < rows.length; i++) {
         if (String(rows[i][0]) === String(data.id)) {
-          s.getRange(i + 1, 2, 1, 5).setValues([[data.name, data.latitude, data.longitude, data.radius, data.transportPrice]]);
+          s.getRange(i + 1, 2, 1, 6).setValues([[data.name, data.latitude, data.longitude, data.radius, data.transportPrice, data.mapLink || ""]]);
           return json({success:true, message: "تم تحديث الموقع بنجاح"});
         }
       }
@@ -1068,7 +1227,7 @@ function doPost(e) {
 
     // DELETE SITE
     if (data.action === "deleteSite") {
-      var s = getOrCreateSheet("sites", ["id","name","latitude","longitude","radius"]);
+      var s = getOrCreateSheet("sites", ["id","name","latitude","longitude","radius","transportPrice","mapLink"]);
       var rows = s.getDataRange().getValues();
       for (var i = 1; i < rows.length; i++) {
         if (String(rows[i][0]) === String(data.id)) {
@@ -1144,7 +1303,7 @@ function doPost(e) {
         mapLongitude,
         ""
       ]);
-      var submitMessage = "Site request submitted successfully. If HR does not respond within 2 minutes, a temporary one-day approval may activate after distance checks.";
+      var submitMessage = "تم إرسال طلب تسجيل الموقع بنجاح للمراجعة. في حال عدم الرد من الإدارة خلال دقيقتين، سيتم تفعيل موافقة تلقائية مؤقتة طالما كنت متواجداً في نفس المكان.";
       return json({ success: true, message: submitMessage, attachmentSaved: false });
     }
 
@@ -1258,10 +1417,11 @@ function doPost(e) {
       if (dayOfWeek === 5 || dayOfWeek === 6) {
         manualStatus = "overtime";
       } else {
-        var parts = workStart.split(':');
-        var lateLimit = new Date(checkInDate);
-        lateLimit.setHours(parseInt(parts[0]), parseInt(parts[1] || 0), 0, 0);
-        manualStatus = (checkInDate > lateLimit) ? "late" : "present";
+        // 🚀 LATE CALCULATION FIX:
+        // Use string comparison (HH:mm) in the same timezone (Script Timezone) 
+        // to avoid offset issues with Date objects.
+        var checkInTimeStr = Utilities.formatDate(checkInDate, Session.getScriptTimeZone(), "HH:mm");
+        manualStatus = (checkInTimeStr > workStart) ? "late" : "present";
       }
       var transportContext = buildTransportContext();
       var attendanceTransport = resolveTransportPrice(site.transportPrice, data.employeeId, site.id, transportContext);
@@ -1859,4 +2019,152 @@ function createTriggers() {
 function json(obj){
   return ContentService.createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+// 🔥 DATA HELPERS (Optimized for reuse)
+
+function _getEmployeesData(ss) {
+  var s = getOrCreateSheet("employees", ["id","name","email","password","phone","role","assignedSites","faceDescriptor","transportPrice"]);
+  var d = s.getDataRange().getValues();
+  d.shift();
+  return d.map(function(r) { 
+    var empId = String(r[0]);
+    return {
+      id: empId, 
+      name: r[1], 
+      email: r[2], 
+      phone: r[4], 
+      role: r[5], 
+      assignedSites: r[6] ? r[6].toString().split(',') : [], 
+      faceDescriptor: r[7], 
+      transportPrice: toNumberSafe(r[8], 0),
+      siteAllowances: getSiteAllowancesForEmployee(empId)
+    };
+  });
+}
+
+function _getSitesData(ss, employeeId) {
+  var sitesSheet = getOrCreateSheet("sites", ["id","name","latitude","longitude","radius","transportPrice","mapLink"]);
+  var sitesRows = sitesSheet.getDataRange().getValues();
+  sitesRows.shift();
+  var siteData = sitesRows.map(function(r) {
+    return {
+      id: String(r[0]),
+      name: r[1],
+      latitude: parseFloat(r[2]),
+      longitude: parseFloat(r[3]),
+      radius: toNumberSafe(r[4], 20),
+      transportPrice: toNumberSafe(r[5], 0),
+      mapLink: r[6] || "",
+      isTemporary: false
+    };
+  });
+
+  if (employeeId) {
+    var empSheet = getOrCreateSheet("employees", ["id","name","email","password","phone","role","assignedSites"]);
+    var empRows = empSheet.getDataRange().getValues();
+    var assignedStr = "";
+    for (var k = 1; k < empRows.length; k++) {
+      if (String(empRows[k][0]) === String(employeeId)) {
+        assignedStr = String(empRows[k][6] || "");
+        break;
+      }
+    }
+    if (assignedStr) {
+      var assignedArray = assignedStr.split(',').map(function(s) { return s.trim(); });
+      siteData = siteData.filter(function(s) { return assignedArray.indexOf(s.id) !== -1; });
+    }
+  }
+
+  var reqSheet = getSiteRequestsSheet();
+  var reqRows = reqSheet.getDataRange().getValues();
+  reqRows.shift();
+  for (var i = 0; i < reqRows.length; i++) {
+    var req = reqRows[i];
+    var isApprovedToday = isApprovedTodayRequestActive(req);
+    var isAuto = false;
+    if (String(req[SITE_REQUEST_COL.STATUS]) === "pending" && employeeId && String(req[SITE_REQUEST_COL.EMPLOYEE_ID]) === String(employeeId)) {
+      var createdAt = new Date(req[SITE_REQUEST_COL.CREATED_AT]);
+      if (!isNaN(createdAt.getTime()) && (new Date() - createdAt >= AUTO_APPROVAL_WAIT_MS)) isAuto = true;
+    }
+    if (!isApprovedToday && !isAuto) continue;
+    if (employeeId && String(req[SITE_REQUEST_COL.EMPLOYEE_ID]) !== String(employeeId)) continue;
+    siteData.push({
+      id: String(req[SITE_REQUEST_COL.ID]),
+      name: (isAuto ? "[موافقة تلقائية] " : "") + req[SITE_REQUEST_COL.SUGGESTED_NAME],
+      latitude: parseFloat(req[SITE_REQUEST_COL.LATITUDE]),
+      longitude: parseFloat(req[SITE_REQUEST_COL.LONGITUDE]),
+      radius: isAuto ? AUTO_APPROVAL_MAX_DISTANCE_METERS : toNumberSafe(req[SITE_REQUEST_COL.TEMP_RADIUS], 100),
+      transportPrice: toNumberSafe(req[SITE_REQUEST_COL.TRANSPORT_PRICE], 120),
+      isTemporary: true,
+      temporaryForEmployeeId: String(req[SITE_REQUEST_COL.EMPLOYEE_ID]),
+      approvedAt: req[SITE_REQUEST_COL.APPROVED_AT] || "",
+      approvalMode: isAuto ? "auto" : "today"
+    });
+  }
+  return siteData;
+}
+
+function _getAttendanceData(ss, employeeId) {
+  var s = getOrCreateSheet("attendance", ["employeeId","employeeName","siteId","siteName","checkIn","checkOut","latitude","longitude","status","totalHours","transportPrice"]);
+  var d = s.getDataRange().getValues();
+  d.shift();
+  var transportContext = buildTransportContext();
+  var records = d.map(function(r) {
+    var hoursNum = toNumberSafe(r[9], null);
+    if ((hoursNum === null || hoursNum === 0) && r[4] && r[5]) {
+       try {
+         var cIn = new Date(r[4]);
+         var cOut = new Date(r[5]);
+         if (!isNaN(cIn.getTime()) && !isNaN(cOut.getTime())) hoursNum = parseFloat(((cOut - cIn) / 36e5).toFixed(2));
+       } catch(e) { hoursNum = 0; }
+    }
+    return {
+      employeeId:r[0], employeeName:r[1], siteId:r[2], siteName:r[3],
+      checkIn:r[4], checkOut:r[5], latitude:r[6], longitude:r[7], status:r[8], 
+      totalHours: hoursNum || 0, transportPrice: resolveTransportPrice(r[10], r[0], r[2], transportContext)
+    };
+  });
+  if (employeeId) records = records.filter(function(r) { return String(r.employeeId) === String(employeeId); });
+  return records;
+}
+
+function _getSettingsData(ss) {
+  var s = getOrCreateSheet("settings", ["key", "value"]);
+  var rows = s.getDataRange().getValues();
+  var settings = {};
+  for (var i = 1; i < rows.length; i++) settings[rows[i][0]] = s.getRange(i + 1, 2).getDisplayValue();
+  if (!settings.workStartTime) settings.workStartTime = "09:00";
+  if (!settings.workEndTime) settings.workEndTime = "17:00";
+  return settings;
+}
+
+function _getSiteRequestsData(ss) {
+  var s = getSiteRequestsSheet();
+  var d = s.getDataRange().getValues();
+  d.shift();
+  return d.map(function(r) {
+    return {
+      id: r[SITE_REQUEST_COL.ID],
+      employeeId: r[SITE_REQUEST_COL.EMPLOYEE_ID],
+      employeeName: r[SITE_REQUEST_COL.EMPLOYEE_NAME],
+      latitude: r[SITE_REQUEST_COL.LATITUDE],
+      longitude: r[SITE_REQUEST_COL.LONGITUDE],
+      suggestedName: r[SITE_REQUEST_COL.SUGGESTED_NAME],
+      mapLink: r[SITE_REQUEST_COL.MAP_LINK],
+      status: r[SITE_REQUEST_COL.STATUS],
+      timestamp: r[SITE_REQUEST_COL.CREATED_AT],
+      transportPrice: toNumberSafe(r[SITE_REQUEST_COL.TRANSPORT_PRICE], 0),
+      note: String(r[SITE_REQUEST_COL.NOTE] || ""),
+      receiptUrl: String(r[SITE_REQUEST_COL.RECEIPT_URL] || ""),
+      receiptName: String(r[SITE_REQUEST_COL.RECEIPT_NAME] || ""),
+      tempRadius: toNumberSafe(r[SITE_REQUEST_COL.TEMP_RADIUS], 100),
+      approvedAt: r[SITE_REQUEST_COL.APPROVED_AT] || "",
+      mapLatitude: toNumberSafe(r[SITE_REQUEST_COL.MAP_LATITUDE], null),
+      mapLongitude: toNumberSafe(r[SITE_REQUEST_COL.MAP_LONGITUDE], null),
+      autoMeta: String(r[SITE_REQUEST_COL.AUTO_META] || ""),
+      isAutoApproved: String(r[SITE_REQUEST_COL.AUTO_META] || "") === AUTO_APPROVAL_META,
+      isActiveToday: isApprovedTodayRequestActive(r)
+    };
+  });
 }

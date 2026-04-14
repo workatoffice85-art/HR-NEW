@@ -1,0 +1,24 @@
+{
+  "name": "hr-new",
+  "version": "1.0.0",
+  "description": "",
+  "main": "download_models.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/workatoffice85-art/HR-NEW.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/workatoffice85-art/HR-NEW/issues"
+  },
+  "homepage": "https://github.com/workatoffice85-art/HR-NEW#readme",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.103.0",
+    "cors": "^2.8.6"
+  }
+}
