@@ -1168,11 +1168,15 @@ async function triggerSmartSync() {
         }
 
         const stats = result.stats || {};
+        const issues = Array.isArray(result.issues) ? result.issues : [];
+        const warningPreview = issues.slice(0, 3);
         alert(
             `Smart sync completed.\n` +
-            `Employees added: ${stats.employeesAdded || 0}\n` +
-            `Sites added: ${stats.sitesAdded || 0}\n` +
-            `Attendance rows added: ${stats.attendanceAdded || 0}`
+            `Employees added: ${stats.employeesAdded || 0} | skipped: ${stats.employeesSkipped || 0}\n` +
+            `Sites added: ${stats.sitesAdded || 0} | skipped: ${stats.sitesSkipped || 0}\n` +
+            `Attendance added: ${stats.attendanceAdded || 0} | updated: ${stats.attendanceUpdated || 0} | skipped: ${stats.attendanceSkipped || 0}\n` +
+            `Warnings: ${issues.length}` +
+            (warningPreview.length ? `\n${warningPreview.map((item, idx) => `${idx + 1}. ${item}`).join('\n')}` : '')
         );
 
         await initDashboard(true);
