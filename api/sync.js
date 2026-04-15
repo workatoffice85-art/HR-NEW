@@ -416,16 +416,21 @@ export default async function handler(req, res) {
             }
         }
 
-        // 4) Site Allowances: Sync all (Delete/Insert)
+        // 4) Site Allowances: Sync all (Upsert with deduplication)
         if (gsAllowances.length > 0) {
-            const allowancesToUpsert = [];
+            const allowanceMap = new Map();
             for (const allow of gsAllowances) {
                 const payload = buildAllowancePayload(allow);
-                if (payload) allowancesToUpsert.push(payload);
+                if (payload) {
+                    const key = `${payload.employeeId}_${payload.siteId}`;
+                    allowanceMap.set(key, payload);
+                }
             }
 
+            const allowancesToUpsert = Array.from(allowanceMap.values());
+
             if (allowancesToUpsert.length > 0) {
-                // For simplicity, we upsert all. siteAllowances has a PK (employeeId, siteId).
+                // siteAllowances has a PK (employeeId, siteId).
                 const { error } = await supabase.from('siteAllowances').upsert(allowancesToUpsert);
                 if (error) {
                     pushIssue(issues, `Failed to sync siteAllowances: ${formatError(error)}`);
