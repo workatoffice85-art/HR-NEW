@@ -144,15 +144,6 @@ function buildAttendancePayload(rawAttendance) {
     const checkOut = normalizeString(rawAttendance.checkOut);
     if (!employeeId || !checkIn) return null;
 
-    let totalHours = toSafeNumber(rawAttendance.totalHours, null);
-    if (totalHours === null && checkOut) {
-        const inMs = parseTimeMs(checkIn);
-        const outMs = parseTimeMs(checkOut);
-        if (inMs !== null && outMs !== null && outMs >= inMs) {
-            totalHours = Number(((outMs - inMs) / 36e5).toFixed(2));
-        }
-    }
-
     return {
         employeeId,
         employeeName: normalizeString(rawAttendance.employeeName),
@@ -163,7 +154,6 @@ function buildAttendancePayload(rawAttendance) {
         latitude: toNullableNumber(rawAttendance.latitude),
         longitude: toNullableNumber(rawAttendance.longitude),
         status: normalizeString(rawAttendance.status) || 'present',
-        totalHours: totalHours === null ? 0 : totalHours,
         transportPrice: toSafeNumber(rawAttendance.transportPrice, 0)
     };
 }
@@ -379,8 +369,7 @@ export default async function handler(req, res) {
                 if (!supabaseCheckOut && sheetCheckOut && existingRow.id) {
                     attendanceToUpdate.push({
                         id: existingRow.id,
-                        checkOut: sheetCheckOut,
-                        totalHours: toSafeNumber(attendance.totalHours, null)
+                        checkOut: sheetCheckOut
                     });
                 }
             }
@@ -394,9 +383,6 @@ export default async function handler(req, res) {
 
         for (const updateRow of attendanceToUpdate) {
             const updatePayload = { checkOut: updateRow.checkOut };
-            if (updateRow.totalHours !== null) {
-                updatePayload.totalHours = updateRow.totalHours;
-            }
 
             const { error } = await supabase
                 .from('attendance')

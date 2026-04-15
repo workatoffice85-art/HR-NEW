@@ -291,15 +291,11 @@ export default async function handler(req, res) {
             
             if (errExist || !existing || existing.length === 0) throw new Error("لا يوجد عملية حضور مفتوحة لنسجل الانصراف");
 
-            let cIn = new Date(existing[0].checkIn);
-            let cOut = new Date(data.checkOut);
-            let hours = ((cOut - cIn) / 36e5).toFixed(2);
-
             const { error } = await supabase.from('attendance')
-                .update({ checkOut: data.checkOut, totalHours: hours })
+                .update({ checkOut: data.checkOut })
                 .eq('id', existing[0].id);
             if (error) throw error;
-            return res.status(200).json({ success: true, message: "تم تسجيل الانصراف الساعات: " + hours });
+            return res.status(200).json({ success: true, message: "تم تسجيل الانصراف بنجاح" });
         }
         
         // --- EMPLOYEE MGMT ---
@@ -310,6 +306,7 @@ export default async function handler(req, res) {
         }
 
         if (action === "saveEmployee") {
+            const allowances = data.siteAllowances || [];
             const payload = {
                 id: data.id,
                 name: data.name,
@@ -317,29 +314,57 @@ export default async function handler(req, res) {
                 phone: data.phone,
                 password: data.password,
                 role: data.role || 'employee',
-                assignedSites: data.assignedSites,
-                transportPrice: data.transportPrice,
-                siteAllowances: data.siteAllowances
+                assignedSites: data.assignedSites || '',
+                faceDescriptor: data.faceDescriptor || null,
+                transportPrice: data.transportPrice || 0
             };
-            const { error } = await supabase.from('employees').insert([payload]);
-            if (error) throw error;
+            
+            // 1. Save to employees table
+            const { error: errEmp } = await supabase.from('employees').insert([payload]);
+            if (errEmp) throw errEmp;
+
+            // 2. Save site allowances if any
+            if (allowances.length > 0) {
+                const allowanceRows = allowances.map(a => ({
+                    employeeId: data.id,
+                    siteId: a.siteId,
+                    transportPrice: a.transportPrice
+                }));
+                const { error: errAll } = await supabase.from('siteAllowances').insert(allowanceRows);
+                if (errAll) console.error("Allowances Save Failed:", errAll);
+            }
+
             return res.status(200).json({ success: true, message: "تمت إضافة الموظف بنجاح" });
         }
 
         if (action === "updateEmployee") {
+            const allowances = data.siteAllowances || [];
             const payload = {
                 name: data.name,
                 email: data.email,
                 phone: data.phone,
                 role: data.role,
-                assignedSites: data.assignedSites,
-                transportPrice: data.transportPrice,
-                siteAllowances: data.siteAllowances
+                assignedSites: data.assignedSites || '',
+                faceDescriptor: data.faceDescriptor || null,
+                transportPrice: data.transportPrice || 0
             };
             if (data.password) payload.password = data.password;
             
-            const { error } = await supabase.from('employees').update(payload).eq('id', data.id);
-            if (error) throw error;
+            // 1. Update employees table
+            const { error: errEmp } = await supabase.from('employees').update(payload).eq('id', data.id);
+            if (errEmp) throw errEmp;
+
+            // 2. Sync site allowances: Delete old, add new
+            const { error: errDel } = await supabase.from('siteAllowances').delete().eq('employeeId', data.id);
+            if (!errDel && allowances.length > 0) {
+                const allowanceRows = allowances.map(a => ({
+                    employeeId: data.id,
+                    siteId: a.siteId,
+                    transportPrice: a.transportPrice || 0
+                }));
+                await supabase.from('siteAllowances').insert(allowanceRows);
+            }
+
             return res.status(200).json({ success: true, message: "تم تحديث بيانات الموظف بنجاح" });
         }
 
@@ -410,6 +435,7 @@ export default async function handler(req, res) {
                 tempRadius: data.radius,
                 note: data.note,
                 receiptUrl: data.receiptUrl,
+                receiptName: data.receiptName || '',
                 status: 'pending',
                 timestamp: new Date().toISOString()
             };
