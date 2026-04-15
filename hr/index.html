@@ -95,7 +95,6 @@
                                 <th>الموقع</th>
                                 <th>وقت الحضور</th>
                                 <th>وقت الانصراف</th>
-                                <th>إجمالي الساعات</th>
                                 <th>بدل الانتقال</th>
                                 <th>الحالة</th>
                             </tr>
@@ -118,11 +117,6 @@
                     <button class="btn-primary" style="width:auto; padding:8px 15px; background:var(--secondary);" onclick="window.print()">طباعة</button>
                 </div>
                 
-                <div class="kpi-grid">
-                    <div class="kpi-card">
-                        <h3>إجمالي ساعات العمل</h3>
-                        <div class="kpi-value" id="kpiTotalHours">0</div>
-                    </div>
                     <div class="kpi-card">
                         <h3>عدد الموظفين الفعالين</h3>
                         <div class="kpi-value" id="kpiActiveEmp">0</div>
@@ -133,14 +127,9 @@
                     </div>
                 </div>
 
-                <div class="charts-grid">
-                    <div class="chart-card">
-                        <canvas id="hoursChart"></canvas>
-                    </div>
                     <div class="chart-card">
                         <canvas id="latesChart"></canvas>
                     </div>
-                </div>
                 <div class="table-container">
                     <table>
                         <thead>
@@ -152,7 +141,6 @@
                                 <th>التأخير</th>
                                 <th>العمل الإضافي</th>
                                 <th>بدل الانتقال</th>
-                                <th>إجمالي الساعات</th>
                             </tr>
                         </thead>
                         <tbody id="reportsTableBody"></tbody>
@@ -192,10 +180,6 @@
                         <div class="kpi-value" id="employeeDetailLate">0</div>
                     </div>
                     <div class="kpi-card">
-                        <h3>إجمالي الساعات</h3>
-                        <div class="kpi-value" id="employeeDetailHours">0.00</div>
-                    </div>
-                    <div class="kpi-card">
                         <h3>إجمالي البدلات</h3>
                         <div class="kpi-value" id="employeeDetailTransport">0.00</div>
                     </div>
@@ -210,7 +194,6 @@
                                 <th>وقت الحضور</th>
                                 <th>وقت الانصراف</th>
                                 <th>الحالة</th>
-                                <th>الساعات</th>
                                 <th>البدل</th>
                             </tr>
                         </thead>

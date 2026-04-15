@@ -631,7 +631,6 @@ function renderMyReports(data, monthStr) {
         }
     }
 
-    let totalHours = 0;
     let totalTransport = 0;
     const dailyTransport = {};
     
@@ -650,7 +649,6 @@ function renderMyReports(data, monthStr) {
         const recordDateObj = new Date(record.checkIn);
         const dateKey = !Number.isNaN(recordDateObj.getTime()) ? recordDateObj.toDateString() : null;
 
-        if(record.totalHours) totalHours += parseFloat(record.totalHours);
         if (dateKey) {
             const transportValue = toTransportNumber(record.transportPrice);
             if (!(dateKey in dailyTransport)) {
@@ -724,7 +722,6 @@ function renderMyReports(data, monthStr) {
     document.getElementById('empTotalPresent').innerText = presentDates.size; // Use size of unique dates set
     document.getElementById('empTotalAbsent').innerText = totalAbsent > 0 ? totalAbsent : 0;
     document.getElementById('empTotalLates').innerText = totalLates;
-    document.getElementById('empTotalHours').innerText = totalHours.toFixed(2);
     document.getElementById('empTotalTransport').innerText = totalTransport.toFixed(2) + " ج.م";
 }
 

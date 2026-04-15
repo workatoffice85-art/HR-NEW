@@ -6,7 +6,6 @@ let allEmployees = [];
 let allSites = [];
 let allSiteRequests = [];
 let appSettings = {};
-let hoursChartInstance = null;
 let latesChartInstance = null;
 let parseMapLinkTimer = null;
 let parseMapLinkRequestId = 0;
@@ -209,7 +208,6 @@ function renderAttendanceTable(data) {
                 <td data-label="الموقع">${record.siteName}</td>
                 <td data-label="وقت الحضور" dir="ltr">${checkInTime}</td>
                 <td data-label="وقت الانصراف" dir="ltr">${checkOutTime}</td>
-                <td data-label="إجمالي الساعات">${record.totalHours && !isNaN(parseFloat(record.totalHours)) ? parseFloat(record.totalHours).toFixed(2) + ' ساعات' : '-'}</td>
                 <td data-label="بدل الانتقال">${record.transportPrice || 0} ج.م</td>
                 <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
             </tr>
@@ -268,7 +266,6 @@ function resetEmployeeDetailedReportView(message) {
     document.getElementById('employeeDetailPresent').innerText = '0';
     document.getElementById('employeeDetailAbsent').innerText = '0';
     document.getElementById('employeeDetailLate').innerText = '0';
-    document.getElementById('employeeDetailHours').innerText = '0.00';
     document.getElementById('employeeDetailTransport').innerText = '0.00';
     document.getElementById('employeeDetailMeta').innerText = message || 'اختر موظفًا وحدد الفترة الزمنية ثم اضغط "عرض التقرير".';
 
@@ -345,7 +342,6 @@ async function generateEmployeeDetailedReport() {
     const sortedRecords = [...employeeRecords].sort((a, b) => new Date(b.checkIn) - new Date(a.checkIn));
     const presentDates = new Set();
     const lateDates = new Set();
-    let totalHours = 0;
     let totalTransport = 0;
 
     sortedRecords.forEach(record => {
@@ -356,8 +352,6 @@ async function generateEmployeeDetailedReport() {
             if (record.status === 'late') lateDates.add(dateKey);
         }
 
-        const parsedHours = parseFloat(record.totalHours || 0);
-        if (!isNaN(parsedHours)) totalHours += parsedHours;
     });
 
     totalTransport = calculateUniqueDailyTransport(sortedRecords);
@@ -369,7 +363,6 @@ async function generateEmployeeDetailedReport() {
     document.getElementById('employeeDetailPresent').innerText = String(daysPresent);
     document.getElementById('employeeDetailAbsent').innerText = String(daysAbsent);
     document.getElementById('employeeDetailLate').innerText = String(lateDates.size);
-    document.getElementById('employeeDetailHours').innerText = totalHours.toFixed(2);
     document.getElementById('employeeDetailTransport').innerText = totalTransport.toFixed(2);
 
     const selectedLabel = employeeSelect.options[employeeSelect.selectedIndex]
@@ -406,8 +399,6 @@ async function generateEmployeeDetailedReport() {
         }
 
         const statusMeta = getStatusMeta(record.status);
-        const parsedHours = parseFloat(record.totalHours);
-        const hoursText = !isNaN(parsedHours) ? `${parsedHours.toFixed(2)} ساعة` : '-';
         const parsedTransport = parseFloat(record.transportPrice || 0);
         const transportText = `${isNaN(parsedTransport) ? 0 : parsedTransport.toFixed(2)} ج.م`;
 
@@ -418,7 +409,6 @@ async function generateEmployeeDetailedReport() {
                 <td data-label="وقت الحضور" dir="ltr">${checkInText}</td>
                 <td data-label="وقت الانصراف" dir="ltr">${checkOutText}</td>
                 <td data-label="الحالة"><span style="color:${statusMeta.color}">${statusMeta.text}</span></td>
-                <td data-label="الساعات">${hoursText}</td>
                 <td data-label="البدل">${transportText}</td>
             </tr>
         `;
@@ -503,7 +493,6 @@ function generateReport() {
                  daysPresent: 0,
                  lates: 0,
                  overtime: 0,
-                 totalHours: 0,
                  totalTransport: 0
              };
         }
@@ -522,7 +511,6 @@ function generateReport() {
             }
         }
         if(record.status === 'overtime') empStats.overtime += 1;
-        if(record.totalHours) empStats.totalHours += parseFloat(record.totalHours);
         const transportValue = toTransportNumber(record.transportPrice);
         if (!(recordDate in empStats.transportByDate)) {
             empStats.transportByDate[recordDate] = transportValue;
@@ -539,12 +527,10 @@ function generateReport() {
     // Calculate working days passed in the selected range
     const workingDaysCount = getWorkingDaysCount(startDate, endDate);
 
-    let kpiTotalHours = 0;
     let kpiTotalLates = 0;
     let kpiActiveEmp = Object.keys(reportAcc).length;
 
     const names = [];
-    const hours = [];
     const lates = [];
 
     const tbody = document.getElementById('reportsTableBody');
@@ -552,13 +538,11 @@ function generateReport() {
 
     for (let empId in reportAcc) {
         const data = reportAcc[empId];
-        kpiTotalHours += data.totalHours;
         kpiTotalLates += data.lates;
         
         const absentDays = workingDaysCount - data.daysPresent;
         
         names.push(data.name);
-        hours.push((data.totalHours).toFixed(2));
         lates.push(data.lates);
 
         tbody.innerHTML += `
@@ -570,16 +554,14 @@ function generateReport() {
                 <td data-label="التأخير"><span style="color:${data.lates > 0 ? 'var(--danger)' : 'inherit'}">${data.lates} مرات</span></td>
                 <td data-label="العمل الإضافي"><span style="color:#3b82f6">${data.overtime || 0} أيام</span></td>
                 <td data-label="بدل الانتقال">${data.totalTransport.toFixed(2)} ج.م</td>
-                <td data-label="إجمالي الساعات">${data.totalHours.toFixed(2)} ساعات</td>
             </tr>
         `;
     }
 
-    document.getElementById('kpiTotalHours').innerText = kpiTotalHours.toFixed(2);
     document.getElementById('kpiTotalLates').innerText = kpiTotalLates;
     document.getElementById('kpiActiveEmp').innerText = kpiActiveEmp;
 
-    updateCharts(names, hours, lates);
+    updateCharts(names, lates);
 }
 
 async function sendCustomReport() {
@@ -607,35 +589,11 @@ async function sendCustomReport() {
     document.getElementById('loader').classList.add('hidden');
 }
 
-function updateCharts(labels, hoursData, latesData) {
-    const ctxHours = document.getElementById('hoursChart').getContext('2d');
+function updateCharts(labels, latesData) {
     const ctxLates = document.getElementById('latesChart').getContext('2d');
 
-    if(hoursChartInstance) hoursChartInstance.destroy();
     if(latesChartInstance) latesChartInstance.destroy();
-
-    Chart.defaults.color = '#94a3b8';
-    Chart.defaults.font.family = 'Tajawal';
-
-    hoursChartInstance = new Chart(ctxHours, {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'إجمالي الساعات',
-                data: hoursData,
-                backgroundColor: 'rgba(79, 70, 229, 0.7)',
-                borderColor: 'rgba(79, 70, 229, 1)',
-                borderWidth: 1,
-                borderRadius: 4
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: { title: { display: true, text: 'ساعات العمل لكل موظف' } }
-        }
-    });
-
+    
     latesChartInstance = new Chart(ctxLates, {
         type: 'doughnut',
         data: {
@@ -1301,6 +1259,9 @@ async function confirmApproval(mode) {
     const transportPrice = document.getElementById('approveTransportPrice').value;
     const radius = document.getElementById('approveRadius').value;
 
+    const matchedRequest = allSiteRequests.find(req => String(req.id) === String(id));
+    const mapLink = matchedRequest ? matchedRequest.mapLink : '';
+
     document.getElementById('loader').classList.remove('hidden');
     try {
         const res = await fetch(API_URL, {
@@ -1311,7 +1272,8 @@ async function confirmApproval(mode) {
                 name: name, 
                 transportPrice: transportPrice, 
                 radius: radius,
-                mode: mode 
+                mode: mode,
+                mapLink: mapLink
             }),
             headers: { 'Content-Type': 'text/plain' }
         });

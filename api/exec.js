@@ -302,10 +302,191 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, message: "تم تسجيل الانصراف الساعات: " + hours });
         }
         
-        // Basic proxy fallback for anything else (or we can just implement the rest quickly)
-        // If action is none of the above, we can just proxy entirely to Google!
-        
-        // Proxy Fallback
+        // --- EMPLOYEE MGMT ---
+        if (action === "getEmployees") {
+            const { data: emps, error } = await supabase.from('employees').select('*');
+            if (error) throw error;
+            return res.status(200).json({ success: true, data: emps || [] });
+        }
+
+        if (action === "saveEmployee") {
+            const payload = {
+                id: data.id,
+                name: data.name,
+                email: data.email,
+                phone: data.phone,
+                password: data.password,
+                role: data.role || 'employee',
+                assignedSites: data.assignedSites,
+                transportPrice: data.transportPrice,
+                siteAllowances: data.siteAllowances
+            };
+            const { error } = await supabase.from('employees').insert([payload]);
+            if (error) throw error;
+            return res.status(200).json({ success: true, message: "تمت إضافة الموظف بنجاح" });
+        }
+
+        if (action === "updateEmployee") {
+            const payload = {
+                name: data.name,
+                email: data.email,
+                phone: data.phone,
+                role: data.role,
+                assignedSites: data.assignedSites,
+                transportPrice: data.transportPrice,
+                siteAllowances: data.siteAllowances
+            };
+            if (data.password) payload.password = data.password;
+            
+            const { error } = await supabase.from('employees').update(payload).eq('id', data.id);
+            if (error) throw error;
+            return res.status(200).json({ success: true, message: "تم تحديث بيانات الموظف بنجاح" });
+        }
+
+        if (action === "deleteEmployee") {
+            const { error } = await supabase.from('employees').delete().eq('id', data.id);
+            if (error) throw error;
+            return res.status(200).json({ success: true, message: "تم حذف الموظف بنجاح" });
+        }
+
+        // --- SITE MGMT ---
+        if (action === "getSites") {
+            const { data: sites, error } = await supabase.from('sites').select('*').eq('isTemporary', false);
+            if (error) throw error;
+            return res.status(200).json({ success: true, data: sites || [] });
+        }
+
+        if (action === "saveSite") {
+            const payload = {
+                id: data.id,
+                name: data.name,
+                latitude: data.latitude,
+                longitude: data.longitude,
+                radius: data.radius,
+                mapLink: data.mapLink,
+                isTemporary: false
+            };
+            const { error } = await supabase.from('sites').insert([payload]);
+            if (error) throw error;
+            return res.status(200).json({ success: true, message: "تمت إضافة الموقع بنجاح" });
+        }
+
+        if (action === "updateSite") {
+            const payload = {
+                name: data.name,
+                latitude: data.latitude,
+                longitude: data.longitude,
+                radius: data.radius,
+                mapLink: data.mapLink
+            };
+            const { error } = await supabase.from('sites').update(payload).eq('id', data.id);
+            if (error) throw error;
+            return res.status(200).json({ success: true, message: "تم تحديث بيانات الموقع بنجاح" });
+        }
+
+        if (action === "deleteSite") {
+            const { error } = await supabase.from('sites').delete().eq('id', data.id);
+            if (error) throw error;
+            return res.status(200).json({ success: true, message: "تم حذف الموقع بنجاح" });
+        }
+
+        // --- SITE REQUESTS ---
+        if (action === "getSiteRequests") {
+            const { data: reqs, error } = await supabase.from('siteRequests').select('*');
+            if (error) throw error;
+            return res.status(200).json({ success: true, data: reqs || [] });
+        }
+
+        if (action === "addSiteRequest") {
+            const payload = {
+                id: data.id || Math.floor(Math.random() * 1000000),
+                employeeId: data.employeeId,
+                employeeName: data.employeeName,
+                suggestedName: data.suggestedName,
+                latitude: data.latitude,
+                longitude: data.longitude,
+                mapLink: data.mapLink,
+                transportPrice: data.transportPrice,
+                tempRadius: data.radius,
+                note: data.note,
+                receiptUrl: data.receiptUrl,
+                status: 'pending',
+                timestamp: new Date().toISOString()
+            };
+            const { error } = await supabase.from('siteRequests').insert([payload]);
+            if (error) throw error;
+            return res.status(200).json({ success: true, message: "تم إرسال طلب الموقع بنجاح" });
+        }
+
+        if (action === "approveSiteRequest") {
+            const { id, name, transportPrice, radius, mode, mapLink } = data;
+            
+            // 1. Update Request table
+            const { error: errReq } = await supabase.from('siteRequests')
+                .update({ 
+                    status: (mode === 'daily' ? 'approved_today' : 'approved'),
+                    approvedAt: new Date().toISOString()
+                })
+                .eq('id', id);
+            if (errReq) throw errReq;
+
+            // 2. If permanent, add to sites table
+            if (mode === 'permanent') {
+                const { data: reqData } = await supabase.from('siteRequests').select('*').eq('id', id).single();
+                if (reqData) {
+                    const sitePayload = {
+                        name: name,
+                        latitude: reqData.latitude,
+                        longitude: reqData.longitude,
+                        radius: radius || 100,
+                        transportPrice: transportPrice || 0,
+                        mapLink: mapLink || reqData.mapLink,
+                        isTemporary: false
+                    };
+                    const { error: errSite } = await supabase.from('sites').insert([sitePayload]);
+                    if (errSite) throw errSite;
+                }
+            }
+            
+            return res.status(200).json({ success: true, message: "تمت الموافقة على الطلب بنجاح" });
+        }
+
+        if (action === "rejectSiteRequest") {
+            const { error } = await supabase.from('siteRequests').update({ status: 'rejected' }).eq('id', data.id);
+            if (error) throw error;
+            return res.status(200).json({ success: true, message: "تم رفض الطلب بنجاح" });
+        }
+
+        // --- SETTINGS ---
+        if (action === "getSettings") {
+            const { data: sets, error } = await supabase.from('settings').select('*');
+            if (error) throw error;
+            let settings = {};
+            if (sets) sets.forEach(s => settings[s.key] = s.value);
+            return res.status(200).json({ success: true, data: settings });
+        }
+
+        if (action === "updateSettings") {
+            const settings = data.settings;
+            const promises = Object.entries(settings).map(([key, value]) => {
+                return supabase.from('settings').upsert({ key, value }, { onConflict: 'key' });
+            });
+            await Promise.all(promises);
+            return res.status(200).json({ success: true, message: "تم تحديث الإعدادات بنجاح" });
+        }
+
+        // --- UTILS ---
+        if (action === "resolveMapLink") {
+            const link = data.link;
+            try {
+                const resLink = await fetch(link, { method: 'HEAD', redirect: 'follow' });
+                return res.status(200).json({ success: true, url: resLink.url });
+            } catch (e) {
+                return res.status(200).json({ success: false, message: e.message });
+            }
+        }
+
+        // --- FINAL FALLBACK ---
         const proxyRes = await fetch(GOOGLE_SCRIPT_URL, {
             method: req.method === 'POST' ? 'POST' : 'GET',
             body: req.method === 'POST' ? JSON.stringify(data) : undefined,
@@ -315,6 +496,7 @@ export default async function handler(req, res) {
         return res.status(200).json(proxyJson);
 
     } catch (e) {
+        console.error("Handler Error:", e);
         return res.status(200).json({ success: false, message: e.message || e.toString() });
     }
 }
