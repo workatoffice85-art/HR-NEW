@@ -103,14 +103,14 @@ function getSiteRequestsSheet() {
 }
 
 function getTodayKey() {
-  return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+  return Utilities.formatDate(new Date(), "Africa/Cairo", "yyyy-MM-dd");
 }
 
 function toDateKey(value) {
   if (!value) return "";
   var dateObj = new Date(value);
   if (isNaN(dateObj.getTime())) return "";
-  return Utilities.formatDate(dateObj, Session.getScriptTimeZone(), "yyyy-MM-dd");
+  return Utilities.formatDate(dateObj, "Africa/Cairo", "yyyy-MM-dd");
 }
 
 function isApprovedTodayRequestActive(row) {
@@ -328,7 +328,7 @@ function normalizeTimeToHHmm(value, fallback) {
   if (value === null || value === undefined || value === "") return defaultTime;
 
   if (Object.prototype.toString.call(value) === "[object Date]" && !isNaN(value.getTime())) {
-    return Utilities.formatDate(value, Session.getScriptTimeZone(), "HH:mm");
+    return Utilities.formatDate(value, "Africa/Cairo", "HH:mm");
   }
 
   if (typeof value === "number" && !isNaN(value)) {
@@ -1421,7 +1421,7 @@ function doPost(e) {
         // 🚀 LATE CALCULATION FIX:
         // Use string comparison (HH:mm) in the same timezone (Script Timezone) 
         // to avoid offset issues with Date objects.
-        var checkInTimeStr = Utilities.formatDate(checkInDate, Session.getScriptTimeZone(), "HH:mm");
+        var checkInTimeStr = Utilities.formatDate(checkInDate, "Africa/Cairo", "HH:mm");
         manualStatus = (checkInTimeStr > workStart) ? "late" : "present";
       }
       var transportContext = buildTransportContext();

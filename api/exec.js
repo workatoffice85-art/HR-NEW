@@ -467,9 +467,10 @@ export default async function handler(req, res) {
                 phone: data.phone,
                 role: data.role,
                 assignedSites: data.assignedSites || '',
-                faceDescriptor: data.faceDescriptor || null,
                 transportPrice: data.transportPrice || 0
             };
+            
+            if (data.faceDescriptor) payload.faceDescriptor = data.faceDescriptor;
             if (data.password) payload.password = data.password;
             
             // 1. Update employees table
