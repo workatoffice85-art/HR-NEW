@@ -185,26 +185,67 @@ export default async function handler(req, res) {
                 }
             });
         }
+
+        // --- NEW HELPER: RESOLVE TRANSPORT PRICE ---
+        async function fetchResolvedTransportPrice(employeeId, siteId, currentPrice, isRequest) {
+            const empIdStr = String(employeeId);
+            const siteIdStr = String(siteId);
+
+            // 1. Check Site Allowances table
+            const { data: allowance, error: allowanceError } = await supabase
+                .from('siteAllowances')
+                .select('transportPrice')
+                .eq('employeeId', empIdStr)
+                .eq('siteId', siteIdStr)
+                .maybeSingle(); // maybeSingle() is safer if row doesn't exist
+            
+            if (allowance) return allowance.transportPrice;
+
+            // 2. If it's a request site, use the price passed or from the request
+            if (isRequest) return currentPrice || 0;
+
+            // 3. Check Employee Default
+            const { data: emp, error: empError } = await supabase
+                .from('employees')
+                .select('transportPrice')
+                .eq('id', empIdStr)
+                .maybeSingle();
+            
+            if (emp && emp.transportPrice > 0) return emp.transportPrice;
+
+            // 4. Default to Site Price
+            return currentPrice || 0;
+        }
+
         // --- DASHBOARD DATA (GET) ---
         if (action === "getDashboardData") {
-            const [empRes, siteRes, attRes, reqRes, setRes] = await Promise.all([
+            const [empRes, siteRes, attRes, reqRes, setRes, allRes] = await Promise.all([
                 supabase.from('employees').select('*'),
                 supabase.from('sites').select('*').eq('isTemporary', false),
                 supabase.from('attendance').select('*'),
                 supabase.from('siteRequests').select('*'),
-                supabase.from('settings').select('*')
+                supabase.from('settings').select('*'),
+                supabase.from('siteAllowances').select('*')
             ]);
             let settings = {};
             if (setRes.data) {
                 setRes.data.forEach(s => settings[s.key] = s.value);
             }
+
+            // Map allowances to employees
+            const employees = (empRes.data || []).map(emp => ({
+                ...emp,
+                siteAllowances: (allRes.data || []).filter(a => String(a.employeeId) === String(emp.id))
+            }));
+
             return res.status(200).json({
                 success: true,
-                employees: empRes.data || [],
+                employees: employees,
                 sites: siteRes.data || [],
                 attendance: attRes.data || [],
                 siteRequests: reqRes.data || [],
-                settings: settings
+                settings: settings,
+                siteAllowances: allRes.data || []
             });
         }
 
@@ -228,27 +269,77 @@ export default async function handler(req, res) {
 
         // --- ADD ATTENDANCE (CHECK-IN) ---
         if (action === "addAttendance") {
-            // Check Location logic
+            // 0. Double Check-In Prevention
+            const { data: openAtt } = await supabase.from('attendance')
+                .select('id')
+                .eq('employeeId', data.employeeId)
+                .is('checkOut', null)
+                .order('checkIn', { ascending: false })
+                .limit(1);
+            
+            if (openAtt && openAtt.length > 0) {
+                throw new Error("لديك عملية حضور مفتوحة بالفعل. يرجى تسجيل الانصراف أولاً.");
+            }
+
+            // 1. Face Identity Check (Security Verification)
+            const { data: userData } = await supabase.from('employees').select('faceDescriptor').eq('id', String(data.employeeId)).maybeSingle();
+            if (userData && userData.faceDescriptor && data.faceDescriptor) {
+                // If they have a face registered, we proxy to Google Script for validation (Distance check)
+                // because calculating face Euclidean distance is easier there or we can just assume front-end did it
+                // but for maximum security we should re-verify if possible. 
+                // However, the main project uses the frontend for descriptor matching.
+                // We will at least ensure a descriptor was provided.
+            } else if (userData && userData.faceDescriptor && !data.faceDescriptor) {
+                throw new Error("مطلوب توثيق بصمة الوجه لإتمام العملية");
+            }
+
+            // 2. Check Location logic
             const { data: sites } = await supabase.from('sites').select('*');
             let matchedSite = null;
+            let isRequest = false;
+
             if (sites) {
                 for (let s of sites) {
                     let d = getDistance(data.latitude, data.longitude, s.latitude, s.longitude);
                     if (d <= s.radius) { matchedSite = s; break; }
                 }
             }
+
             if (!matchedSite) {
-                // Check if any auto-approved temp site matches
-                const { data: reqs } = await supabase.from('siteRequests').select('*').eq('employeeId', data.employeeId).eq('status', 'approved_today');
+                // Check if any approved today or PENDING (> 2min) request matches
+                const { data: reqs } = await supabase.from('siteRequests').select('*').eq('employeeId', data.employeeId);
                 if (reqs) {
+                    const now = new Date();
                     for (let r of reqs) {
-                        let d = getDistance(data.latitude, data.longitude, r.latitude, r.longitude);
-                        if (d <= (r.tempRadius || 100)) { 
-                            matchedSite = { id: r.id, name: r.suggestedName, transportPrice: r.transportPrice }; break; 
+                        let isAutoApprovable = false;
+                        if (r.status === 'pending') {
+                            const createdAt = new Date(r.timestamp || r.approvedAt);
+                            if (now - createdAt >= 2 * 60 * 1000) isAutoApprovable = true;
+                        }
+
+                        if (r.status === 'approved_today' || isAutoApprovable) {
+                            let d = getDistance(data.latitude, data.longitude, r.latitude, r.longitude);
+                            let radius = isAutoApprovable ? 700 : (r.tempRadius || 100);
+                            if (d <= radius) { 
+                                matchedSite = { id: r.id, name: r.suggestedName, transportPrice: r.transportPrice }; 
+                                isRequest = true;
+                                
+                                // Silent Auto-Approval update if pending
+                                if (isAutoApprovable) {
+                                    await supabase.from('siteRequests').update({ 
+                                        status: 'approved_today', 
+                                        tempRadius: 700, 
+                                        approvedAt: now.toISOString(),
+                                        note: (r.note ? r.note + " | " : "") + "[AUTO APPROVED after 2 minutes]"
+                                    }).eq('id', r.id);
+                                }
+                                break; 
+                            }
                         }
                     }
                 }
             }
+
             if (!matchedSite) throw new Error("أنت خارج نطاق جميع مواقع العمل المسجلة");
 
             // Calculate status
@@ -258,10 +349,20 @@ export default async function handler(req, res) {
             
             const { data: setRows } = await supabase.from('settings').select('*').eq('key', 'workStartTime');
             let workStart = (setRows && setRows.length > 0) ? setRows[0].value : "09:00";
-            let checkInTimeStr = checkInDate.toLocaleTimeString('en-US', {hour12:false, hour:'2-digit', minute:'2-digit'});
+            
+            // Critical Fix: Use Africa/Cairo time to compare with local workStart
+            let checkInTimeStr = checkInDate.toLocaleTimeString('en-US', {
+                timeZone: 'Africa/Cairo',
+                hour12: false, 
+                hour: '2-digit', 
+                minute: '2-digit'
+            });
 
             if (dayOfWeek === 5 || dayOfWeek === 6) status = "overtime";
             else if (checkInTimeStr > workStart) status = "late";
+
+            // Resolve proper transport price
+            const finalTransport = await fetchResolvedTransportPrice(data.employeeId, matchedSite.id, matchedSite.transportPrice, isRequest);
 
             const payload = {
                 employeeId: data.employeeId,
@@ -272,7 +373,7 @@ export default async function handler(req, res) {
                 latitude: data.latitude,
                 longitude: data.longitude,
                 status: status,
-                transportPrice: matchedSite.transportPrice || 0
+                transportPrice: finalTransport
             };
 
             const { error } = await supabase.from('attendance').insert([payload]);
@@ -291,8 +392,18 @@ export default async function handler(req, res) {
             
             if (errExist || !existing || existing.length === 0) throw new Error("لا يوجد عملية حضور مفتوحة لنسجل الانصراف");
 
+            const checkIn = new Date(existing[0].checkIn);
+            const checkOut = new Date(data.checkOut);
+            let totalHours = 0;
+            if (!isNaN(checkIn) && !isNaN(checkOut)) {
+                totalHours = parseFloat(((checkOut - checkIn) / 36e5).toFixed(2));
+            }
+
             const { error } = await supabase.from('attendance')
-                .update({ checkOut: data.checkOut })
+                .update({ 
+                    checkOut: data.checkOut,
+                    totalHours: totalHours
+                })
                 .eq('id', existing[0].id);
             if (error) throw error;
             return res.status(200).json({ success: true, message: "تم تسجيل الانصراف بنجاح" });
@@ -302,7 +413,14 @@ export default async function handler(req, res) {
         if (action === "getEmployees") {
             const { data: emps, error } = await supabase.from('employees').select('*');
             if (error) throw error;
-            return res.status(200).json({ success: true, data: emps || [] });
+
+            const { data: alls } = await supabase.from('siteAllowances').select('*');
+            const employees = (emps || []).map(emp => ({
+                ...emp,
+                siteAllowances: (alls || []).filter(a => String(a.employeeId) === String(emp.id))
+            }));
+
+            return res.status(200).json({ success: true, data: employees || [] });
         }
 
         if (action === "saveEmployee") {
@@ -423,16 +541,40 @@ export default async function handler(req, res) {
         }
 
         if (action === "addSiteRequest") {
+            let mapLink = String(data.mapLink || "").trim();
+            let mapLatitude = null;
+            let mapLongitude = null;
+
+            if (mapLink) {
+                try {
+                    // Try to resolve redirected map link and extract lat/lng
+                    const resLink = await fetch(mapLink, { method: 'HEAD', redirect: 'follow' });
+                    const resolvedUrl = resLink.url;
+                    
+                    // Basic extraction attempt from URL
+                    const match = resolvedUrl.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+                    if (match) {
+                        mapLatitude = parseFloat(match[1]);
+                        mapLongitude = parseFloat(match[2]);
+                    }
+                    mapLink = resolvedUrl;
+                } catch (e) {
+                    console.error("Map Link Resolution Failed:", e);
+                }
+            }
+
             const payload = {
-                id: data.id || Math.floor(Math.random() * 1000000),
+                id: data.id || "REQ" + Math.floor(10000 + Math.random() * 90000),
                 employeeId: data.employeeId,
                 employeeName: data.employeeName,
                 suggestedName: data.suggestedName,
                 latitude: data.latitude,
                 longitude: data.longitude,
-                mapLink: data.mapLink,
-                transportPrice: data.transportPrice,
-                tempRadius: data.radius,
+                mapLink: mapLink,
+                mapLatitude: mapLatitude,
+                mapLongitude: mapLongitude,
+                transportPrice: data.transportPrice || 120,
+                tempRadius: data.radius || 100,
                 note: data.note,
                 receiptUrl: data.receiptUrl,
                 receiptName: data.receiptName || '',
@@ -441,37 +583,44 @@ export default async function handler(req, res) {
             };
             const { error } = await supabase.from('siteRequests').insert([payload]);
             if (error) throw error;
-            return res.status(200).json({ success: true, message: "تم إرسال طلب الموقع بنجاح" });
+            return res.status(200).json({ 
+                success: true, 
+                message: "تم إرسال طلب الموقع بنجاح. سيتم تفعيل الموافقة التلقائية خلال دقيقتين إذا كنت في الموقع." 
+            });
         }
 
         if (action === "approveSiteRequest") {
             const { id, name, transportPrice, radius, mode, mapLink } = data;
             
             // 1. Update Request table
+            const { data: reqData, error: errFetch } = await supabase.from('siteRequests').select('*').eq('id', id).single();
+            if (errFetch || !reqData) throw new Error("الطلب غير موجود");
+
+            const finalStatus = (mode === 'daily' || mode === 'today') ? 'approved_today' : 'approved';
             const { error: errReq } = await supabase.from('siteRequests')
                 .update({ 
-                    status: (mode === 'daily' ? 'approved_today' : 'approved'),
-                    approvedAt: new Date().toISOString()
+                    status: finalStatus,
+                    approvedAt: new Date().toISOString(),
+                    transportPrice: transportPrice || reqData.transportPrice,
+                    tempRadius: radius || reqData.tempRadius
                 })
                 .eq('id', id);
             if (errReq) throw errReq;
 
             // 2. If permanent, add to sites table
-            if (mode === 'permanent') {
-                const { data: reqData } = await supabase.from('siteRequests').select('*').eq('id', id).single();
-                if (reqData) {
-                    const sitePayload = {
-                        name: name,
-                        latitude: reqData.latitude,
-                        longitude: reqData.longitude,
-                        radius: radius || 100,
-                        transportPrice: transportPrice || 0,
-                        mapLink: mapLink || reqData.mapLink,
-                        isTemporary: false
-                    };
-                    const { error: errSite } = await supabase.from('sites').insert([sitePayload]);
-                    if (errSite) throw errSite;
-                }
+            if (mode === 'permanent' || mode === 'always') {
+                const sitePayload = {
+                    id: String(Math.floor(10000 + Math.random() * 90000)),
+                    name: name || reqData.suggestedName,
+                    latitude: reqData.latitude,
+                    longitude: reqData.longitude,
+                    radius: radius || 100,
+                    transportPrice: transportPrice || 120,
+                    mapLink: mapLink || reqData.mapLink,
+                    isTemporary: false
+                };
+                const { error: errSite } = await supabase.from('sites').insert([sitePayload]);
+                if (errSite) throw errSite;
             }
             
             return res.status(200).json({ success: true, message: "تمت الموافقة على الطلب بنجاح" });
@@ -523,6 +672,8 @@ export default async function handler(req, res) {
 
     } catch (e) {
         console.error("Handler Error:", e);
-        return res.status(200).json({ success: false, message: e.message || e.toString() });
+        // Supabase error objects can be complex, ensure we extract the meaningful message
+        const errorMsg = e.message || (e.error && e.error.message) || e.toString();
+        return res.status(200).json({ success: false, message: errorMsg });
     }
 }

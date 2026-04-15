@@ -793,7 +793,8 @@ function doGet(e) {
         sites: _getSitesData(ss),
         attendance: _getAttendanceData(ss),
         settings: _getSettingsData(ss),
-        siteRequests: _getSiteRequestsData(ss)
+        siteRequests: _getSiteRequestsData(ss),
+        siteAllowances: _getSiteAllowancesData(ss)
       });
     }
 
@@ -2165,6 +2166,18 @@ function _getSiteRequestsData(ss) {
       autoMeta: String(r[SITE_REQUEST_COL.AUTO_META] || ""),
       isAutoApproved: String(r[SITE_REQUEST_COL.AUTO_META] || "") === AUTO_APPROVAL_META,
       isActiveToday: isApprovedTodayRequestActive(r)
+    };
+  });
+}
+function _getSiteAllowancesData(ss) {
+  var s = getOrCreateSheet("siteAllowances", ["employeeId", "siteId", "transportPrice"]);
+  var d = s.getDataRange().getValues();
+  d.shift();
+  return d.map(function(r) {
+    return {
+      employeeId: String(r[0]),
+      siteId: String(r[1]),
+      transportPrice: toNumberSafe(r[2], 0)
     };
   });
 }

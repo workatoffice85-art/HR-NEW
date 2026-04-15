@@ -158,6 +158,18 @@ function buildAttendancePayload(rawAttendance) {
     };
 }
 
+function buildAllowancePayload(rawAllowance) {
+    const employeeId = normalizeString(rawAllowance.employeeId);
+    const siteId = normalizeString(rawAllowance.siteId);
+    if (!employeeId || !siteId) return null;
+
+    return {
+        employeeId,
+        siteId,
+        transportPrice: toSafeNumber(rawAllowance.transportPrice, 0)
+    };
+}
+
 async function fetchAllRows(table, columns) {
     let from = 0;
     const rows = [];
@@ -259,6 +271,7 @@ export default async function handler(req, res) {
         const gsEmployees = Array.isArray(gsData.employees) ? gsData.employees : [];
         const gsSites = Array.isArray(gsData.sites) ? gsData.sites : [];
         const gsAttendance = Array.isArray(gsData.attendance) ? gsData.attendance : [];
+        const gsAllowances = Array.isArray(gsData.siteAllowances) ? gsData.siteAllowances : [];
 
         const issues = [];
         const stats = {
@@ -268,7 +281,8 @@ export default async function handler(req, res) {
             sitesSkipped: 0,
             attendanceAdded: 0,
             attendanceUpdated: 0,
-            attendanceSkipped: 0
+            attendanceSkipped: 0,
+            allowancesSynced: 0
         };
 
         // 1) Employees: add only rows missing in Supabase.
@@ -395,6 +409,25 @@ export default async function handler(req, res) {
                 pushIssue(issues, `Failed to update attendance checkout (id: ${updateRow.id}): ${formatError(error)}`);
             } else {
                 stats.attendanceUpdated++;
+            }
+        }
+
+        // 4) Site Allowances: Sync all (Delete/Insert)
+        if (gsAllowances.length > 0) {
+            const allowancesToUpsert = [];
+            for (const allow of gsAllowances) {
+                const payload = buildAllowancePayload(allow);
+                if (payload) allowancesToUpsert.push(payload);
+            }
+
+            if (allowancesToUpsert.length > 0) {
+                // For simplicity, we upsert all. siteAllowances has a PK (employeeId, siteId).
+                const { error } = await supabase.from('siteAllowances').upsert(allowancesToUpsert);
+                if (error) {
+                    pushIssue(issues, `Failed to sync siteAllowances: ${formatError(error)}`);
+                } else {
+                    stats.allowancesSynced = allowancesToUpsert.length;
+                }
             }
         }
 
