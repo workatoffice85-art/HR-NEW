@@ -114,8 +114,7 @@ function buildEmployeePayload(rawEmployee) {
         role: normalizeString(rawEmployee.role) || 'employee',
         assignedSites: toAssignedSitesValue(rawEmployee.assignedSites),
         faceDescriptor: rawEmployee.faceDescriptor ?? null,
-        transportPrice: toSafeNumber(rawEmployee.transportPrice, 0),
-        salary: toSafeNumber(rawEmployee.salary, 0)
+        transportPrice: toSafeNumber(rawEmployee.transportPrice, 0)
     };
 }
 
@@ -393,10 +392,7 @@ export default async function handler(req, res) {
                 if (!supabaseCheckOut && sheetCheckOut && existingRow.id) {
                     attendanceToUpdate.push({
                         id: existingRow.id,
-                        checkOut: sheetCheckOut,
-                        requestedExtraAmount: toSafeNumber(attendance.requestedExtraAmount, 0),
-                        extraAmountReason: normalizeString(attendance.extraAmountReason),
-                        extraAmountStatus: normalizeString(attendance.extraAmountStatus) || 'none'
+                        checkOut: sheetCheckOut
                     });
                 }
             }
@@ -409,12 +405,7 @@ export default async function handler(req, res) {
         }
 
         for (const updateRow of attendanceToUpdate) {
-            const updatePayload = { 
-                checkOut: updateRow.checkOut,
-                requestedExtraAmount: updateRow.requestedExtraAmount,
-                extraAmountReason: updateRow.extraAmountReason,
-                extraAmountStatus: updateRow.extraAmountStatus
-            };
+            const updatePayload = { checkOut: updateRow.checkOut };
 
             const { error } = await supabase
                 .from('attendance')
