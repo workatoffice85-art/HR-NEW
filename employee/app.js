@@ -14,6 +14,24 @@ let tempEmail = ""; // used during registration
 let tempPhone = ""; // used during registration
 const MODEL_URL = '../models';
 
+async function callApi(payload, options = {}) {
+    const headers = { 
+        'Content-Type': 'text/plain' 
+    };
+    const token = localStorage.getItem('empToken');
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch(API_URL, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+        headers: headers,
+        ...options
+    });
+    return await response.json();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     checkSession();
 });
@@ -39,54 +57,70 @@ function checkSession() {
 async function login() {
     const email = document.getElementById('loginIdentifier').value.trim();
     const pass = document.getElementById('loginPass').value.trim();
-    if (!email || !pass) return alert("أدخل بيانات الدخول");
+    if (!email || !pass) return showToast("أدخل بيانات الدخول", "error");
 
-    document.querySelector('#loginSection button').innerText = 'جاري التحقق...';
+    const btn = document.querySelector('#loginSection btn-primary') || document.querySelector('#loginSection button');
+    setLoading(btn, true);
 
     try {
+<<<<<<< HEAD
         const response = await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify({ action: 'login', identifier: email, password: pass }),
-            headers: { 'Content-Type': 'text/plain' }
+            headers: { 'Content-Type': 'application/json' }
         });
         const result = await response.json();
+=======
+        const result = await callApi({ action: 'login', identifier: email, password: pass });
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
         
         if (result.success) {
+            localStorage.setItem('empToken', result.token);
             localStorage.setItem('empSession', JSON.stringify(result.data));
+            showToast("تم تسجيل الدخول بنجاح", "success");
             checkSession();
         } else {
-            showError('loginError', result.message || 'البريد أو كلمة المرور غير صحيحة');
+            showToast(result.message || 'البريد أو كلمة المرور غير صحيحة', 'error');
         }
     } catch (e) {
-        showError('loginError', 'فشل الاتصال بالخادم: ' + e.message);
+        showToast('فشل الاتصال بالخادم: ' + e.message, 'error');
         console.error(e);
     }
-    document.querySelector('#loginSection button').innerText = 'دخول';
+    setLoading(btn, false);
 }
 
 // 2. Request OTP (Registration)
 async function requestOTP() {
     tempEmail = document.getElementById('regEmail').value.trim();
     tempPhone = document.getElementById('regPhone').value.trim();
-    if(!tempPhone) return alert("أدخل رقم الهاتف");
-    if(!tempEmail) return alert("أدخل الإيميل");
+    if(!tempPhone) return showToast("أدخل رقم الهاتف", "error");
+    if(!tempEmail) return showToast("أدخل الإيميل", "error");
 
-    document.getElementById('btnRequestOTP').innerText = 'جاري الإرسال...';
+    setLoading('btnRequestOTP', true);
     try {
+<<<<<<< HEAD
        const res = await fetch(API_URL, {
             method:'POST', body: JSON.stringify({action:'sendOTP', email: tempEmail, phone: tempPhone}), headers:{'Content-Type':'text/plain'}
        });
        const result = await res.json();
        if(result.success) {
+           showToast("تم إرسال الكود بنجاح", "success");
            showSection('verifyOTPSection');
        } else {
-           showError('otpError', result.message);
+           showToast(result.message, 'error');
        }
+=======
+        const result = await callApi({action:'sendOTP', email: tempEmail, phone: tempPhone});
+        if(result.success) {
+            showSection('verifyOTPSection');
+        } else {
+            showError('otpError', result.message);
+        }
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
     } catch(e) {
-        showError('otpError', 'خطأ في الشبكة: ' + e.message);
-        console.error(e);
+        showToast('خطأ في الشبكة: ' + e.message, 'error');
     }
-    document.getElementById('btnRequestOTP').innerText = 'إرسال كود التحقق';
+    setLoading('btnRequestOTP', false);
 }
 
 // 3. Verify OTP
@@ -96,16 +130,13 @@ async function verifyOTP() {
     
     document.getElementById('btnVerifyOTP').innerText = 'جاري...';
     try {
-       const res = await fetch(API_URL, {
-            method:'POST', body: JSON.stringify({action:'verifyOTP', email: tempEmail, code: code}), headers:{'Content-Type':'text/plain'}
-       });
-       const result = await res.json();
-       if(result.success) {
-           showSection('registrationSection');
-           startRegistrationVideo(); // start face registration
-       } else {
-           showError('verifyError', result.message);
-       }
+        const result = await callApi({action:'verifyOTP', email: tempEmail, code: code});
+        if(result.success) {
+            showSection('registrationSection');
+            startRegistrationVideo(); // start face registration
+        } else {
+            showError('verifyError', result.message);
+        }
     } catch(e) {
         showError('verifyError', 'خطأ في الشبكة: ' + e.message);
         console.error(e);
@@ -147,10 +178,10 @@ async function completeRegistration() {
     const name = document.getElementById('regName').value.trim();
     const pass = document.getElementById('regPass').value.trim();
     if(!name || !pass || !registeredFaceDescriptor) {
-        return showError('regError', 'أكمل بياناتك والتقط البصمة');
+        return showToast('أكمل بياناتك والتقط البصمة', 'error');
     }
 
-    document.getElementById('btnCompleteReg').innerText = 'جاري الإنشاء...';
+    setLoading('btnCompleteReg', true);
     
     // Generate Random Employee ID internally
     const newId = 'EMP' + Math.floor(1000 + Math.random() * 9000);
@@ -162,22 +193,17 @@ async function completeRegistration() {
     };
 
     try {
-        const res = await fetch(API_URL, {
-            method:'POST', body: JSON.stringify(payload), headers:{'Content-Type':'text/plain'}
-        });
-        const result = await res.json();
+        const result = await callApi(payload);
         if(result.success) {
-            alert('تم إنشاء الحساب بنجاح، سجل دخول الآن');
-            location.reload();
+            showToast('تم إنشاء الحساب بنجاح، سجل دخول الآن', 'success');
+            setTimeout(() => location.reload(), 2000);
         } else {
-            showError('regError', result.message);
-            document.getElementById('btnCompleteReg').innerText = 'إنشاء الحساب';
+            showToast(result.message, 'error');
         }
     } catch(e) {
-        showError('regError', 'حدث خطأ: ' + e.message);
-        console.error(e);
-        document.getElementById('btnCompleteReg').innerText = 'إنشاء الحساب';
+        showToast('حدث خطأ: ' + e.message, 'error');
     }
+    setLoading('btnCompleteReg', false);
 }
 
 function showError(elId, msg) {
@@ -195,9 +221,11 @@ function logout() {
 async function initSystem() {
     setStatus('🔄 جاري بدء النظام (النسخة المحدثة)...', 'text-muted');
     
-    // Step 1: Load Data & AI Models in Parallel
+    const token = localStorage.getItem('empToken');
     try {
-        const dataPromise = fetch(`${API_URL}?action=getPortalInitialData&employeeId=${encodeURIComponent(currentUser.id)}`).then(r => r.json());
+        const dataPromise = fetch(`${API_URL}?action=getPortalInitialData&employeeId=${encodeURIComponent(currentUser.id)}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        }).then(r => r.json());
         const modelPromise = Promise.all([
             faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
             faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
@@ -407,36 +435,54 @@ function getLocation() {
     }
 }
 
-function verifyLocation() {
-    if (!lastLocation || sitesData.length === 0) return;
+let lastDetectionTime = 0;
+const DETECTION_INTERVAL_MS = 10000; // 10 seconds
+
+async function verifyLocation() {
+    if (!lastLocation) return;
     
-    let detectedSite = null;
-    let minDistance = Infinity;
-    let closestSiteName = "";
+    // Throttle server-side detection to every 10 seconds
+    const now = Date.now();
+    if (now - lastDetectionTime < DETECTION_INTERVAL_MS && lastDetectedSite) return;
+    lastDetectionTime = now;
 
-    // Check ALL sites
-    for (const site of sitesData) {
-        const dist = getDistanceFromLatLonInM(lastLocation.lat, lastLocation.lng, site.latitude, site.longitude);
-        if (dist < minDistance) {
-            minDistance = dist;
-            closestSiteName = site.name;
-        }
+    try {
+        const res = await fetch(`${API_URL}?action=detectSite&latitude=${lastLocation.lat}&longitude=${lastLocation.lng}&employeeId=${currentUser.id}`);
+        const result = await res.json();
         
-        if (dist <= site.radius) {
-            detectedSite = site;
-            break;
-        }
-    }
+        if (result.success) {
+            const detectedSite = result.matchedSite;
+            const minDistance = result.minDistance;
+            const closestSiteName = result.closestSiteName;
 
+<<<<<<< HEAD
+            if (detectedSite) {
+                document.getElementById('siteText').innerText = `✅ أنت في موقع: ${detectedSite.name}`;
+                document.getElementById('btnRequestSite').classList.add('hidden');
+                lastDetectedSite = detectedSite;
+            } else {
+                const distText = (minDistance === Infinity || minDistance === null) ? "" : `(أقرب موقع لك هو ${closestSiteName} ويبعد ${(minDistance/1000).toFixed(2)} كم)`;
+                document.getElementById('siteText').innerText = `❌ أنت خارج النطاق. ${distText}`;
+                document.getElementById('btnRequestSite').classList.remove('hidden');
+                lastDetectedSite = null;
+            }
+        }
+    } catch(e) {
+        console.error("Server-side site detection failed:", e);
+        // Silently fail and keep last status until next interval
+=======
     if (detectedSite) {
         document.getElementById('siteText').innerText = `✅ أنت في موقع: ${detectedSite.name}`;
         document.getElementById('btnRequestSite').classList.add('hidden');
         lastDetectedSite = detectedSite;
+        document.getElementById('extraAllowanceLocationNote').innerText = `* سيتم ربط هذا الطلب تلقائياً بالموقع الحالي (${detectedSite.name})`;
     } else {
         const distText = minDistance === Infinity ? "" : `(أقرب موقع لك هو ${closestSiteName} ويبعد ${(minDistance/1000).toFixed(2)} كم)`;
         document.getElementById('siteText').innerText = `❌ أنت خارج النطاق. ${distText}`;
         document.getElementById('btnRequestSite').classList.remove('hidden');
         lastDetectedSite = null;
+        document.getElementById('extraAllowanceLocationNote').innerText = `* سيتم ربط هذا الطلب تلقائياً بالموقع الحالي (جاري التحديد...)`;
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
     }
     updateActionButtonsState();
 }
@@ -450,47 +496,93 @@ function getDistanceFromLatLonInM(lat1, lon1, lat2, lon2) {
 function deg2rad(deg) { return deg * (Math.PI/180) }
 
 async function handleCheckIn() {
-    if(!currentFaceDescriptor) return alert('بصمة الوجه غير ملتقطة الحين');
-    if(!lastLocation) return alert('يجب تفعيل الـ GPS');
+    if(!currentFaceDescriptor) return showToast('بصمة الوجه غير ملتقطة الحين', 'error');
+    if(!lastLocation) return showToast('يجب تفعيل الـ GPS', 'error');
 
-    document.getElementById('loader').classList.remove('hidden');
+    setLoading('btnCheckIn', true);
+    const token = localStorage.getItem('empToken');
     const payload = {
-        action: 'addAttendance', employeeId: currentUser.id, employeeName: currentUser.name,
-        checkIn: new Date().toISOString(), latitude: lastLocation.lat, longitude: lastLocation.lng,
+<<<<<<< HEAD
+        action: 'addAttendance', 
+        latitude: lastLocation.lat, 
+        longitude: lastLocation.lng,
         faceDescriptor: JSON.stringify(currentFaceDescriptor)
     };
 
     try {
-        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'text/plain' } });
+        const res = await fetch(API_URL, { 
+            method: 'POST', 
+            body: JSON.stringify(payload), 
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            } 
+        });
         const result = await res.json();
+=======
+        action: 'addAttendance', employeeId: currentUser.id, employeeName: currentUser.name,
+        checkIn: new Date().toISOString(), latitude: lastLocation.lat, longitude: lastLocation.lng,
+        faceDescriptor: JSON.stringify(currentFaceDescriptor),
+        note: document.getElementById('attendanceNote').value.trim()
+    };
+
+    try {
+        const result = await callApi(payload);
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
         if(result.success) {
-            alert(result.message);
-            setAppState('in', payload.checkIn);
-        } else alert('خطأ: ' + result.message);
-    } catch(e) { console.error(e); alert('حدث خطأ في الاتصال'); }
-    document.getElementById('loader').classList.add('hidden');
+            showToast(result.message, 'success');
+            // result.data might contain the server-side timestamp if we returned it, 
+            // but for now we'll just use a local approximation for UI immediate feedback
+            setAppState('in', new Date().toISOString());
+        } else showToast('خطأ: ' + result.message, 'error');
+    } catch(e) { showToast('حدث خطأ في الاتصال', 'error'); }
+    setLoading('btnCheckIn', false);
 }
 
 async function handleCheckOut() {
-    if(!currentFaceDescriptor) return alert('بصمة الوجه غير ملتقطة الحين');
-    if(!lastLocation) return alert('يجب تفعيل الـ GPS');
+    if(!currentFaceDescriptor) return showToast('بصمة الوجه غير ملتقطة الحين', 'error');
+    if(!lastLocation) return showToast('يجب تفعيل الـ GPS', 'error');
 
-    document.getElementById('loader').classList.remove('hidden');
+    setLoading('btnCheckOut', true);
+    const token = localStorage.getItem('empToken');
     const payload = { 
-        action: 'checkoutAttendance', employeeId: currentUser.id, 
-        checkOut: new Date().toISOString(), latitude: lastLocation.lat, longitude: lastLocation.lng,
+<<<<<<< HEAD
+        action: 'checkoutAttendance',
+        latitude: lastLocation.lat, 
+        longitude: lastLocation.lng,
         faceDescriptor: JSON.stringify(currentFaceDescriptor)
     };
     try {
-        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'text/plain' } });
+        const res = await fetch(API_URL, { 
+            method: 'POST', 
+            body: JSON.stringify(payload), 
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            } 
+        });
         const result = await res.json();
+=======
+        action: 'checkoutAttendance', employeeId: currentUser.id, 
+        checkOut: new Date().toISOString(), latitude: lastLocation.lat, longitude: lastLocation.lng,
+        faceDescriptor: JSON.stringify(currentFaceDescriptor),
+        note: document.getElementById('attendanceNote').value.trim(),
+        requestedExtraAmount: document.getElementById('extraAllowanceAmount').value,
+        extraAmountReason: document.getElementById('extraAllowanceReason').value.trim()
+    };
+    try {
+        const result = await callApi(payload);
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
         if(result.success) {
-            alert(result.message);
+            showToast(result.message, 'success');
             setAppState('out');
+            document.getElementById('attendanceNote').value = ''; 
+            document.getElementById('extraAllowanceAmount').value = ''; 
+            document.getElementById('extraAllowanceReason').value = ''; 
         }
-        else alert('خطأ: ' + result.message);
-    } catch(e) { console.error(e); alert('حدث خطأ في الشبكة: ' + e.message); }
-    document.getElementById('loader').classList.add('hidden');
+        else showToast('خطأ: ' + result.message, 'error');
+    } catch(e) { showToast('حدث خطأ في الشبكة: ' + e.message, 'error'); }
+    setLoading('btnCheckOut', false);
 }
 
 // ------ SITE REQUEST LOGIC ------ //
@@ -510,10 +602,11 @@ async function submitSiteRequest() {
     const name = document.getElementById('suggestedSiteName').value.trim();
     const link = document.getElementById('suggestedSiteLink').value.trim();
     const note = document.getElementById('suggestedSiteNote').value.trim();
-    if (!name) return alert("يرجى إدخال اسم الموقع");
-    if (!lastLocation) return alert("يجب توفير إحداثيات الموقع");
+    if (!name) return showToast("يرجى إدخال اسم الموقع", "error");
+    if (!lastLocation) return showToast("يجب توفير إحداثيات الموقع", "error");
 
-    document.getElementById('loader').classList.remove('hidden');
+    const submitBtn = document.querySelector('#requestSiteModal .btn-primary');
+    setLoading(submitBtn, true);
     
     // Validate that the link matches the current location (within 700m)
     if (link) {
@@ -525,8 +618,8 @@ async function submitSiteRequest() {
             if (result.success && result.lat && result.lng) {
                 const dist = getDistanceFromLatLonInM(lastLocation.lat, lastLocation.lng, parseFloat(result.lat), parseFloat(result.lng));
                 if (dist > 700) {
-                    document.getElementById('loader').classList.add('hidden');
-                    return alert(`❌ خطأ: الرابط يشير لمكان يبعد عنك ${(dist/1000).toFixed(2)} كم. يجب أن يكون الرابط لمكانك الحالي (بحد أقصى 700 متر).`);
+                    setLoading(submitBtn, false);
+                    return showToast(`❌ خطأ: الرابط يشير لمكان يبعد عنك ${(dist/1000).toFixed(2)} كم.`, 'error');
                 }
             }
         } catch(e) { console.warn("Failed to validate link distance", e); }
@@ -550,16 +643,15 @@ async function submitSiteRequest() {
         });
         const result = await res.json();
         if (result.success) {
-            alert(result.message);
+            showToast(result.message, 'success');
             closeRequestModal();
         } else {
-            alert("خطأ: " + result.message);
+            showToast("خطأ: " + result.message, 'error');
         }
     } catch (e) {
-        console.error(e);
-        alert("فشل الاتصال بالسيرفر");
+        showToast("فشل الاتصال بالسيرفر", 'error');
     }
-    document.getElementById('loader').classList.add('hidden');
+    setLoading(submitBtn, false);
 }
 
 // ------ MY REPORTS SYSTEM ------ //
@@ -631,7 +723,6 @@ function renderMyReports(data, monthStr) {
         }
     }
 
-    let totalHours = 0;
     let totalTransport = 0;
     const dailyTransport = {};
     
@@ -650,7 +741,6 @@ function renderMyReports(data, monthStr) {
         const recordDateObj = new Date(record.checkIn);
         const dateKey = !Number.isNaN(recordDateObj.getTime()) ? recordDateObj.toDateString() : null;
 
-        if(record.totalHours) totalHours += parseFloat(record.totalHours);
         if (dateKey) {
             const transportValue = toTransportNumber(record.transportPrice);
             if (!(dateKey in dailyTransport)) {
@@ -663,13 +753,19 @@ function renderMyReports(data, monthStr) {
             date: new Date(record.checkIn),
             checkIn: record.checkIn,
             checkOut: record.checkOut,
-            status: record.status, // 'present' or 'late'
+            status: record.status,
             transport: record.transportPrice || 0,
+            overtimeAmount: record.overtimeAmount || 0,
+            extraAmount: (record.extraAmountStatus === 'approved') ? (record.requestedExtraAmount || 0) : 0,
+            note: record.note || '',
             type: 'entry'
         });
     });
 
-    totalTransport = Object.values(dailyTransport).reduce((sum, value) => sum + value, 0);
+    const totalTransportVal = Object.values(dailyTransport).reduce((sum, value) => sum + value, 0);
+    const totalOvertimeVal = presentRecords.reduce((sum, r) => sum + parseFloat(r.overtimeAmount || 0), 0);
+    const totalExtraVal = presentRecords.reduce((sum, r) => sum + (r.extraAmountStatus === 'approved' ? parseFloat(r.requestedExtraAmount || 0) : 0), 0);
+    totalTransport = totalTransportVal + totalOvertimeVal + totalExtraVal;
 
     // Add Absent Days (Only for working days that have no record)
     workingDaysPassed.forEach(dateStr => {
@@ -695,15 +791,69 @@ function renderMyReports(data, monthStr) {
                 statusColor = 'var(--danger)';
             } else if (item.status === 'overtime') {
                 statusText = 'عمل إضافي';
-                statusColor = '#3b82f6'; // Bright Blue
+                statusColor = '#3b82f6';
             }
 
+<<<<<<< HEAD
+            const statusSpan = document.createElement('span');
+            statusSpan.style.color = statusColor;
+            statusSpan.textContent = statusText;
+
+            const row = createSafeRow([
+                item.date.toLocaleDateString('ar-EG'),
+                new Date(item.checkIn).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'}),
+                item.checkOut ? new Date(item.checkOut).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'}) : '-',
+                item.transport + ' ج.م',
+                statusSpan
+            ]);
+            
+            const labels = ["التاريخ", "الحضور", "الانصراف", "البدل", "الحالة"];
+            row.querySelectorAll('td').forEach((td, i) => {
+                td.setAttribute('data-label', labels[i]);
+                if (i === 1 || i === 2) td.dir = 'ltr';
+            });
+            tbody.appendChild(row);
+        } else {
+            // Absent Row
+            const statusSpan = document.createElement('span');
+            statusSpan.style.color = 'var(--danger)';
+            statusSpan.textContent = 'غائب';
+
+            const detailsCell = document.createElement('div');
+            detailsCell.style.cssText = 'text-align:center !important; color:var(--danger); font-size:0.8rem;';
+            detailsCell.textContent = 'غائب (لم يتم تسجيل حضور)';
+
+            const row = createSafeRow([
+                item.date.toLocaleDateString('ar-EG'),
+                detailsCell,
+                '',
+                '',
+                statusSpan
+            ]);
+            
+            // Special handling for merged-like look of absent row
+            const cells = row.querySelectorAll('td');
+            cells[1].colSpan = 3;
+            cells[2].remove();
+            cells[3].remove();
+            
+            row.style.background = 'rgba(239, 68, 68, 0.05)';
+            
+            const labels = ["التاريخ", "التفاصيل", "الحالة"];
+            cells[0].setAttribute('data-label', labels[0]);
+            cells[1].setAttribute('data-label', labels[1]);
+            cells[4].setAttribute('data-label', labels[2]);
+
+            tbody.appendChild(row);
+=======
+            const totalPayable = (parseFloat(item.transport) + parseFloat(item.overtimeAmount) + parseFloat(item.extraAmount || 0)).toFixed(2);
             tbody.innerHTML += `
                 <tr>
                     <td data-label="التاريخ">${item.date.toLocaleDateString('ar-EG')}</td>
                     <td data-label="الحضور" dir="ltr">${new Date(item.checkIn).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'})}</td>
                     <td data-label="الانصراف" dir="ltr">${item.checkOut ? new Date(item.checkOut).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'}) : '-'}</td>
-                    <td data-label="البدل">${item.transport} ج.م</td>
+                    <td data-label="إجمالي المستحق">${totalPayable} ج.م</td>
+                    <td data-label="الملاحظات">${item.note || '-'}</td>
                     <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
                 </tr>
             `;
@@ -712,10 +862,11 @@ function renderMyReports(data, monthStr) {
             tbody.innerHTML += `
                 <tr style="background: rgba(239, 68, 68, 0.05);">
                     <td data-label="التاريخ">${item.date.toLocaleDateString('ar-EG')}</td>
-                    <td data-label="التفاصيل" colspan="3" style="text-align:center !important; color:var(--danger); font-size:0.8rem;">غائب (لم يتم تسجيل حضور)</td>
+                    <td data-label="التفاصيل" colspan="4" style="text-align:center !important; color:var(--danger); font-size:0.8rem;">غائب (لم يتم تسجيل حضور)</td>
                     <td data-label="الحالة"><span style="color:var(--danger)">غائب</span></td>
                 </tr>
             `;
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
         }
     });
 
@@ -724,7 +875,6 @@ function renderMyReports(data, monthStr) {
     document.getElementById('empTotalPresent').innerText = presentDates.size; // Use size of unique dates set
     document.getElementById('empTotalAbsent').innerText = totalAbsent > 0 ? totalAbsent : 0;
     document.getElementById('empTotalLates').innerText = totalLates;
-    document.getElementById('empTotalHours').innerText = totalHours.toFixed(2);
     document.getElementById('empTotalTransport').innerText = totalTransport.toFixed(2) + " ج.م";
 }
 

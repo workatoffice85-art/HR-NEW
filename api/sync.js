@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://ofegdbbyanyglqewbdlm.supabase.co';
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9mZWdkYmJ5YW55Z2xxZXdiZGxtIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjEzOTAzMywiZXhwIjoyMDkxNzE1MDMzfQ.lw2wyo5_U_hXZSebLScV1fqt7eRHPOfFi7Z4XKnswzU';
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwNhaRKDP-7M4dXSQend8RbYPkXRgs5nzN0-BmNzxEO8IkBN9lt6KDtJCdOqpovhJEY1Q/exec';
 const SYNC_DEFAULT_PASSWORD = process.env.SYNC_DEFAULT_PASSWORD || '';
 
@@ -114,7 +114,8 @@ function buildEmployeePayload(rawEmployee) {
         role: normalizeString(rawEmployee.role) || 'employee',
         assignedSites: toAssignedSitesValue(rawEmployee.assignedSites),
         faceDescriptor: rawEmployee.faceDescriptor ?? null,
-        transportPrice: toSafeNumber(rawEmployee.transportPrice, 0)
+        transportPrice: toSafeNumber(rawEmployee.transportPrice, 0),
+        salary: toSafeNumber(rawEmployee.salary, 0)
     };
 }
 
@@ -144,15 +145,6 @@ function buildAttendancePayload(rawAttendance) {
     const checkOut = normalizeString(rawAttendance.checkOut);
     if (!employeeId || !checkIn) return null;
 
-    let totalHours = toSafeNumber(rawAttendance.totalHours, null);
-    if (totalHours === null && checkOut) {
-        const inMs = parseTimeMs(checkIn);
-        const outMs = parseTimeMs(checkOut);
-        if (inMs !== null && outMs !== null && outMs >= inMs) {
-            totalHours = Number(((outMs - inMs) / 36e5).toFixed(2));
-        }
-    }
-
     return {
         employeeId,
         employeeName: normalizeString(rawAttendance.employeeName),
@@ -163,8 +155,24 @@ function buildAttendancePayload(rawAttendance) {
         latitude: toNullableNumber(rawAttendance.latitude),
         longitude: toNullableNumber(rawAttendance.longitude),
         status: normalizeString(rawAttendance.status) || 'present',
-        totalHours: totalHours === null ? 0 : totalHours,
-        transportPrice: toSafeNumber(rawAttendance.transportPrice, 0)
+        transportPrice: toSafeNumber(rawAttendance.transportPrice, 0),
+        note: normalizeString(rawAttendance.note),
+        overtimeAmount: toSafeNumber(rawAttendance.overtimeAmount, 0),
+        requestedExtraAmount: toSafeNumber(rawAttendance.requestedExtraAmount, 0),
+        extraAmountReason: normalizeString(rawAttendance.extraAmountReason),
+        extraAmountStatus: normalizeString(rawAttendance.extraAmountStatus) || 'none'
+    };
+}
+
+function buildAllowancePayload(rawAllowance) {
+    const employeeId = normalizeString(rawAllowance.employeeId);
+    const siteId = normalizeString(rawAllowance.siteId);
+    if (!employeeId || !siteId) return null;
+
+    return {
+        employeeId,
+        siteId,
+        transportPrice: toSafeNumber(rawAllowance.transportPrice, 0)
     };
 }
 
@@ -255,13 +263,35 @@ export default async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'POST') return res.status(405).json({ success: false, message: 'Method not allowed' });
 
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+        return res.status(500).json({ success: false, message: "Missing Supabase configuration." });
+    }
+
     try {
-        // Fetch latest snapshot from Google Sheets (master backup).
-        const gsRes = await fetch(`${GOOGLE_SCRIPT_URL}?action=getDashboardData&t=${Date.now()}`, {
+        // 0) Determine sync mode (Incremental vs Full)
+        const isFull = req.query.full === 'true';
+        let since = "";
+
+        if (!isFull) {
+            const { data: latestRows } = await supabase
+                .from('attendance')
+                .select('checkIn')
+                .order('checkIn', { ascending: false })
+                .limit(1);
+
+            if (latestRows && latestRows.length > 0) {
+                // Buffer of 1 hour for safe overlap
+                const lastDate = new Date(latestRows[0].checkIn);
+                since = new Date(lastDate.getTime() - 3600000).toISOString();
+            }
+        }
+
+        // 1) Fetch snapshot from Google Sheets (master backup).
+        const url = `${GOOGLE_SCRIPT_URL}?action=getDashboardData&since=${encodeURIComponent(since)}&t=${Date.now()}`;
+        const gsRes = await fetch(url, {
             method: 'GET',
             headers: { Accept: 'application/json' }
         });
-        if (!gsRes.ok) throw new Error(`Failed to fetch Google Sheets snapshot (${gsRes.status})`);
 
         const gsData = await gsRes.json();
         if (!gsData.success) throw new Error(gsData.message || 'Failed to fetch data from Google Sheets');
@@ -269,6 +299,7 @@ export default async function handler(req, res) {
         const gsEmployees = Array.isArray(gsData.employees) ? gsData.employees : [];
         const gsSites = Array.isArray(gsData.sites) ? gsData.sites : [];
         const gsAttendance = Array.isArray(gsData.attendance) ? gsData.attendance : [];
+        const gsAllowances = Array.isArray(gsData.siteAllowances) ? gsData.siteAllowances : [];
 
         const issues = [];
         const stats = {
@@ -278,7 +309,8 @@ export default async function handler(req, res) {
             sitesSkipped: 0,
             attendanceAdded: 0,
             attendanceUpdated: 0,
-            attendanceSkipped: 0
+            attendanceSkipped: 0,
+            allowancesSynced: 0
         };
 
         // 1) Employees: add only rows missing in Supabase.
@@ -380,7 +412,9 @@ export default async function handler(req, res) {
                     attendanceToUpdate.push({
                         id: existingRow.id,
                         checkOut: sheetCheckOut,
-                        totalHours: toSafeNumber(attendance.totalHours, null)
+                        requestedExtraAmount: toSafeNumber(attendance.requestedExtraAmount, 0),
+                        extraAmountReason: normalizeString(attendance.extraAmountReason),
+                        extraAmountStatus: normalizeString(attendance.extraAmountStatus) || 'none'
                     });
                 }
             }
@@ -393,10 +427,12 @@ export default async function handler(req, res) {
         }
 
         for (const updateRow of attendanceToUpdate) {
-            const updatePayload = { checkOut: updateRow.checkOut };
-            if (updateRow.totalHours !== null) {
-                updatePayload.totalHours = updateRow.totalHours;
-            }
+            const updatePayload = { 
+                checkOut: updateRow.checkOut,
+                requestedExtraAmount: updateRow.requestedExtraAmount,
+                extraAmountReason: updateRow.extraAmountReason,
+                extraAmountStatus: updateRow.extraAmountStatus
+            };
 
             const { error } = await supabase
                 .from('attendance')
@@ -409,6 +445,30 @@ export default async function handler(req, res) {
                 pushIssue(issues, `Failed to update attendance checkout (id: ${updateRow.id}): ${formatError(error)}`);
             } else {
                 stats.attendanceUpdated++;
+            }
+        }
+
+        // 4) Site Allowances: Sync all (Upsert with deduplication)
+        if (gsAllowances.length > 0) {
+            const allowanceMap = new Map();
+            for (const allow of gsAllowances) {
+                const payload = buildAllowancePayload(allow);
+                if (payload) {
+                    const key = `${payload.employeeId}_${payload.siteId}`;
+                    allowanceMap.set(key, payload);
+                }
+            }
+
+            const allowancesToUpsert = Array.from(allowanceMap.values());
+
+            if (allowancesToUpsert.length > 0) {
+                // siteAllowances has a PK (employeeId, siteId).
+                const { error } = await supabase.from('siteAllowances').upsert(allowancesToUpsert);
+                if (error) {
+                    pushIssue(issues, `Failed to sync siteAllowances: ${formatError(error)}`);
+                } else {
+                    stats.allowancesSynced = allowancesToUpsert.length;
+                }
             }
         }
 

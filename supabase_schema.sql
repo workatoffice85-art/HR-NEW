@@ -11,7 +11,8 @@ CREATE TABLE IF NOT EXISTS employees (
     role TEXT NOT NULL DEFAULT 'employee',
     "assignedSites" TEXT,
     "faceDescriptor" TEXT,
-    "transportPrice" NUMERIC DEFAULT 0
+    "transportPrice" NUMERIC DEFAULT 0,
+    salary NUMERIC DEFAULT 0
 );
 
 -- Table: sites
@@ -44,13 +45,13 @@ CREATE TABLE IF NOT EXISTS "siteRequests" (
     "suggestedName" TEXT,
     "mapLink" TEXT,
     status TEXT DEFAULT 'pending',
-    timestamp TEXT, -- Keeping ISO string as text to match old format
+    timestamp TIMESTAMPTZ DEFAULT NOW(),
     "transportPrice" NUMERIC,
     note TEXT,
     "receiptUrl" TEXT,
     "receiptName" TEXT,
     "tempRadius" NUMERIC,
-    "approvedAt" TEXT,
+    "approvedAt" TIMESTAMPTZ,
     "mapLatitude" NUMERIC,
     "mapLongitude" NUMERIC,
     "autoMeta" TEXT
@@ -63,13 +64,25 @@ CREATE TABLE IF NOT EXISTS attendance (
     "employeeName" TEXT,
     "siteId" TEXT,
     "siteName" TEXT,
-    "checkIn" TEXT,
-    "checkOut" TEXT,
+    "checkIn" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    "checkOut" TIMESTAMPTZ,
     latitude NUMERIC,
     longitude NUMERIC,
     status TEXT,
     "totalHours" NUMERIC,
-    "transportPrice" NUMERIC
+    "transportPrice" NUMERIC,
+    note TEXT,
+    "overtimeAmount" NUMERIC DEFAULT 0,
+    "requestedExtraAmount" NUMERIC DEFAULT 0,
+    "extraAmountReason" TEXT,
+    "extraAmountStatus" TEXT DEFAULT 'none' -- 'none', 'pending', 'approved', 'rejected'
+);
+
+-- Table: holidays
+CREATE TABLE IF NOT EXISTS holidays (
+    id SERIAL PRIMARY KEY,
+    date TEXT UNIQUE NOT NULL, -- Format: YYYY-MM-DD
+    name TEXT
 );
 
 -- Table: settings
@@ -77,3 +90,57 @@ CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT
 );
+
+--- SECURITY: ROW LEVEL SECURITY (RLS) ---
+
+-- Enable RLS on all tables
+ALTER TABLE employees ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sites ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "siteAllowances" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "siteRequests" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE attendance ENABLE ROW LEVEL SECURITY;
+ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
+
+-- 1. Employees Policies
+CREATE POLICY "Employees can view own data" ON employees
+    FOR SELECT USING (auth.uid()::text = id);
+
+CREATE POLICY "HR can view all employees" ON employees
+    FOR ALL USING (auth.jwt() ->> 'role' = 'hr');
+
+-- 2. Sites Policies
+CREATE POLICY "Everyone can view sites" ON sites
+    FOR SELECT USING (true);
+
+CREATE POLICY "Only HR can manage sites" ON sites
+    FOR ALL USING (auth.jwt() ->> 'role' = 'hr');
+
+-- 3. Attendance Policies
+CREATE POLICY "Employees can view own attendance" ON attendance
+    FOR SELECT USING (auth.uid()::text = "employeeId");
+
+CREATE POLICY "Employees can insert attendance" ON attendance
+    FOR INSERT WITH CHECK (auth.uid()::text = "employeeId");
+
+CREATE POLICY "Employees can update own non-finalized attendance" ON attendance
+    FOR UPDATE USING (auth.uid()::text = "employeeId" AND "checkOut" IS NULL);
+
+CREATE POLICY "HR can manage all attendance" ON attendance
+    FOR ALL USING (auth.jwt() ->> 'role' = 'hr');
+
+-- 4. Site Requests Policies
+CREATE POLICY "Employees can view own requests" ON "siteRequests"
+    FOR SELECT USING (auth.uid()::text = "employeeId");
+
+CREATE POLICY "Employees can submit requests" ON "siteRequests"
+    FOR INSERT WITH CHECK (auth.uid()::text = "employeeId");
+
+CREATE POLICY "HR can manage all site requests" ON "siteRequests"
+    FOR ALL USING (auth.jwt() ->> 'role' = 'hr');
+
+-- 5. Settings Policies
+CREATE POLICY "Everyone can view settings" ON settings
+    FOR SELECT USING (true);
+
+CREATE POLICY "Only HR can modify settings" ON settings
+    FOR ALL USING (auth.jwt() ->> 'role' = 'hr');
