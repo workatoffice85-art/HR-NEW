@@ -791,7 +791,7 @@ function doGet(e) {
         success: true,
         employees: _getEmployeesData(ss),
         sites: _getSitesData(ss),
-        attendance: _getAttendanceData(ss),
+        attendance: _getAttendanceData(ss, null, e.parameter.since),
         settings: _getSettingsData(ss),
         siteRequests: _getSiteRequestsData(ss),
         siteAllowances: _getSiteAllowancesData(ss),
@@ -1090,8 +1090,8 @@ function doPost(e) {
     }
 
     // SEND OTP
-    if (action === "sendOTP") {
-       var sheet = getOrCreateSheet("employees", ["id","name","email","password","phone","role","assignedSites","faceDescriptor","transportPrice"]);
+    if (data.action === "sendOTP") {
+       var sheet = getOrCreateSheet("employees", ["id","name","email","password","phone","role","assignedSites","faceDescriptor","transportPrice","salary"]);
        var rows = sheet.getDataRange().getValues();
        rows.shift();
        var normalizedEmail = normalizeEmailValue(data.email);
@@ -1143,14 +1143,23 @@ function doPost(e) {
     // ADD EMPLOYEE
     if (data.action === "saveEmployee") {
       var s = getOrCreateSheet("employees",
-        ["id","name","email","password","phone","role","assignedSites","faceDescriptor","transportPrice"]
+        ["id","name","email","password","phone","role","assignedSites","faceDescriptor","transportPrice","salary"]
       );
       var existingRows = s.getDataRange().getValues();
       existingRows.shift();
       var normalizedContacts = ensureEmployeeContactsUnique(existingRows, data.email, data.phone);
 
       s.appendRow([
-        normalizedContacts.phone,data.role,data.assignedSites,data.faceDescriptor,toNumberSafe(data.transportPrice, 0),toNumberSafe(data.salary, 0)
+        data.id, 
+        data.name, 
+        normalizedContacts.email, 
+        data.password, 
+        normalizedContacts.phone, 
+        data.role || "employee", 
+        data.assignedSites || "", 
+        data.faceDescriptor || "", 
+        toNumberSafe(data.transportPrice, 0),
+        toNumberSafe(data.salary, 0)
       ]);
 
       if (data.siteAllowances) {
@@ -1422,7 +1431,8 @@ function doPost(e) {
     if (data.action === "checkoutAttendance") {
       var sheet = getOrCreateSheet("attendance",
         ["employeeId","employeeName","siteId","siteName",
-         "checkIn","checkOut","latitude","longitude","status","totalHours","transportPrice","note","overtimeAmount"]
+         "checkIn","checkOut","latitude","longitude","status","totalHours","transportPrice","note","overtimeAmount",
+         "requestedExtraAmount","extraAmountReason","extraAmountStatus"]
       );
       var rows = sheet.getDataRange().getValues();
       for (var i = rows.length - 1; i >= 1; i--) {
@@ -2009,7 +2019,7 @@ function json(obj){
 // 🔥 DATA HELPERS (Optimized for reuse)
 
 function _getEmployeesData(ss) {
-  var s = getOrCreateSheet("employees", ["id","name","email","password","phone","role","assignedSites","faceDescriptor","transportPrice"]);
+  var s = getOrCreateSheet("employees", ["id","name","email","password","phone","role","assignedSites","faceDescriptor","transportPrice","salary"]);
   var d = s.getDataRange().getValues();
   d.shift();
   return d.map(function(r) { 
@@ -2023,6 +2033,7 @@ function _getEmployeesData(ss) {
       assignedSites: r[6] ? r[6].toString().split(',') : [], 
       faceDescriptor: r[7], 
       transportPrice: toNumberSafe(r[8], 0),
+      salary: toNumberSafe(r[9], 0),
       siteAllowances: getSiteAllowancesForEmployee(empId)
     };
   });
@@ -2090,11 +2101,13 @@ function _getSitesData(ss, employeeId) {
   return siteData;
 }
 
-function _getAttendanceData(ss, employeeId) {
+function _getAttendanceData(ss, employeeId, since) {
   var s = getOrCreateSheet("attendance", ["employeeId","employeeName","siteId","siteName","checkIn","checkOut","latitude","longitude","status","transportPrice"]);
   var d = s.getDataRange().getValues();
   d.shift();
   var transportContext = buildTransportContext();
+  var sinceMs = (since && !isNaN(since)) ? parseInt(since) : 0;
+  
   var records = d.map(function(r) {
     var hoursNum = toNumberSafe(r[9], null);
     if ((hoursNum === null || hoursNum === 0) && r[4] && r[5]) {
@@ -2109,8 +2122,15 @@ function _getAttendanceData(ss, employeeId) {
       checkIn:r[4], checkOut:r[5], latitude:r[6], longitude:r[7], status:r[8], 
       transportPrice: resolveTransportPrice(r[9], r[0], r[2], transportContext)
     };
+  }).filter(function(r) {
+    if (employeeId && String(r.employeeId) !== String(employeeId)) return false;
+    if (sinceMs > 0) {
+      var cInMs = r.checkIn ? new Date(r.checkIn).getTime() : 0;
+      var cOutMs = r.checkOut ? new Date(r.checkOut).getTime() : 0;
+      return cInMs >= sinceMs || cOutMs >= sinceMs;
+    }
+    return true;
   });
-  if (employeeId) records = records.filter(function(r) { return String(r.employeeId) === String(employeeId); });
   return records;
 }
 

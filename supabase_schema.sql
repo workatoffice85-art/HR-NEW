@@ -11,7 +11,6 @@ CREATE TABLE IF NOT EXISTS employees (
     role TEXT NOT NULL DEFAULT 'employee',
     "assignedSites" TEXT,
     "faceDescriptor" TEXT,
-    "faceDescriptor" TEXT,
     "transportPrice" NUMERIC DEFAULT 0,
     salary NUMERIC DEFAULT 0
 );

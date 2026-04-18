@@ -1,8 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
+import jwt from 'jsonwebtoken';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwNhaRKDP-7M4dXSQend8RbYPkXRgs5nzN0-BmNzxEO8IkBN9lt6KDtJCdOqpovhJEY1Q/exec';
+const JWT_SECRET = process.env.JWT_SECRET || 'hr-system-secret-2026';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -17,9 +19,36 @@ function getDistance(lat1, lon1, lat2, lon2) {
   return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
+function euclideanDistance(desc1, desc2) {
+    if (!desc1 || !desc2 || desc1.length !== desc2.length) return Infinity;
+    let sum = 0;
+    for (let i = 0; i < desc1.length; i++) {
+        sum += Math.pow(desc1[i] - desc2[i], 2);
+    }
+    return Math.sqrt(sum);
+}
+
+function verifyToken(token) {
+    try {
+        return jwt.verify(token, JWT_SECRET);
+    } catch (e) {
+        return null;
+    }
+}
+
 function normalizeString(value) {
     if (value === null || value === undefined) return '';
     return String(value).trim();
+}
+
+function normalizeName(name) {
+    if (!name) return "";
+    return name.toLowerCase()
+        .trim()
+        .replace(/[\s\-_]+/g, ' ') // normalize whitespace/separators
+        .replace(/[أإآ]/g, 'ا')     // normalize Arabic Alif
+        .replace(/ة/g, 'ه')         // normalize Arabic Taa Marbutah
+        .replace(/ى/g, 'ي');        // normalize Arabic Yaa
 }
 
 function normalizeDigits(value) {
@@ -101,7 +130,7 @@ export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Credentials', true);
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-    res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
+    res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization');
 
     if (req.method === 'OPTIONS') {
         res.status(200).end();
@@ -118,6 +147,22 @@ export default async function handler(req, res) {
         }
 
         const action = data.action;
+
+        // --- AUTHENTICATION ENFORCEMENT ---
+        const protectedActions = [
+            "getDashboardData", "getEmployees", "getSites", "getSiteRequests", 
+            "addAttendance", "checkoutAttendance", "updateEmployee", "deleteEmployee", 
+            "saveSite", "updateSite", "deleteSite", "updateSettings", 
+            "addHoliday", "deleteHoliday", "getHolidays", "getSettings", "getAttendance"
+        ];
+        
+        if (protectedActions.includes(action)) {
+            const authHeader = req.headers.authorization;
+            const token = authHeader && authHeader.split(' ')[1];
+            if (!token || !verifyToken(token)) {
+                return res.status(401).json({ success: false, message: "غير مصرح لك بالوصول (يجب تسجيل الدخول)" });
+            }
+        }
 
         // DUAL WRITING / BACKUP SYNC:
         // For writing actions, we asynchronously broadcast the exact request to your existing Google Apps Script
@@ -184,9 +229,13 @@ export default async function handler(req, res) {
             if (role && normalizeString(user.role).toLowerCase() !== role) {
                 throw new Error("لا تملك صلاحية الدخول");
             }
+            
+            const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+
             return res.status(200).json({
                 success: true,
                 message: "تم تسجيل الدخول بنجاح",
+                token: token,
                 data: {
                     id: user.id,
                     name: user.name,
@@ -283,6 +332,23 @@ export default async function handler(req, res) {
 
         // --- ADD ATTENDANCE (CHECK-IN) ---
         if (action === "addAttendance") {
+            // Server-side Face Verification
+            const { data: empData } = await supabase.from('employees').select('faceDescriptor').eq('id', String(data.employeeId)).maybeSingle();
+            if (empData && empData.faceDescriptor && data.faceDescriptor) {
+                try {
+                    const registeredDesc = JSON.parse(empData.faceDescriptor);
+                    const currentDesc = typeof data.faceDescriptor === 'string' ? JSON.parse(data.faceDescriptor) : data.faceDescriptor;
+                    const distance = euclideanDistance(registeredDesc, currentDesc);
+                    if (distance > 0.6) {
+                        return res.status(401).json({ success: false, message: 'بصمة الوجه غير متطابقة (فشل التحقق الأمني).' });
+                    }
+                } catch (e) {
+                    console.error("Face distance check failed", e);
+                }
+            } else if (empData && empData.faceDescriptor && !data.faceDescriptor) {
+                throw new Error("مطلوب توثيق بصمة الوجه لإتمام العملية");
+            }
+
             // 0. Double Check-In Prevention
             const { data: openAtt } = await supabase.from('attendance')
                 .select('id')
@@ -418,6 +484,21 @@ export default async function handler(req, res) {
 
         // --- CHECK OUT ---
         if (action === "checkoutAttendance") {
+            // Server-side Face Verification
+            const { data: empData } = await supabase.from('employees').select('faceDescriptor').eq('id', String(data.employeeId)).maybeSingle();
+            if (empData && empData.faceDescriptor && data.faceDescriptor) {
+                try {
+                    const registeredDesc = JSON.parse(empData.faceDescriptor);
+                    const currentDesc = typeof data.faceDescriptor === 'string' ? JSON.parse(data.faceDescriptor) : data.faceDescriptor;
+                    const distance = euclideanDistance(registeredDesc, currentDesc);
+                    if (distance > 0.6) {
+                        return res.status(401).json({ success: false, message: 'بصمة الوجه غير متطابقة (فشل التحقق الأمني في الانصراف).' });
+                    }
+                } catch (e) {
+                    console.error("Face distance check failed", e);
+                }
+            }
+
             const { data: existing, error: errExist } = await supabase.from('attendance')
                 .select('*')
                 .eq('employeeId', data.employeeId)
@@ -495,8 +576,15 @@ export default async function handler(req, res) {
 
         if (action === "saveEmployee") {
             const allowances = data.siteAllowances || [];
+            let empId = data.id;
+            
+            // Server-side ID generation if blank
+            if (!empId) {
+                empId = 'EMP' + Math.floor(1000 + Math.random() * 9000);
+            }
+
             const payload = {
-                id: data.id,
+                id: empId,
                 name: data.name,
                 email: data.email,
                 phone: data.phone,
@@ -624,17 +712,24 @@ export default async function handler(req, res) {
 
             if (mapLink) {
                 try {
-                    // Try to resolve redirected map link and extract lat/lng
-                    const resLink = await fetch(mapLink, { method: 'HEAD', redirect: 'follow' });
-                    const resolvedUrl = resLink.url;
-                    
-                    // Basic extraction attempt from URL
-                    const match = resolvedUrl.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
-                    if (match) {
-                        mapLatitude = parseFloat(match[1]);
-                        mapLongitude = parseFloat(match[2]);
+                    // Security: Restrict map link resolution to trusted domains to prevent SSRF
+                    const allowedDomains = ['google.com', 'goo.gl', 'maps.app.goo.gl'];
+                    const urlObj = new URL(mapLink);
+                    const isGoogleMap = allowedDomains.some(domain => urlObj.hostname.endsWith(domain));
+
+                    if (isGoogleMap) {
+                        // Try to resolve redirected map link and extract lat/lng
+                        const resLink = await fetch(mapLink, { method: 'HEAD', redirect: 'follow' });
+                        const resolvedUrl = resLink.url;
+                        
+                        // Basic extraction attempt from URL
+                        const match = resolvedUrl.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+                        if (match) {
+                            mapLatitude = parseFloat(match[1]);
+                            mapLongitude = parseFloat(match[2]);
+                        }
+                        mapLink = resolvedUrl;
                     }
-                    mapLink = resolvedUrl;
                 } catch (e) {
                     console.error("Map Link Resolution Failed:", e);
                 }
@@ -687,16 +782,25 @@ export default async function handler(req, res) {
             // 2. If permanent, add to sites table (IF NOT DUPLICATE)
             if (mode === 'permanent' || mode === 'always') {
                 const siteName = name || reqData.suggestedName;
-                const { data: allSites } = await supabase.from('sites').select('*');
+                const normalizedNewName = normalizeName(siteName);
                 
+                // Optimized check: Fetch all sites to check normalized names and proximity
+                const { data: allSites } = await supabase.from('sites').select('id, name, latitude, longitude');
                 let isDuplicate = false;
+
                 if (allSites) {
                     for (const s of allSites) {
-                        // Check by Name
-                        if (s.name.trim() === siteName.trim()) { isDuplicate = true; break; }
-                        // Check by Proximity (20 meters)
+                        // 1. Check normalized name
+                        if (normalizeName(s.name) === normalizedNewName) {
+                            isDuplicate = true;
+                            break;
+                        }
+                        // 2. Check proximity (15 meters threshold)
                         const dist = getDistance(reqData.latitude, reqData.longitude, s.latitude, s.longitude);
-                        if (dist <= 20) { isDuplicate = true; break; }
+                        if (dist <= 15) { 
+                            isDuplicate = true; 
+                            break; 
+                        }
                     }
                 }
 
