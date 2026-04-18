@@ -457,8 +457,7 @@ async function handleCheckIn() {
     const payload = {
         action: 'addAttendance', employeeId: currentUser.id, employeeName: currentUser.name,
         checkIn: new Date().toISOString(), latitude: lastLocation.lat, longitude: lastLocation.lng,
-        faceDescriptor: JSON.stringify(currentFaceDescriptor),
-        note: document.getElementById('attendanceNote').value.trim()
+        faceDescriptor: JSON.stringify(currentFaceDescriptor)
     };
 
     try {
@@ -480,10 +479,7 @@ async function handleCheckOut() {
     const payload = { 
         action: 'checkoutAttendance', employeeId: currentUser.id, 
         checkOut: new Date().toISOString(), latitude: lastLocation.lat, longitude: lastLocation.lng,
-        faceDescriptor: JSON.stringify(currentFaceDescriptor),
-        note: document.getElementById('attendanceNote').value.trim(),
-        requestedExtraAmount: document.getElementById('extraAllowanceAmount').value,
-        extraAmountReason: document.getElementById('extraAllowanceReason').value.trim()
+        faceDescriptor: JSON.stringify(currentFaceDescriptor)
     };
     try {
         const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'text/plain' } });
@@ -491,9 +487,6 @@ async function handleCheckOut() {
         if(result.success) {
             alert(result.message);
             setAppState('out');
-            document.getElementById('attendanceNote').value = ''; 
-            document.getElementById('extraAllowanceAmount').value = ''; 
-            document.getElementById('extraAllowanceReason').value = ''; 
         }
         else alert('خطأ: ' + result.message);
     } catch(e) { console.error(e); alert('حدث خطأ في الشبكة: ' + e.message); }
@@ -668,19 +661,13 @@ function renderMyReports(data, monthStr) {
             date: new Date(record.checkIn),
             checkIn: record.checkIn,
             checkOut: record.checkOut,
-            status: record.status,
+            status: record.status, // 'present' or 'late'
             transport: record.transportPrice || 0,
-            overtimeAmount: record.overtimeAmount || 0,
-            extraAmount: (record.extraAmountStatus === 'approved') ? (record.requestedExtraAmount || 0) : 0,
-            note: record.note || '',
             type: 'entry'
         });
     });
 
-    const totalTransportVal = Object.values(dailyTransport).reduce((sum, value) => sum + value, 0);
-    const totalOvertimeVal = presentRecords.reduce((sum, r) => sum + parseFloat(r.overtimeAmount || 0), 0);
-    const totalExtraVal = presentRecords.reduce((sum, r) => sum + (r.extraAmountStatus === 'approved' ? parseFloat(r.requestedExtraAmount || 0) : 0), 0);
-    totalTransport = totalTransportVal + totalOvertimeVal + totalExtraVal;
+    totalTransport = Object.values(dailyTransport).reduce((sum, value) => sum + value, 0);
 
     // Add Absent Days (Only for working days that have no record)
     workingDaysPassed.forEach(dateStr => {
@@ -709,14 +696,12 @@ function renderMyReports(data, monthStr) {
                 statusColor = '#3b82f6'; // Bright Blue
             }
 
-            const totalPayable = (parseFloat(item.transport) + parseFloat(item.overtimeAmount) + parseFloat(item.extraAmount || 0)).toFixed(2);
             tbody.innerHTML += `
                 <tr>
                     <td data-label="التاريخ">${item.date.toLocaleDateString('ar-EG')}</td>
                     <td data-label="الحضور" dir="ltr">${new Date(item.checkIn).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'})}</td>
                     <td data-label="الانصراف" dir="ltr">${item.checkOut ? new Date(item.checkOut).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'}) : '-'}</td>
-                    <td data-label="إجمالي المستحق">${totalPayable} ج.م</td>
-                    <td data-label="الملاحظات">${item.note || '-'}</td>
+                    <td data-label="البدل">${item.transport} ج.م</td>
                     <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
                 </tr>
             `;
@@ -725,7 +710,7 @@ function renderMyReports(data, monthStr) {
             tbody.innerHTML += `
                 <tr style="background: rgba(239, 68, 68, 0.05);">
                     <td data-label="التاريخ">${item.date.toLocaleDateString('ar-EG')}</td>
-                    <td data-label="التفاصيل" colspan="4" style="text-align:center !important; color:var(--danger); font-size:0.8rem;">غائب (لم يتم تسجيل حضور)</td>
+                    <td data-label="التفاصيل" colspan="3" style="text-align:center !important; color:var(--danger); font-size:0.8rem;">غائب (لم يتم تسجيل حضور)</td>
                     <td data-label="الحالة"><span style="color:var(--danger)">غائب</span></td>
                 </tr>
             `;

@@ -5,7 +5,6 @@ let allAttendanceData = [];
 let allEmployees = [];
 let allSites = [];
 let allSiteRequests = [];
-let allHolidays = [];
 let appSettings = {};
 let latesChartInstance = null;
 let parseMapLinkTimer = null;
@@ -100,7 +99,6 @@ function showTab(tabName) {
     if (tabName === 'employees') fetchEmployees();
     if (tabName === 'sites') fetchSites();
     if (tabName === 'siteRequests') fetchSiteRequests();
-    if (tabName === 'holidays') fetchHolidays();
     if (tabName === 'reports') generateReport();
     if (tabName === 'employeeDetails') initEmployeeDetailedTab();
     if (tabName === 'settings') fetchSettings();
@@ -125,7 +123,6 @@ async function initDashboard(forceRefresh = false) {
             allEmployees = result.employees || [];
             allSites = result.sites || [];
             allSiteRequests = result.siteRequests || [];
-            allHolidays = result.holidays || [];
             appSettings = result.settings || {};
             
             isInitialDataLoaded = true;
@@ -145,8 +142,6 @@ function renderActiveTab(tabName) {
     if (tabName === 'employees') renderEmployeesTable(allEmployees);
     if (tabName === 'sites') renderSitesTable(allSites);
     if (tabName === 'siteRequests') renderRequestsTable(allSiteRequests);
-    if (tabName === 'allowanceRequests') renderAllowanceRequestsTable(allAttendanceData);
-    if (tabName === 'holidays') renderHolidaysTable(allHolidays);
     if (tabName === 'settings') renderSettings(appSettings);
 }
 
@@ -176,6 +171,7 @@ function renderAttendanceTable(data) {
     const tbody = document.getElementById('attendanceTableBody');
     tbody.innerHTML = '';
     
+    // Filter by date if selected
     let filtered = data;
     if (filterDate) {
         filtered = data.filter(record => {
@@ -184,6 +180,7 @@ function renderAttendanceTable(data) {
         });
     }
 
+    // Reverse to show newest first
     [...filtered].reverse().forEach(record => {
         const cInObj = new Date(record.checkIn);
         const checkInTime = !isNaN(cInObj) ? cInObj.toLocaleString('ar-EG') : (record.checkIn || '-');
@@ -194,9 +191,16 @@ function renderAttendanceTable(data) {
             checkOutTime = !isNaN(cOutObj) ? cOutObj.toLocaleString('ar-EG') : (record.checkOut || '-');
         }
         
-        const statusMeta = getStatusMeta(record.status);
-        const extra = (record.extraAmountStatus === 'approved') ? parseFloat(record.requestedExtraAmount || 0) : 0;
-        const totalPayable = (parseFloat(record.transportPrice || 0) + parseFloat(record.overtimeAmount || 0) + extra).toFixed(2);
+        let statusText = 'حاضر';
+        let statusColor = 'var(--secondary)';
+        
+        if (record.status === 'late') {
+            statusText = 'متأخر';
+            statusColor = 'var(--danger)';
+        } else if (record.status === 'overtime') {
+            statusText = 'عمل إضافي';
+            statusColor = '#3b82f6';
+        }
 
         tbody.innerHTML += `
             <tr>
@@ -204,9 +208,8 @@ function renderAttendanceTable(data) {
                 <td data-label="الموقع">${record.siteName}</td>
                 <td data-label="وقت الحضور" dir="ltr">${checkInTime}</td>
                 <td data-label="وقت الانصراف" dir="ltr">${checkOutTime}</td>
-                <td data-label="إجمالي المستحق">${totalPayable} ج.م</td>
-                <td data-label="الملاحظات">${record.note || '-'}</td>
-                <td data-label="الحالة"><span style="color:${statusMeta.color}">${statusMeta.text}</span></td>
+                <td data-label="بدل الانتقال">${record.transportPrice || 0} ج.م</td>
+                <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
             </tr>
         `;
     });
@@ -395,8 +398,10 @@ async function generateEmployeeDetailedReport() {
                 : (record.checkOut || '-');
         }
 
-        const otAmount = parseFloat(record.overtimeAmount || 0);
-        
+        const statusMeta = getStatusMeta(record.status);
+        const parsedTransport = parseFloat(record.transportPrice || 0);
+        const transportText = `${isNaN(parsedTransport) ? 0 : parsedTransport.toFixed(2)} ج.م`;
+
         tbody.innerHTML += `
             <tr>
                 <td data-label="التاريخ">${dateText}</td>
@@ -405,8 +410,6 @@ async function generateEmployeeDetailedReport() {
                 <td data-label="وقت الانصراف" dir="ltr">${checkOutText}</td>
                 <td data-label="الحالة"><span style="color:${statusMeta.color}">${statusMeta.text}</span></td>
                 <td data-label="البدل">${transportText}</td>
-                <td data-label="الإضافي">${otAmount > 0 ? otAmount.toFixed(2) + ' ج.م' : '-'}</td>
-                <td data-label="الملاحظات">${record.note || '-'}</td>
             </tr>
         `;
     });
@@ -490,9 +493,7 @@ function generateReport() {
                  daysPresent: 0,
                  lates: 0,
                  overtime: 0,
-                 totalTransport: 0,
-                 totalOvertimeAmount: 0,
-                 totalExtraAllowanceAmount: 0
+                 totalTransport: 0
              };
         }
         
@@ -510,10 +511,6 @@ function generateReport() {
             }
         }
         if(record.status === 'overtime') empStats.overtime += 1;
-        if(record.overtimeAmount) empStats.totalOvertimeAmount += parseFloat(record.overtimeAmount);
-        if(record.extraAmountStatus === 'approved' && record.requestedExtraAmount) {
-            empStats.totalExtraAllowanceAmount += parseFloat(record.requestedExtraAmount);
-        }
         const transportValue = toTransportNumber(record.transportPrice);
         if (!(recordDate in empStats.transportByDate)) {
             empStats.transportByDate[recordDate] = transportValue;
@@ -556,7 +553,7 @@ function generateReport() {
                 <td data-label="أيام الغياب"><span style="color:${absentDays > 0 ? 'var(--danger)' : 'inherit'}">${absentDays > 0 ? absentDays : 0} أيام</span></td>
                 <td data-label="التأخير"><span style="color:${data.lates > 0 ? 'var(--danger)' : 'inherit'}">${data.lates} مرات</span></td>
                 <td data-label="العمل الإضافي"><span style="color:#3b82f6">${data.overtime || 0} أيام</span></td>
-                <td data-label="إجمالي المستحق">${(data.totalTransport + (data.totalOvertimeAmount || 0) + (data.totalExtraAllowanceAmount || 0)).toFixed(2)} ج.م</td>
+                <td data-label="بدل الانتقال">${data.totalTransport.toFixed(2)} ج.م</td>
             </tr>
         `;
     }
@@ -714,7 +711,6 @@ async function editEmployee(id) {
     document.getElementById('empRole').value = emp.role;
     document.getElementById('empRole').value = emp.role;
     document.getElementById('empTransportPrice').value = emp.transportPrice || 0;
-    document.getElementById('empSalary').value = emp.salary || 0;
     
     // Assigned sites (can keep for compatibility or just use for initialization)
     const assigned = Array.isArray(emp.assignedSites) ? emp.assignedSites : (emp.assignedSites ? String(emp.assignedSites).split(',') : []);
@@ -771,7 +767,6 @@ async function openEmployeeModal(mode = 'add', emp = null) {
         document.getElementById('empPass').placeholder = 'اختياري: سيتم توليد كلمة مرور مؤقتة تلقائيًا';
         document.getElementById('empRole').value = 'employee';
         document.getElementById('empTransportPrice').value = 0;
-        document.getElementById('empSalary').value = 0;
         document.getElementById('empSites').value = '';
         document.getElementById('advancedEmpOptions').classList.add('hidden');
     }
@@ -834,8 +829,6 @@ async function saveEmployee() {
     const phone = document.getElementById('empPhone').value.trim();
     const pass = document.getElementById('empPass').value.trim();
     const role = document.getElementById('empRole').value;
-    const transportPrice = parseFloat(document.getElementById('empTransportPrice').value) || 0;
-    const salary = parseFloat(document.getElementById('empSalary').value) || 0;
     
     // Collect sites and allowances
     const selectedSites = [];
@@ -869,8 +862,7 @@ async function saveEmployee() {
         role: role, 
         assignedSites: selectedSites.join(','),
         siteAllowances: siteAllowances,
-        transportPrice: transportPrice,
-        salary: salary
+        transportPrice: document.getElementById('empTransportPrice').value || 0
     };
     
     document.getElementById('loader').classList.remove('hidden');
@@ -1328,155 +1320,6 @@ async function clearProcessedRequests() {
         if(result.success) {
             alert(result.message);
             await initDashboard(true); // Refresh all data to sync
-        } else alert("خطأ: " + result.message);
-    } catch(e) { console.error(e); alert("خطأ في الاتصال"); }
-    document.getElementById('loader').classList.add('hidden');
-}
-async function fetchHolidays() {
-    document.getElementById('loader').classList.remove('hidden');
-    try {
-        const res = await fetch(`${API_URL}?action=getHolidays`);
-        const result = await res.json();
-        if(result.success) {
-            allHolidays = result.data || [];
-            renderHolidaysTable(allHolidays);
-        }
-    } catch(e) { console.error(e); }
-    document.getElementById('loader').classList.add('hidden');
-}
-
-function renderHolidaysTable(data) {
-    const tbody = document.getElementById('holidaysTableBody');
-    if (!tbody) return;
-    tbody.innerHTML = '';
-    [...data].forEach(h => {
-        tbody.innerHTML += `
-            <tr>
-                <td>${h.date}</td>
-                <td>${h.name}</td>
-                <td>
-                    <button class="btn-danger" style="padding:5px 10px; width:auto;" onclick="deleteHoliday('${h.id}', '${h.date}')">حذف 🗑️</button>
-                </td>
-            </tr>
-        `;
-    });
-}
-
-function openHolidayModal() {
-    document.getElementById('holidayDate').value = '';
-    document.getElementById('holidayName').value = '';
-    document.getElementById('holidayModal').classList.remove('hidden');
-}
-
-function closeHolidayModal() {
-    document.getElementById('holidayModal').classList.add('hidden');
-}
-
-async function saveHoliday() {
-    const date = document.getElementById('holidayDate').value;
-    const name = document.getElementById('holidayName').value.trim();
-    if (!date || !name) return alert("يرجى اختيار التاريخ والاسم");
-
-    document.getElementById('loader').classList.remove('hidden');
-    try {
-        const res = await fetch(API_URL, {
-            method: 'POST',
-            body: JSON.stringify({ action: 'addHoliday', date, name }),
-            headers: { 'Content-Type': 'text/plain' }
-        });
-        const result = await res.json();
-        if(result.success) {
-            closeHolidayModal();
-            fetchHolidays();
-        } else alert("خطأ: " + result.message);
-    } catch(e) { alert("خطأ في الاتصال"); }
-    document.getElementById('loader').classList.add('hidden');
-}
-
-async function deleteHoliday(id, date) {
-    if(!confirm(`هل أنت متأكد من حذف العطلة الخاصة بيوم ${date}؟`)) return;
-    document.getElementById('loader').classList.remove('hidden');
-    try {
-        const res = await fetch(API_URL, {
-            method: 'POST',
-            body: JSON.stringify({ action: 'deleteHoliday', id, date }),
-            headers: { 'Content-Type': 'text/plain' }
-        });
-        const result = await res.json();
-        if(result.success) fetchHolidays();
-        else alert("خطأ: " + result.message);
-    } catch(e) { alert("خطأ في الاتصال"); }
-    document.getElementById('loader').classList.add('hidden');
-}
-
-// ------ EXTRA ALLOWANCE MGMT ------
-function renderAllowanceRequestsTable(data) {
-    const tbody = document.getElementById('allowanceRequestsTableBody');
-    if (!tbody) return;
-    tbody.innerHTML = '';
-    
-    // Sort by checking so newest are first
-    const pending = data.filter(a => a.extraAmountStatus === 'pending');
-    
-    if (pending.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px; color:var(--text-muted);">لا توجد طلبات معلقة حالياً</td></tr>';
-        return;
-    }
-
-    [...pending].reverse().forEach(req => {
-        const dateObj = new Date(req.checkIn);
-        const dateStr = dateObj.toLocaleString('ar-EG');
-        
-        tbody.innerHTML += `
-            <tr>
-                <td data-label="الموظف">${req.employeeName}</td>
-                <td data-label="الموقع المتواجد به">${req.siteName}</td>
-                <td data-label="المبلغ المطلوب" style="font-weight:bold; color:var(--secondary);">${req.requestedExtraAmount} ج.م</td>
-                <td data-label="السبب / الملاحظة">${req.extraAmountReason || '-'}</td>
-                <td data-label="تاريخ الطلب">${dateStr}</td>
-                <td data-label="الحالة"><span style="color:var(--warning)">قيد الانتظار</span></td>
-                <td data-label="الإجراءات">
-                    <div style="display:flex; gap:8px;">
-                        <button class="btn-primary" style="padding:5px 12px; font-size:0.85rem; width:auto; background:var(--secondary);" onclick="approveExtraAllowance('${req.id}')">موافقة ✓</button>
-                        <button class="btn-danger" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="rejectExtraAllowance('${req.id}')">رفض ✕</button>
-                    </div>
-                </td>
-            </tr>
-        `;
-    });
-}
-
-async function approveExtraAllowance(id) {
-    if(!confirm("هل أنت متأكد من الموافقة على هذا المبلغ الإضافي؟")) return;
-    document.getElementById('loader').classList.remove('hidden');
-    try {
-        const res = await fetch(API_URL, {
-            method: 'POST',
-            body: JSON.stringify({ action: 'approveExtraAllowance', id: id }),
-            headers: { 'Content-Type': 'text/plain' }
-        });
-        const result = await res.json();
-        if(result.success) {
-            alert(result.message);
-            await initDashboard(true); // Refresh data
-        } else alert("خطأ: " + result.message);
-    } catch(e) { console.error(e); alert("خطأ في الاتصال"); }
-    document.getElementById('loader').classList.add('hidden');
-}
-
-async function rejectExtraAllowance(id) {
-    if(!confirm("هل أنت متأكد من رفض هذا الطلب؟")) return;
-    document.getElementById('loader').classList.remove('hidden');
-    try {
-        const res = await fetch(API_URL, {
-            method: 'POST',
-            body: JSON.stringify({ action: 'rejectExtraAllowance', id: id }),
-            headers: { 'Content-Type': 'text/plain' }
-        });
-        const result = await res.json();
-        if(result.success) {
-            alert(result.message);
-            await initDashboard(true); // Refresh data
         } else alert("خطأ: " + result.message);
     } catch(e) { console.error(e); alert("خطأ في الاتصال"); }
     document.getElementById('loader').classList.add('hidden');

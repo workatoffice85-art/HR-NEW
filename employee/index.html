@@ -225,25 +225,6 @@
                 </div>
             </div>
 
-            <div id="noteContainer" style="margin-bottom: 20px;">
-                <label style="display:block; margin-bottom:8px; font-size:0.9rem; color:var(--text-muted);">إضافة ملاحظة (اختياري)</label>
-                <textarea id="attendanceNote" placeholder="اكتب ملاحظاتك هنا (مثال: تأخير بسبب الزحام، زيارة عميل...)" rows="2" 
-                    style="width: 100%; padding: 12px; border-radius: 12px; background: rgba(0,0,0,0.2); color: #fff; border: 1px solid var(--card-border); font-family: inherit; resize: none;"></textarea>
-            </div>
-
-            <div id="extraExpenseContainer" style="margin-bottom: 20px; padding: 15px; background: rgba(16, 185, 129, 0.05); border-radius: 12px; border: 1px dashed var(--secondary);">
-                <label style="display:block; margin-bottom:10px; font-size:0.95rem; color:var(--secondary); font-weight:bold;">💰 طلب بدل إضافي لهذا اليوم (اختياري)</label>
-                <div style="display:flex; gap:10px; margin-bottom:10px;">
-                    <div style="flex:1;">
-                        <label style="display:block; font-size:0.8rem; color:var(--text-muted); margin-bottom:4px;">المبلغ (ج.م)</label>
-                        <input type="number" id="extraAllowanceAmount" placeholder="مثال: 50" style="width:100%; padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); color:#fff; border:1px solid var(--card-border);">
-                    </div>
-                </div>
-                <label style="display:block; font-size:0.8rem; color:var(--text-muted); margin-bottom:4px;">سبب طلب المبلغ الإضافي</label>
-                <input type="text" id="extraAllowanceReason" placeholder="مثال: مواصلات إضافية بسبب عطل..." style="width:100%; padding:10px; border-radius:8px; background:rgba(0,0,0,0.2); color:#fff; border:1px solid var(--card-border);">
-                <p style="font-size:0.75rem; color:var(--text-muted); margin-top:8px;">* سيتم ربط هذا الطلب تلقائياً بالموقع الحالي (${siteText.id || 'جاري التحديد'})</p>
-            </div>
-
             <div class="action-buttons">
                 <button id="btnCheckIn" class="action-btn check-in-btn hidden" disabled onclick="handleCheckIn()">
                     تسجيل حضور
@@ -331,8 +312,7 @@
                             <th style="padding: 10px;">التاريخ</th>
                             <th style="padding: 10px;">حضور</th>
                             <th style="padding: 10px;">انصراف</th>
-                            <th style="padding: 10px;">إجمالي المستحق</th>
-                            <th style="padding: 10px;">الملاحظات</th>
+                            <th style="padding: 10px;">البدل</th>
                             <th style="padding: 10px;">الحالة</th>
                         </tr>
                     </thead>

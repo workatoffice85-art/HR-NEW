@@ -11,9 +11,7 @@ CREATE TABLE IF NOT EXISTS employees (
     role TEXT NOT NULL DEFAULT 'employee',
     "assignedSites" TEXT,
     "faceDescriptor" TEXT,
-    "faceDescriptor" TEXT,
-    "transportPrice" NUMERIC DEFAULT 0,
-    salary NUMERIC DEFAULT 0
+    "transportPrice" NUMERIC DEFAULT 0
 );
 
 -- Table: sites
@@ -71,19 +69,7 @@ CREATE TABLE IF NOT EXISTS attendance (
     longitude NUMERIC,
     status TEXT,
     "totalHours" NUMERIC,
-    "transportPrice" NUMERIC,
-    note TEXT,
-    "overtimeAmount" NUMERIC DEFAULT 0,
-    "requestedExtraAmount" NUMERIC DEFAULT 0,
-    "extraAmountReason" TEXT,
-    "extraAmountStatus" TEXT DEFAULT 'none' -- 'none', 'pending', 'approved', 'rejected'
-);
-
--- Table: holidays
-CREATE TABLE IF NOT EXISTS holidays (
-    id SERIAL PRIMARY KEY,
-    date TEXT UNIQUE NOT NULL, -- Format: YYYY-MM-DD
-    name TEXT
+    "transportPrice" NUMERIC
 );
 
 -- Table: settings

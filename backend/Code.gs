@@ -278,7 +278,7 @@ function deleteAttendanceForTemporaryRequestDay(requestRow) {
   if (!requestId || !employeeId || !targetDateKey) return 0;
 
   var attendanceSheet = getOrCreateSheet("attendance",
-    ["employeeId","employeeName","siteId","siteName","checkIn","checkOut","latitude","longitude","status","transportPrice","note","overtimeAmount"]
+    ["employeeId","employeeName","siteId","siteName","checkIn","checkOut","latitude","longitude","status","totalHours","transportPrice"]
   );
   var rows = attendanceSheet.getDataRange().getValues();
   if (rows.length <= 1) return 0;
@@ -521,7 +521,7 @@ function saveSiteAllowances(employeeId, allowances) {
 
 function getEmployeeTransportMap() {
   var sheet = getOrCreateSheet("employees",
-    ["id","name","email","password","phone","role","assignedSites","faceDescriptor","transportPrice","salary"]
+    ["id","name","email","password","phone","role","assignedSites","faceDescriptor","transportPrice"]
   );
   var rows = sheet.getDataRange().getValues();
   var map = {};
@@ -593,7 +593,7 @@ function resolveTransportPrice(rawTransport, employeeId, siteId, context) {
 
 function syncAttendanceTransportForEmployee(employeeId, employeeTransport) {
   var attendanceSheet = getOrCreateSheet("attendance",
-    ["employeeId","employeeName","siteId","siteName","checkIn","checkOut","latitude","longitude","status","transportPrice","note","overtimeAmount"]
+    ["employeeId","employeeName","siteId","siteName","checkIn","checkOut","latitude","longitude","status","totalHours","transportPrice"]
   );
   var rows = attendanceSheet.getDataRange().getValues();
   if (rows.length <= 1) return;
@@ -618,7 +618,7 @@ function syncAttendanceTransportForEmployee(employeeId, employeeTransport) {
 
 function syncAttendanceTransportForRequest(requestId, requestTransport) {
   var attendanceSheet = getOrCreateSheet("attendance",
-    ["employeeId","employeeName","siteId","siteName","checkIn","checkOut","latitude","longitude","status","transportPrice","note","overtimeAmount"]
+    ["employeeId","employeeName","siteId","siteName","checkIn","checkOut","latitude","longitude","status","totalHours","transportPrice"]
   );
   var rows = attendanceSheet.getDataRange().getValues();
   if (rows.length <= 1) return;
@@ -794,8 +794,7 @@ function doGet(e) {
         attendance: _getAttendanceData(ss),
         settings: _getSettingsData(ss),
         siteRequests: _getSiteRequestsData(ss),
-        siteAllowances: _getSiteAllowancesData(ss),
-        holidays: _getHolidaysData(ss)
+        siteAllowances: _getSiteAllowancesData(ss)
       });
     }
 
@@ -1070,7 +1069,7 @@ function doPost(e) {
     // LOGIN
     if (action === "login") {
       var s = getOrCreateSheet("employees",
-        ["id","name","email","password","phone","role","assignedSites","faceDescriptor","transportPrice","salary"]
+        ["id","name","email","password","phone","role","assignedSites","faceDescriptor","transportPrice"]
       );
 
       var rows = s.getDataRange().getValues();
@@ -1084,7 +1083,7 @@ function doPost(e) {
 
       return json({
         success:true,
-        data:{ id:user[0], name:user[1], email:user[2], phone:user[4], role:user[5], assignedSites:user[6]?user[6].toString().split(','):[], faceDescriptor:user[7]||"", transportPrice:toNumberSafe(user[8], 0), salary:toNumberSafe(user[9], 0) },
+        data:{ id:user[0], name:user[1], email:user[2], phone:user[4], role:user[5], assignedSites:user[6]?user[6].toString().split(','):[], faceDescriptor:user[7]||"", transportPrice:toNumberSafe(user[8], 0) },
         message: "تم تسجيل الدخول بنجاح"
       });
     }
@@ -1150,7 +1149,8 @@ function doPost(e) {
       var normalizedContacts = ensureEmployeeContactsUnique(existingRows, data.email, data.phone);
 
       s.appendRow([
-        normalizedContacts.phone,data.role,data.assignedSites,data.faceDescriptor,toNumberSafe(data.transportPrice, 0),toNumberSafe(data.salary, 0)
+        data.id,data.name,normalizedContacts.email,data.password,
+        normalizedContacts.phone,data.role,data.assignedSites,data.faceDescriptor,toNumberSafe(data.transportPrice, 0)
       ]);
 
       if (data.siteAllowances) {
@@ -1162,7 +1162,7 @@ function doPost(e) {
 
     // UPDATE EMPLOYEE
     if (data.action === "updateEmployee") {
-      var s = getOrCreateSheet("employees", ["id","name","email","password","phone","role","assignedSites","faceDescriptor","transportPrice","salary"]);
+      var s = getOrCreateSheet("employees", ["id","name","email","password","phone","role","assignedSites","faceDescriptor","transportPrice"]);
       var rows = s.getDataRange().getValues();
       var normalizedContacts = ensureEmployeeContactsUnique(rows.slice(1), data.email, data.phone, data.id);
       for (var i = 1; i < rows.length; i++) {
@@ -1172,11 +1172,7 @@ function doPost(e) {
           // Update (name to transportPrice)
           s.getRange(i + 1, 2, 1, 6).setValues([[data.name, normalizedContacts.email, finalPassword, normalizedContacts.phone, data.role, data.assignedSites]]);
           var normalizedEmployeeTransport = toNumberSafe(data.transportPrice, 0);
-          var normalizedSalary = toNumberSafe(data.salary, 0);
           s.getRange(i+1, 9).setValue(normalizedEmployeeTransport);
-          s.getRange(i+1, 10).setValue(normalizedSalary);
-          
-          if (data.faceDescriptor) s.getRange(i+1, 8).setValue(data.faceDescriptor);
           
           if (data.siteAllowances) {
             saveSiteAllowances(data.id, data.siteAllowances);
@@ -1389,8 +1385,7 @@ function doPost(e) {
 
       var sheet = getOrCreateSheet("attendance",
         ["employeeId","employeeName","siteId","siteName",
-         "checkIn","checkOut","latitude","longitude","status","totalHours","transportPrice","note","overtimeAmount",
-         "requestedExtraAmount","extraAmountReason","extraAmountStatus"]
+         "checkIn","checkOut","latitude","longitude","status","totalHours","transportPrice"]
       );
 
       var rows = sheet.getDataRange().getValues();
@@ -1404,51 +1399,72 @@ function doPost(e) {
         }
       }
 
-      sheet.appendRow([
-        data.employeeId, data.employeeName, site.id, site.name,
-        data.checkIn, "", data.latitude, data.longitude, data.status || "present", 
-        0, // totalHours
-        site.transportPrice, 
-        data.note || "", 
-        toNumberSafe(data.overtimeAmount, 0),
-        toNumberSafe(data.requestedExtraAmount, 0),
-        data.extraAmountReason || "",
-        data.extraAmountStatus || "none"
-      ]);
-      return json({ success: true, message: "تم تسجيل الحضور بنجاح" });
-    }
+      var checkInDate = new Date(data.checkIn);
+      var dayOfWeek = checkInDate.getDay();
+      var manualStatus = "present";
 
-    // CHECK-OUT
-    if (data.action === "checkoutAttendance") {
-      var sheet = getOrCreateSheet("attendance",
-        ["employeeId","employeeName","siteId","siteName",
-         "checkIn","checkOut","latitude","longitude","status","totalHours","transportPrice","note","overtimeAmount"]
-      );
-      var rows = sheet.getDataRange().getValues();
-      for (var i = rows.length - 1; i >= 1; i--) {
-        if (rows[i][0] == data.employeeId && !rows[i][5]) {
-           sheet.getRange(i + 1, 6).setValue(data.checkOut);
-           // Calculate hours
-           var checkIn = new Date(rows[i][4]);
-           var checkOut = new Date(data.checkOut);
-           if (!isNaN(checkIn) && !isNaN(checkOut)) {
-             var totalHours = parseFloat(((checkOut - checkIn) / 36e5).toFixed(2));
-             sheet.getRange(i + 1, 10).setValue(totalHours);
-           }
-           
-           if (data.note) {
-             var oldNote = String(rows[i][11] || "");
-             sheet.getRange(i + 1, 12).setValue(oldNote + (oldNote ? " | " : "") + data.note);
-           }
-           if (data.requestedExtraAmount !== undefined) {
-             sheet.getRange(i + 1, 14).setValue(toNumberSafe(data.requestedExtraAmount, 0));
-             sheet.getRange(i + 1, 15).setValue(data.extraAmountReason || "");
-             sheet.getRange(i + 1, 16).setValue(data.extraAmountStatus || "pending");
-           }
-           return json({ success: true, message: "تم تسجيل الانصراف بنجاح" });
+      // GET SETTINGS
+      var settingsSheet = getOrCreateSheet("settings", ["key", "value"]);
+      var sRows = settingsSheet.getDataRange().getValues();
+      var workStart = "09:15"; // Default
+      for(var j=1; j<sRows.length; j++) {
+        if(sRows[j][0] === "workStartTime") {
+          workStart = sRows[j][1];
+          break;
         }
       }
-      throw new Error("لم يتم العثور على سجل حضور مفتوح");
+      workStart = normalizeTimeToHHmm(workStart, "09:15");
+
+      if (dayOfWeek === 5 || dayOfWeek === 6) {
+        manualStatus = "overtime";
+      } else {
+        // 🚀 LATE CALCULATION FIX:
+        // Use string comparison (HH:mm) in the same timezone (Script Timezone) 
+        // to avoid offset issues with Date objects.
+        var checkInTimeStr = Utilities.formatDate(checkInDate, "Africa/Cairo", "HH:mm");
+        manualStatus = (checkInTimeStr > workStart) ? "late" : "present";
+      }
+      var transportContext = buildTransportContext();
+      var attendanceTransport = resolveTransportPrice(site.transportPrice, data.employeeId, site.id, transportContext);
+
+      sheet.appendRow([
+        data.employeeId,data.employeeName,
+        site.id,site.name,
+        data.checkIn,"",
+        data.latitude,data.longitude,
+        manualStatus,"",
+        attendanceTransport
+      ]);
+
+      var siteTransportLabel = attendanceTransport;
+      return json({success:true, message: "تم تسجيل الحضور بنجاح في: " + site.name + (siteTransportLabel ? " (بدل انتقال: " + siteTransportLabel + ")" : "")});
+    }
+
+// CHECK-OUT
+    if (data.action === "checkoutAttendance") {
+      validateAll(ss, data);
+
+      var sheet = getOrCreateSheet("attendance",
+        ["employeeId","employeeName","siteId","siteName",
+         "checkIn","checkOut","latitude","longitude","status","totalHours","transportPrice"]
+      );
+
+      var rows = sheet.getDataRange().getValues();
+
+      for (var i=rows.length-1;i>=1;i--) {
+        if (rows[i][0]==data.employeeId && (rows[i][5] === "" || !rows[i][5])) {
+          var checkOutDate = new Date(data.checkOut);
+          var checkInDate = new Date(rows[i][4]);
+          var hours = ((checkOutDate - checkInDate) / 36e5).toFixed(2);
+
+          sheet.getRange(i+1,6).setValue(data.checkOut);
+          sheet.getRange(i+1,10).setValue(hours);
+
+          return json({success:true, message: "تم تسجيل الانصراف وإجمالي الساعات: " + hours});
+        }
+      }
+
+      throw new Error("لا يوجد عملية حضور مفتوحة لنسجل الانصراف");
     }
 
   } catch(e){
@@ -1787,7 +1803,7 @@ function initializePermissions() {
 }
 
 function getAttendanceInRange(start, end) {
-  var s = getOrCreateSheet("attendance", ["employeeId","employeeName","siteId","siteName","checkIn","checkOut","latitude","longitude","status","transportPrice"]);
+  var s = getOrCreateSheet("attendance", ["employeeId","employeeName","siteId","siteName","checkIn","checkOut","latitude","longitude","status","totalHours","transportPrice"]);
   var data = s.getDataRange().getValues();
   data.shift();
   var transportContext = buildTransportContext();
@@ -2091,7 +2107,7 @@ function _getSitesData(ss, employeeId) {
 }
 
 function _getAttendanceData(ss, employeeId) {
-  var s = getOrCreateSheet("attendance", ["employeeId","employeeName","siteId","siteName","checkIn","checkOut","latitude","longitude","status","transportPrice"]);
+  var s = getOrCreateSheet("attendance", ["employeeId","employeeName","siteId","siteName","checkIn","checkOut","latitude","longitude","status","totalHours","transportPrice"]);
   var d = s.getDataRange().getValues();
   d.shift();
   var transportContext = buildTransportContext();
@@ -2107,7 +2123,7 @@ function _getAttendanceData(ss, employeeId) {
     return {
       employeeId:r[0], employeeName:r[1], siteId:r[2], siteName:r[3],
       checkIn:r[4], checkOut:r[5], latitude:r[6], longitude:r[7], status:r[8], 
-      transportPrice: resolveTransportPrice(r[9], r[0], r[2], transportContext)
+      totalHours: hoursNum || 0, transportPrice: resolveTransportPrice(r[10], r[0], r[2], transportContext)
     };
   });
   if (employeeId) records = records.filter(function(r) { return String(r.employeeId) === String(employeeId); });
@@ -2164,16 +2180,4 @@ function _getSiteAllowancesData(ss) {
       transportPrice: toNumberSafe(r[2], 0)
     };
   });
-}
-function _getHolidaysData(ss) {
-  var s = getOrCreateSheet("holidays", ["date", "name"]);
-  var rows = s.getDataRange().getValues();
-  var data = [];
-  for (var i = 1; i < rows.length; i++) {
-    data.push({
-      date: rows[i][0] instanceof Date ? Utilities.formatDate(rows[i][0], "Africa/Cairo", "yyyy-MM-dd") : rows[i][0],
-      name: rows[i][1]
-    });
-  }
-  return data;
 }

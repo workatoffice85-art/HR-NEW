@@ -121,18 +121,8 @@ export default async function handler(req, res) {
 
         // DUAL WRITING / BACKUP SYNC:
         // For writing actions, we asynchronously broadcast the exact request to your existing Google Apps Script
-        const writeActions = ["saveEmployee", "updateEmployee", "deleteEmployee", "saveSite", "updateSite", "deleteSite", "addSiteRequest", "approveSiteRequest", "rejectSiteRequest", "addAttendance", "checkoutAttendance", "updateSettings", "addHoliday", "deleteHoliday"];
-        
-        async function syncEnrichedToGoogleSheet(action, payload) {
-            try {
-                const body = { action: action, ...payload };
-                await syncToGoogleSheet(body);
-            } catch (e) {
-                console.error("Enriched Sync Failed:", e);
-            }
-        }
-
-        if (writeActions.includes(action) && action !== "addAttendance" && action !== "checkoutAttendance" && action !== "saveEmployee" && action !== "updateEmployee") {
+        const writeActions = ["saveEmployee", "updateEmployee", "deleteEmployee", "saveSite", "updateSite", "deleteSite", "addSiteRequest", "approveSiteRequest", "rejectSiteRequest", "addAttendance", "checkoutAttendance", "updateSettings"];
+        if (writeActions.includes(action)) {
             syncToGoogleSheet(data);
         }
         // --- AUTH ---
@@ -374,24 +364,9 @@ export default async function handler(req, res) {
 
             if (dayOfWeek === 5 || dayOfWeek === 6) status = "overtime";
             else if (checkInTimeStr > workStart) status = "late";
-            
-            // --- HOLIDAY CHECK ---
-            const todayDate = checkInDate.toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' }); // YYYY-MM-DD
-            const { data: holiday } = await supabase.from('holidays').select('*').eq('date', todayDate).maybeSingle();
-            if (holiday) {
-                status = "overtime";
-            }
 
             // Resolve proper transport price
             const finalTransport = await fetchResolvedTransportPrice(data.employeeId, matchedSite.id, matchedSite.transportPrice, isRequest);
-
-            // --- OVERTIME AMOUNT CALCULATION ---
-            let overtimeAmount = 0;
-            if (status === "overtime") {
-                const { data: emp } = await supabase.from('employees').select('salary').eq('id', String(data.employeeId)).maybeSingle();
-                const salary = emp ? (emp.salary || 0) : 0;
-                overtimeAmount = parseFloat((salary / 30).toFixed(2));
-            }
 
             const payload = {
                 employeeId: data.employeeId,
@@ -402,17 +377,11 @@ export default async function handler(req, res) {
                 latitude: data.latitude,
                 longitude: data.longitude,
                 status: status,
-                transportPrice: finalTransport,
-                note: data.note || null,
-                overtimeAmount: overtimeAmount
+                transportPrice: finalTransport
             };
 
             const { error } = await supabase.from('attendance').insert([payload]);
             if (error) throw error;
-            
-            // Sync enriched payload to GS
-            syncEnrichedToGoogleSheet("addAttendance", payload);
-
             return res.status(200).json({ success: true, message: "تم تسجيل الحضور بنجاح" });
         }
 
@@ -434,49 +403,14 @@ export default async function handler(req, res) {
                 totalHours = parseFloat(((checkOut - checkIn) / 36e5).toFixed(2));
             }
 
-            const updatePayload = { 
-                checkOut: data.checkOut,
-                totalHours: totalHours
-            };
-            if (data.note) updatePayload.note = (existing[0].note ? existing[0].note + " | " : "") + data.note;
-            
-            // Allowances Request
-            if (data.requestedExtraAmount) {
-                updatePayload.requestedExtraAmount = parseFloat(data.requestedExtraAmount) || 0;
-                updatePayload.extraAmountReason = data.extraAmountReason || "";
-                updatePayload.extraAmountStatus = 'pending';
-            }
-
             const { error } = await supabase.from('attendance')
-                .update(updatePayload)
+                .update({ 
+                    checkOut: data.checkOut,
+                    totalHours: totalHours
+                })
                 .eq('id', existing[0].id);
             if (error) throw error;
-
-            // Sync enriched payload to GS
-            syncEnrichedToGoogleSheet("checkoutAttendance", { 
-                id: existing[0].id, 
-                employeeId: data.employeeId, 
-                ...updatePayload 
-            });
-
             return res.status(200).json({ success: true, message: "تم تسجيل الانصراف بنجاح" });
-        }
-
-        // --- ALLOWANCE REQUESTS MGMT ---
-        if (action === "approveExtraAllowance") {
-            const { error } = await supabase.from('attendance')
-                .update({ extraAmountStatus: 'approved' })
-                .eq('id', data.id);
-            if (error) throw error;
-            return res.status(200).json({ success: true, message: "تمت الموافقة على البدل الإضافي" });
-        }
-
-        if (action === "rejectExtraAllowance") {
-            const { error } = await supabase.from('attendance')
-                .update({ extraAmountStatus: 'rejected' })
-                .eq('id', data.id);
-            if (error) throw error;
-            return res.status(200).json({ success: true, message: "تم رفض طلب البدل الإضافي" });
         }
         
         // --- EMPLOYEE MGMT ---
@@ -504,8 +438,7 @@ export default async function handler(req, res) {
                 role: data.role || 'employee',
                 assignedSites: data.assignedSites || '',
                 faceDescriptor: data.faceDescriptor || null,
-                transportPrice: data.transportPrice || 0,
-                salary: data.salary || 0
+                transportPrice: data.transportPrice || 0
             };
             
             // 1. Save to employees table
@@ -523,7 +456,6 @@ export default async function handler(req, res) {
                 if (errAll) console.error("Allowances Save Failed:", errAll);
             }
 
-            syncEnrichedToGoogleSheet("saveEmployee", payload);
             return res.status(200).json({ success: true, message: "تمت إضافة الموظف بنجاح" });
         }
 
@@ -535,12 +467,9 @@ export default async function handler(req, res) {
                 phone: data.phone,
                 role: data.role,
                 assignedSites: data.assignedSites || '',
-                transportPrice: data.transportPrice || 0,
-                salary: data.salary || 0
+                transportPrice: data.transportPrice || 0
             };
             
-            // FIX: If faceDescriptor is not provided and we are NOT explicitly trying to clear it, 
-            // we should not send it in the update to avoid clearing it.
             if (data.faceDescriptor) payload.faceDescriptor = data.faceDescriptor;
             if (data.password) payload.password = data.password;
             
@@ -559,7 +488,6 @@ export default async function handler(req, res) {
                 await supabase.from('siteAllowances').insert(allowanceRows);
             }
 
-            syncEnrichedToGoogleSheet("updateEmployee", { id: data.id, ...payload });
             return res.status(200).json({ success: true, message: "تم تحديث بيانات الموظف بنجاح" });
         }
 
@@ -684,38 +612,20 @@ export default async function handler(req, res) {
                 .eq('id', id);
             if (errReq) throw errReq;
 
-            // 2. If permanent, add to sites table (IF NOT DUPLICATE)
+            // 2. If permanent, add to sites table
             if (mode === 'permanent' || mode === 'always') {
-                const siteName = name || reqData.suggestedName;
-                const { data: allSites } = await supabase.from('sites').select('*');
-                
-                let isDuplicate = false;
-                if (allSites) {
-                    for (const s of allSites) {
-                        // Check by Name
-                        if (s.name.trim() === siteName.trim()) { isDuplicate = true; break; }
-                        // Check by Proximity (20 meters)
-                        const dist = getDistance(reqData.latitude, reqData.longitude, s.latitude, s.longitude);
-                        if (dist <= 20) { isDuplicate = true; break; }
-                    }
-                }
-
-                if (!isDuplicate) {
-                    const sitePayload = {
-                        id: String(Math.floor(10000 + Math.random() * 90000)),
-                        name: siteName,
-                        latitude: reqData.latitude,
-                        longitude: reqData.longitude,
-                        radius: radius || 100,
-                        transportPrice: transportPrice || 120,
-                        mapLink: mapLink || reqData.mapLink,
-                        isTemporary: false
-                    };
-                    const { error: errSite } = await supabase.from('sites').insert([sitePayload]);
-                    if (errSite) throw errSite;
-                } else {
-                    return res.status(200).json({ success: true, message: "تمت الموافقة وربط الطلب بموقع موجود مسبقاً لمنع التكرار" });
-                }
+                const sitePayload = {
+                    id: String(Math.floor(10000 + Math.random() * 90000)),
+                    name: name || reqData.suggestedName,
+                    latitude: reqData.latitude,
+                    longitude: reqData.longitude,
+                    radius: radius || 100,
+                    transportPrice: transportPrice || 120,
+                    mapLink: mapLink || reqData.mapLink,
+                    isTemporary: false
+                };
+                const { error: errSite } = await supabase.from('sites').insert([sitePayload]);
+                if (errSite) throw errSite;
             }
             
             return res.status(200).json({ success: true, message: "تمت الموافقة على الطلب بنجاح" });
@@ -725,28 +635,6 @@ export default async function handler(req, res) {
             const { error } = await supabase.from('siteRequests').update({ status: 'rejected' }).eq('id', data.id);
             if (error) throw error;
             return res.status(200).json({ success: true, message: "تم رفض الطلب بنجاح" });
-        }
-
-        // --- HOLIDAYS ---
-        if (action === "getHolidays") {
-            const { data: holis, error } = await supabase.from('holidays').select('*').order('date', { ascending: false });
-            if (error) throw error;
-            return res.status(200).json({ success: true, data: holis || [] });
-        }
-
-        if (action === "addHoliday") {
-            const { error } = await supabase.from('holidays').upsert({ 
-                date: data.date, 
-                name: data.name 
-            }, { onConflict: 'date' });
-            if (error) throw error;
-            return res.status(200).json({ success: true, message: "تمت إضافة العطلة بنجاح" });
-        }
-
-        if (action === "deleteHoliday") {
-            const { error } = await supabase.from('holidays').delete().eq('id', data.id);
-            if (error) throw error;
-            return res.status(200).json({ success: true, message: "تم حذف العطلة بنجاح" });
         }
 
         // --- SETTINGS ---
