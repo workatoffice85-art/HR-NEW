@@ -234,15 +234,10 @@
                 </button>
             </div>
 
+            <!-- Request Site Button (Hidden by default) -->
             <button id="btnRequestSite" class="btn-primary hidden"
                 style="margin-top:15px; background:var(--warning); color:#000;" onclick="openRequestModal()">
                 📍 طلب تسجيل هذا الموقع كفرع عمل
-            </button>
-
-            <!-- Extra Allowance Request Button -->
-            <button id="btnRequestAllowance" class="btn-primary"
-                style="margin-top:10px; background:rgba(16, 185, 129, 0.2); border:1px solid var(--secondary); color:var(--secondary);" onclick="openAllowanceModal()">
-                💰 طلب بدل إضافي / انتقالات خاصة
             </button>
 
             <button class="btn-primary" style="margin-top:20px; background:var(--primary);"
@@ -274,31 +269,6 @@
                     <button class="btn-primary" onclick="submitSiteRequest()">إرسال الطلب</button>
                     <button class="btn-danger" style="background:transparent; border:1px solid var(--danger);"
                         onclick="closeRequestModal()">إلغاء</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- NEW: Allowance Modal -->
-        <div id="allowanceModal" class="modal hidden"
-            style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); display:flex; align-items:center; justify-content:center; z-index:1000;">
-            <div class="glass-card" style="width:90%; max-width:400px; padding:25px;">
-                <h3 style="margin-bottom:15px;">طلب بدل يومي / انتقالات إضافية</h3>
-                <div class="input-group">
-                    <label>التاريخ</label>
-                    <input type="date" id="allowanceDate">
-                </div>
-                <div class="input-group">
-                    <label>المبلغ الإضافي (ج.م)</label>
-                    <input type="number" id="allowanceAmount" placeholder="0.00">
-                </div>
-                <div class="input-group">
-                    <label>السبب / ملاحظة</label>
-                    <textarea id="allowanceNote" placeholder="اكتب سبب طلب البدل..." rows="3"></textarea>
-                </div>
-                <div style="display:flex; gap:10px;">
-                    <button class="btn-primary" onclick="submitAllowanceRequest()">إرسال الطلب</button>
-                    <button class="btn-danger" style="background:transparent; border:1px solid var(--danger);"
-                        onclick="closeAllowanceModal()">إلغاء</button>
                 </div>
             </div>
         </div>

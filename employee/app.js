@@ -450,48 +450,24 @@ function getDistanceFromLatLonInM(lat1, lon1, lat2, lon2) {
 function deg2rad(deg) { return deg * (Math.PI/180) }
 
 async function handleCheckIn() {
-    if(!isFaceVerified) return alert('يرجى التحقق من الوجه أولاً أمام الكاميرا');
+    if(!currentFaceDescriptor) return alert('بصمة الوجه غير ملتقطة الحين');
     if(!lastLocation) return alert('يجب تفعيل الـ GPS');
 
     document.getElementById('loader').classList.remove('hidden');
-    
-    // Capture photo from video to send to server
-    const video = document.getElementById('videoElement');
-    const canvasCapture = document.createElement('canvas');
-    canvasCapture.width = video.videoWidth;
-    canvasCapture.height = video.videoHeight;
-    const ctx = canvasCapture.getContext('2d');
-    ctx.drawImage(video, 0, 0, canvasCapture.width, canvasCapture.height);
-    const imageBase64 = canvasCapture.toDataURL('image/jpeg', 0.8);
-
     const payload = {
-        action: 'addAttendance', 
-        employeeId: currentUser.id, 
-        employeeName: currentUser.name,
-        checkIn: new Date().toISOString(), 
-        latitude: lastLocation.lat, 
-        longitude: lastLocation.lng,
-        siteId: lastDetectedSite ? lastDetectedSite.id : null,
-        imageBase64: imageBase64
+        action: 'addAttendance', employeeId: currentUser.id, employeeName: currentUser.name,
+        checkIn: new Date().toISOString(), latitude: lastLocation.lat, longitude: lastLocation.lng,
+        faceDescriptor: JSON.stringify(currentFaceDescriptor)
     };
 
     try {
-        const res = await fetch(API_URL, { 
-            method: 'POST', 
-            body: JSON.stringify(payload), 
-            headers: { 'Content-Type': 'text/plain' } 
-        });
+        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'text/plain' } });
         const result = await res.json();
         if(result.success) {
             alert(result.message);
             setAppState('in', payload.checkIn);
-        } else {
-            alert('خطأ: ' + result.message);
-        }
-    } catch(e) { 
-        console.error(e); 
-        alert('حدث خطأ في الاتصال بالسيرفر'); 
-    }
+        } else alert('خطأ: ' + result.message);
+    } catch(e) { console.error(e); alert('حدث خطأ في الاتصال'); }
     document.getElementById('loader').classList.add('hidden');
 }
 

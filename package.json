@@ -18,9 +18,7 @@
   },
   "homepage": "https://github.com/workatoffice85-art/HR-NEW#readme",
   "dependencies": {
-    "@supabase/supabase-js": "^2.103.3",
-    "@vladmandic/face-api": "^1.7.15",
-    "canvas": "^3.2.3",
+    "@supabase/supabase-js": "^2.103.0",
     "cors": "^2.8.6"
   }
 }
