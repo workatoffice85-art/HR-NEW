@@ -189,9 +189,6 @@
                 <div class="camera-container" style="height: 250px;">
                     <video id="regVideo" autoplay muted playsinline></video>
                     <canvas id="regCanvas"></canvas>
-                    <div class="face-scan-overlay">
-                        <div class="face-scan-line"></div>
-                    </div>
                 </div>
                 <button class="btn-primary" style="background:var(--secondary); width:80%"
                     onclick="captureFaceRegistration()">التقاط البصمة</button>
@@ -215,9 +212,6 @@
             <div class="camera-container">
                 <video id="videoElement" autoplay muted playsinline></video>
                 <canvas id="overlay"></canvas>
-                <div class="face-scan-overlay">
-                    <div class="face-scan-line"></div>
-                </div>
             </div>
 
             <div id="statusMessage">جاري تهيئة النظام...</div>
@@ -348,7 +342,6 @@
         </div>
     </div>
 
-    <script src="../assets/ui-utils.js"></script>
     <script src="app.js?v=1.1"></script>
 </body>
 

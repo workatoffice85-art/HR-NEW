@@ -782,7 +782,6 @@ function validateAll(ss, data) {
 /////////////////////////////
 function doGet(e) {
   var action = e.parameter.action;
-  var since = e.parameter.since;
 
   try {
 
@@ -792,15 +791,7 @@ function doGet(e) {
         success: true,
         employees: _getEmployeesData(ss),
         sites: _getSitesData(ss),
-<<<<<<< HEAD
-<<<<<<< HEAD
-        attendance: _getAttendanceData(ss, null, since),
-=======
         attendance: _getAttendanceData(ss, null, e.parameter.since),
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
-=======
-        attendance: _getAttendanceData(ss, null, e.parameter.since),
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
         settings: _getSettingsData(ss),
         siteRequests: _getSiteRequestsData(ss),
         siteAllowances: _getSiteAllowancesData(ss),
@@ -927,10 +918,41 @@ function doGet(e) {
     }
 
     if (action === "getAttendance") {
-      var employeeId = e.parameter.employeeId;
-      var since = e.parameter.since;
-      var ss = getSpreadsheet();
-      var records = _getAttendanceData(ss, employeeId, since);
+      var s = getOrCreateSheet("attendance",
+        ["employeeId","employeeName","siteId","siteName",
+         "checkIn","checkOut","latitude","longitude","status","totalHours","transportPrice"]
+      );
+
+      var d = s.getDataRange().getValues();
+      d.shift();
+      var transportContext = buildTransportContext();
+
+      var records = d.map(function(r) {
+        var transport = resolveTransportPrice(r[10], r[0], r[2], transportContext);
+        var rawHours = r[9];
+        var hoursNum = toNumberSafe(rawHours, null);
+        
+        // If hours are missing or invalid but user has checked out, calculate on the fly
+        if ((hoursNum === null || hoursNum === 0) && r[4] && r[5]) {
+          try {
+             var cIn = new Date(r[4]);
+             var cOut = new Date(r[5]);
+             if (!isNaN(cIn.getTime()) && !isNaN(cOut.getTime())) {
+               hoursNum = parseFloat(((cOut - cIn) / 36e5).toFixed(2));
+             }
+          } catch(e) { hoursNum = 0; }
+        }
+
+        return {
+          employeeId:r[0], employeeName:r[1], siteId:r[2], siteName:r[3],
+          checkIn:r[4], checkOut:r[5], latitude:r[6], longitude:r[7], status:r[8], 
+          totalHours: hoursNum || 0, transportPrice:transport
+        };
+      });
+      
+      if(e.parameter.employeeId) {
+          records = records.filter(function(r) { return String(r.employeeId) === String(e.parameter.employeeId); });
+      }
 
       return json({ success:true, data:records });
     }
@@ -2080,15 +2102,7 @@ function _getSitesData(ss, employeeId) {
 }
 
 function _getAttendanceData(ss, employeeId, since) {
-<<<<<<< HEAD
-<<<<<<< HEAD
-  var s = getOrCreateSheet("attendance", ["employeeId","employeeName","siteId","siteName","checkIn","checkOut","latitude","longitude","status","totalHours","transportPrice"]);
-=======
   var s = getOrCreateSheet("attendance", ["employeeId","employeeName","siteId","siteName","checkIn","checkOut","latitude","longitude","status","transportPrice"]);
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
-=======
-  var s = getOrCreateSheet("attendance", ["employeeId","employeeName","siteId","siteName","checkIn","checkOut","latitude","longitude","status","transportPrice"]);
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
   var d = s.getDataRange().getValues();
   d.shift();
   var transportContext = buildTransportContext();
@@ -2117,23 +2131,6 @@ function _getAttendanceData(ss, employeeId, since) {
     }
     return true;
   });
-<<<<<<< HEAD
-<<<<<<< HEAD
-  if (employeeId) records = records.filter(function(r) { return String(r.employeeId) === String(employeeId); });
-  if (since) {
-    var sinceTime = new Date(since).getTime();
-    if (!isNaN(sinceTime)) {
-      records = records.filter(function(r) {
-        if (!r.checkIn) return false;
-        var rTime = new Date(r.checkIn).getTime();
-        return !isNaN(rTime) && rTime >= sinceTime;
-      });
-    }
-  }
-=======
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
-=======
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
   return records;
 }
 

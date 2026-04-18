@@ -268,30 +268,12 @@ export default async function handler(req, res) {
     }
 
     try {
-        // 0) Determine sync mode (Incremental vs Full)
-        const isFull = req.query.full === 'true';
-        let since = "";
-
-        if (!isFull) {
-            const { data: latestRows } = await supabase
-                .from('attendance')
-                .select('checkIn')
-                .order('checkIn', { ascending: false })
-                .limit(1);
-
-            if (latestRows && latestRows.length > 0) {
-                // Buffer of 1 hour for safe overlap
-                const lastDate = new Date(latestRows[0].checkIn);
-                since = new Date(lastDate.getTime() - 3600000).toISOString();
-            }
-        }
-
-        // 1) Fetch snapshot from Google Sheets (master backup).
-        const url = `${GOOGLE_SCRIPT_URL}?action=getDashboardData&since=${encodeURIComponent(since)}&t=${Date.now()}`;
-        const gsRes = await fetch(url, {
+        // Fetch latest snapshot from Google Sheets (master backup).
+        const gsRes = await fetch(`${GOOGLE_SCRIPT_URL}?action=getDashboardData&t=${Date.now()}`, {
             method: 'GET',
             headers: { Accept: 'application/json' }
         });
+        if (!gsRes.ok) throw new Error(`Failed to fetch Google Sheets snapshot (${gsRes.status})`);
 
         const gsData = await gsRes.json();
         if (!gsData.success) throw new Error(gsData.message || 'Failed to fetch data from Google Sheets');

@@ -45,13 +45,13 @@ CREATE TABLE IF NOT EXISTS "siteRequests" (
     "suggestedName" TEXT,
     "mapLink" TEXT,
     status TEXT DEFAULT 'pending',
-    timestamp TIMESTAMPTZ DEFAULT NOW(),
+    timestamp TEXT, -- Keeping ISO string as text to match old format
     "transportPrice" NUMERIC,
     note TEXT,
     "receiptUrl" TEXT,
     "receiptName" TEXT,
     "tempRadius" NUMERIC,
-    "approvedAt" TIMESTAMPTZ,
+    "approvedAt" TEXT,
     "mapLatitude" NUMERIC,
     "mapLongitude" NUMERIC,
     "autoMeta" TEXT
@@ -64,8 +64,8 @@ CREATE TABLE IF NOT EXISTS attendance (
     "employeeName" TEXT,
     "siteId" TEXT,
     "siteName" TEXT,
-    "checkIn" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    "checkOut" TIMESTAMPTZ,
+    "checkIn" TEXT,
+    "checkOut" TEXT,
     latitude NUMERIC,
     longitude NUMERIC,
     status TEXT,
@@ -90,57 +90,3 @@ CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT
 );
-
---- SECURITY: ROW LEVEL SECURITY (RLS) ---
-
--- Enable RLS on all tables
-ALTER TABLE employees ENABLE ROW LEVEL SECURITY;
-ALTER TABLE sites ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "siteAllowances" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "siteRequests" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE attendance ENABLE ROW LEVEL SECURITY;
-ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
-
--- 1. Employees Policies
-CREATE POLICY "Employees can view own data" ON employees
-    FOR SELECT USING (auth.uid()::text = id);
-
-CREATE POLICY "HR can view all employees" ON employees
-    FOR ALL USING (auth.jwt() ->> 'role' = 'hr');
-
--- 2. Sites Policies
-CREATE POLICY "Everyone can view sites" ON sites
-    FOR SELECT USING (true);
-
-CREATE POLICY "Only HR can manage sites" ON sites
-    FOR ALL USING (auth.jwt() ->> 'role' = 'hr');
-
--- 3. Attendance Policies
-CREATE POLICY "Employees can view own attendance" ON attendance
-    FOR SELECT USING (auth.uid()::text = "employeeId");
-
-CREATE POLICY "Employees can insert attendance" ON attendance
-    FOR INSERT WITH CHECK (auth.uid()::text = "employeeId");
-
-CREATE POLICY "Employees can update own non-finalized attendance" ON attendance
-    FOR UPDATE USING (auth.uid()::text = "employeeId" AND "checkOut" IS NULL);
-
-CREATE POLICY "HR can manage all attendance" ON attendance
-    FOR ALL USING (auth.jwt() ->> 'role' = 'hr');
-
--- 4. Site Requests Policies
-CREATE POLICY "Employees can view own requests" ON "siteRequests"
-    FOR SELECT USING (auth.uid()::text = "employeeId");
-
-CREATE POLICY "Employees can submit requests" ON "siteRequests"
-    FOR INSERT WITH CHECK (auth.uid()::text = "employeeId");
-
-CREATE POLICY "HR can manage all site requests" ON "siteRequests"
-    FOR ALL USING (auth.jwt() ->> 'role' = 'hr');
-
--- 5. Settings Policies
-CREATE POLICY "Everyone can view settings" ON settings
-    FOR SELECT USING (true);
-
-CREATE POLICY "Only HR can modify settings" ON settings
-    FOR ALL USING (auth.jwt() ->> 'role' = 'hr');

@@ -19,13 +19,6 @@
   "homepage": "https://github.com/workatoffice85-art/HR-NEW#readme",
   "dependencies": {
     "@supabase/supabase-js": "^2.103.0",
-<<<<<<< HEAD
-<<<<<<< HEAD
-    "bcryptjs": "^3.0.3",
-=======
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
-=======
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
     "cors": "^2.8.6",
     "jsonwebtoken": "^9.0.3"
   }

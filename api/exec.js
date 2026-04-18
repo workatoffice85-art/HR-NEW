@@ -1,31 +1,14 @@
-<<<<<<< HEAD
-import { 
-    supabase as systemSupabase, 
-    getAuthenticatedClient,
-    normalizeString, 
-    normalizeEmailValue, 
-    normalizePhoneValue, 
-    hashPassword, 
-    comparePassword, 
-    generateToken, 
-    verifyToken,
-    generateUUID
-} from './utils';
-
-=======
 import { createClient } from '@supabase/supabase-js';
 import jwt from 'jsonwebtoken';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-<<<<<<< HEAD
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
-=======
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
 const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwNhaRKDP-7M4dXSQend8RbYPkXRgs5nzN0-BmNzxEO8IkBN9lt6KDtJCdOqpovhJEY1Q/exec';
 const JWT_SECRET = process.env.JWT_SECRET || 'hr-system-secret-2026';
 
-// ... (getDistance and buildPhoneCandidates functions remain same)
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+// Helper: Distance calculation in meters
 function getDistance(lat1, lon1, lat2, lon2) {
   const R = 6371e3;
   const f1 = lat1 * Math.PI/180;
@@ -36,11 +19,6 @@ function getDistance(lat1, lon1, lat2, lon2) {
   return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-=======
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
 function euclideanDistance(desc1, desc2) {
     if (!desc1 || !desc2 || desc1.length !== desc2.length) return Infinity;
     let sum = 0;
@@ -109,48 +87,41 @@ function normalizePhoneValue(value) {
     return phone;
 }
 
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
 function buildPhoneCandidates(value) {
     const raw = normalizeString(value);
     const candidates = new Set();
     if (raw) candidates.add(raw);
+
+    const onlyDigits = normalizeDigits(raw).replace(/[^\d]/g, '');
+    if (onlyDigits) candidates.add(onlyDigits);
+
     const normalized = normalizePhoneValue(raw);
     if (normalized) {
         candidates.add(normalized);
         candidates.add(normalized.replace(/^\+/, ''));
+
         const localMatch = normalized.match(/^\+20(1\d{9})$/);
-        if (localMatch) candidates.add(`0${localMatch[1]}`);
+        if (localMatch) {
+            candidates.add(`0${localMatch[1]}`);
+        }
     }
+
     return Array.from(candidates).filter(Boolean);
 }
-
+// Background sync to Google Sheets (Backup)
 async function syncToGoogleSheet(body) {
-    if (!GOOGLE_SCRIPT_URL) return;
-    const maxRetries = 3;
-    let attempt = 0;
-    while (attempt < maxRetries) {
-        try {
-            await fetch(GOOGLE_SCRIPT_URL, { method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'text/plain' } });
-            return;
-        } catch (e) {
-            attempt++;
-            if (attempt >= maxRetries) break;
-            await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt)));
-        }
+    try {
+        await fetch(GOOGLE_SCRIPT_URL, {
+            method: 'POST',
+            body: JSON.stringify(body),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+    } catch (e) {
+        console.error("Google Sync Failed:", e);
     }
 }
 
 export default async function handler(req, res) {
-<<<<<<< HEAD
-<<<<<<< HEAD
-    // CORS headers (Tightened)
-    res.setHeader('Access-Control-Allow-Credentials', true);
-    res.setHeader('Access-Control-Allow-Origin', '*'); // Should be production domain in real env
-    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,POST');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-=======
-=======
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
         return res.status(500).json({ success: false, message: "Missing Supabase configuration. Please set environment variables." });
     }
@@ -160,45 +131,22 @@ export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
     res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization');
-<<<<<<< HEAD
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
-=======
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
 
-    if (req.method === 'OPTIONS') return res.status(200).end();
+    if (req.method === 'OPTIONS') {
+        res.status(200).end();
+        return;
+    }
 
     try {
-        let data = req.method === 'POST' 
-            ? (typeof req.body === 'string' ? JSON.parse(req.body) : req.body)
-            : req.query;
+        // Parse the body if POST, or query if GET
+        let data = {};
+        if (req.method === 'POST') {
+            data = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+        } else {
+            data = req.query;
+        }
 
         const action = data.action;
-        const authHeader = req.headers.authorization;
-        const token = authHeader && authHeader.split(' ')[1];
-        const decoded = verifyToken(token);
-        
-        // --- CLIENT SELECTION ---
-        // Use authenticated client for user-specific actions, system client for login/sync
-        const db = decoded ? getAuthenticatedClient(token) : systemSupabase;
-
-<<<<<<< HEAD
-        // --- AUTH EXCEPTION ---
-=======
-        // --- AUTHENTICATION ENFORCEMENT ---
-        const protectedActions = [
-            "getDashboardData", "getEmployees", "getSites", "getSiteRequests", 
-            "addAttendance", "checkoutAttendance", "updateEmployee", "deleteEmployee", 
-            "saveSite", "updateSite", "deleteSite", "updateSettings", 
-            "addHoliday", "deleteHoliday", "getHolidays", "getSettings", "getAttendance"
-        ];
-        
-        if (protectedActions.includes(action)) {
-            const authHeader = req.headers.authorization;
-            const token = authHeader && authHeader.split(' ')[1];
-            if (!token || !verifyToken(token)) {
-                return res.status(401).json({ success: false, message: "غير مصرح لك بالوصول (يجب تسجيل الدخول)" });
-            }
-        }
 
         // --- AUTHENTICATION ENFORCEMENT ---
         const protectedActions = [
@@ -233,35 +181,26 @@ export default async function handler(req, res) {
             syncToGoogleSheet(data);
         }
         // --- AUTH ---
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
         if (action === "login") {
             const identifier = normalizeString(data.identifier);
             const password = normalizeString(data.password);
             const role = normalizeString(data.role).toLowerCase();
             const usersById = new Map();
-
             const addUsers = (rows) => {
                 for (const row of (rows || [])) {
                     const key = normalizeString(row.id) || normalizeString(row.email) || normalizeString(row.phone);
                     if (key) usersById.set(key, row);
                 }
             };
-
+            if (identifier.includes('@')) {
+                const { data: emailUsers, error: emailError } = await supabase
+                    .from('employees')
+                    .select('*')
+                    .eq('email', normalizeEmailValue(identifier));
+                if (emailError) throw emailError;
+                addUsers(emailUsers);
+            }
             const phoneCandidates = buildPhoneCandidates(identifier);
-<<<<<<< HEAD
-            const { data: usersData } = await systemSupabase.from('employees')
-                .select('*')
-                .or(`email.eq.${normalizeEmailValue(identifier)},phone.in.(${phoneCandidates.join(',')})`);
-            addUsers(usersData);
-
-            const user = Array.from(usersById.values()).find((u) => comparePassword(password, u.password));
-            if (!user) throw new Error("بيانات الدخول غير صحيحة");
-            if (role && normalizeString(user.role).toLowerCase() !== role) throw new Error("لا تملك صلاحية الدخول");
-
-            return res.status(200).json({
-                success: true,
-                token: generateToken(user),
-=======
             if (phoneCandidates.length) {
                 const { data: phoneUsers, error: phoneError } = await supabase
                     .from('employees')
@@ -297,68 +236,19 @@ export default async function handler(req, res) {
                 success: true,
                 message: "تم تسجيل الدخول بنجاح",
                 token: token,
-<<<<<<< HEAD
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
-=======
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
                 data: {
-                    id: user.id, name: user.name, email: user.email, phone: user.phone, role: user.role,
-                    assignedSites: user.assignedSites ? String(user.assignedSites).split(',').map(s => s.trim()).filter(Boolean) : [],
-                    faceDescriptor: user.faceDescriptor, transportPrice: user.transportPrice
+                    id: user.id,
+                    name: user.name,
+                    email: user.email,
+                    phone: user.phone,
+                    role: user.role,
+                    assignedSites: user.assignedSites ? String(user.assignedSites).split(',').map((s) => s.trim()).filter(Boolean) : [],
+                    faceDescriptor: user.faceDescriptor,
+                    transportPrice: user.transportPrice
                 }
             });
         }
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-        // --- AUTHORIZATION GATE ---
-        const publicActions = ["sendOTP", "verifyOTP", "saveEmployee"]; 
-        if (!decoded && !publicActions.includes(action)) {
-            return res.status(401).json({ success: false, message: "غير مصرح لك بالوصول" });
-        }
-
-        // --- SYNC GATE ---
-        const writeActions = ["saveEmployee", "updateEmployee", "deleteEmployee", "saveSite", "updateSite", "deleteSite", "addSiteRequest", "approveSiteRequest", "rejectSiteRequest", "addAttendance", "checkoutAttendance", "updateSettings"];
-        if (writeActions.includes(action)) syncToGoogleSheet(data);
-
-        // --- HANDLERS ---
-        if (action === "saveEmployee" || action === "updateEmployee") {
-            const isReg = action === "saveEmployee" && !data.id;
-            if (isReg) {
-                data.id = generateUUID();
-                data.role = 'employee'; // Force employee role for self-reg
-            } else if (!decoded || decoded.role !== 'hr') {
-                throw new Error("غير مصرح لك بتعديل بيانات الموظفين");
-            }
-
-            const payload = { ...data };
-            delete payload.action;
-            if (payload.password) payload.password = hashPassword(payload.password);
-            
-            const { error } = await systemSupabase.from('employees').upsert([payload]);
-            if (error) throw error;
-            return res.status(200).json({ success: true, message: "تم حفظ بيانات الموظف بنجاح" });
-        }
-
-        if (action === "getDashboardData") {
-            if (!decoded || decoded.role !== 'hr') throw new Error("غير مصرح لك");
-            const [empRes, siteRes, attRes, reqRes, setRes] = await Promise.all([
-                db.from('employees').select('id, name, email, phone, role'), // Exclude faceDescriptor & password
-                db.from('sites').select('*').eq('isTemporary', false),
-                db.from('attendance').select('*').order('checkIn', { ascending: false }).limit(200),
-                db.from('siteRequests').select('*'),
-                db.from('settings').select('*')
-            ]);
-            let settings = {};
-            if (setRes.data) setRes.data.forEach(s => settings[s.key] = s.value);
-            return res.status(200).json({
-                success: true,
-                employees: empRes.data || [], sites: siteRes.data || [],
-                attendance: attRes.data || [], siteRequests: reqRes.data || [],
-                settings: settings
-=======
-=======
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
         // --- NEW HELPER: RESOLVE TRANSPORT PRICE ---
         async function fetchResolvedTransportPrice(employeeId, siteId, currentPrice, isRequest) {
             const empIdStr = String(employeeId);
@@ -419,43 +309,27 @@ export default async function handler(req, res) {
                 siteRequests: reqRes.data || [],
                 settings: settings,
                 siteAllowances: allRes.data || []
-<<<<<<< HEAD
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
-=======
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
             });
         }
 
+        // --- EMPLOYEE DASHBOARD INIT ---
         if (action === "getPortalInitialData") {
-            const empId = decoded.id;
+            const empId = data.employeeId;
             const [siteRes, attRes] = await Promise.all([
-                db.from('sites').select('*'),
-                db.from('attendance').select('*').eq('employeeId', empId).order('checkIn', { ascending: false }).limit(50)
+                supabase.from('sites').select('*'),
+                supabase.from('attendance').select('*').eq('employeeId', empId)
             ]);
             return res.status(200).json({ success: true, sites: siteRes.data || [], attendance: attRes.data || [] });
         }
 
         if (action === "getAttendance") {
-            const limit = Math.min(parseInt(data.limit) || 50, 200);
-            const offset = parseInt(data.offset) || 0;
-            const empId = (decoded.role !== 'hr') ? decoded.id : (data.employeeId || null);
-            
-            let query = db.from('attendance').select('*', { count: 'exact' });
-            if (empId) query = query.eq('employeeId', empId);
-            const { data: att, error, count } = await query.order('checkIn', { ascending: false }).range(offset, offset + limit - 1);
+            let query = supabase.from('attendance').select('*');
+            if (data.employeeId) query = query.eq('employeeId', data.employeeId);
+            const { data: att, error } = await query;
             if (error) throw error;
-            return res.status(200).json({ success: true, data: att, total: count });
+            return res.status(200).json({ success: true, data: att });
         }
 
-<<<<<<< HEAD
-        if (action === "detectSite") {
-            const { latitude, longitude } = data;
-            const empId = decoded.id;
-            const { data: sites } = await db.from('sites').select('*').eq('isTemporary', false);
-            let matchedSite = null;
-            let minDistance = Infinity;
-            let closestSiteName = "";
-=======
         // --- ADD ATTENDANCE (CHECK-IN) ---
         if (action === "addAttendance") {
             // Server-side Face Verification
@@ -503,44 +377,20 @@ export default async function handler(req, res) {
             const { data: sites } = await supabase.from('sites').select('*');
             let matchedSite = null;
             let isRequest = false;
-<<<<<<< HEAD
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
-=======
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
 
             if (sites) {
                 for (let s of sites) {
-                    let d = getDistance(latitude, longitude, s.latitude, s.longitude);
-                    if (d < minDistance) { minDistance = d; closestSiteName = s.name; }
-                    if (d <= s.radius) { matchedSite = { ...s, isTemporary: false }; break; }
+                    let d = getDistance(data.latitude, data.longitude, s.latitude, s.longitude);
+                    if (d <= s.radius) { matchedSite = s; break; }
                 }
             }
 
             if (!matchedSite) {
-<<<<<<< HEAD
-<<<<<<< HEAD
-                const { data: reqs } = await db.from('siteRequests').select('*').eq('employeeId', empId).eq('status', 'approved_today');
-=======
-                // Check if any approved today or PENDING (> 2min) request matches
-                const { data: reqs } = await supabase.from('siteRequests').select('*').eq('employeeId', data.employeeId);
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
-                if (reqs) {
-                    const now = new Date();
-                    for (let r of reqs) {
-<<<<<<< HEAD
-                        let d = getDistance(latitude, longitude, r.latitude, r.longitude);
-                        if (d < minDistance) { minDistance = d; closestSiteName = r.suggestedName; }
-                        if (d <= (r.tempRadius || 100)) {
-                            matchedSite = { id: r.id, name: r.suggestedName, transportPrice: r.transportPrice, isTemporary: true };
-                            break;
-=======
-=======
                 // Check if any approved today or PENDING (> 2min) request matches
                 const { data: reqs } = await supabase.from('siteRequests').select('*').eq('employeeId', data.employeeId);
                 if (reqs) {
                     const now = new Date();
                     for (let r of reqs) {
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
                         let isAutoApprovable = false;
                         if (r.status === 'pending') {
                             const createdAt = new Date(r.timestamp || r.approvedAt);
@@ -565,54 +415,17 @@ export default async function handler(req, res) {
                                 }
                                 break; 
                             }
-<<<<<<< HEAD
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
-=======
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
                         }
                     }
                 }
             }
-<<<<<<< HEAD
-<<<<<<< HEAD
-            return res.status(200).json({ success: true, matchedSite, minDistance, closestSiteName });
-        }
-=======
-=======
 
             if (!matchedSite) throw new Error("أنت خارج نطاق جميع مواقع العمل المسجلة");
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
 
-            if (!matchedSite) throw new Error("أنت خارج نطاق جميع مواقع العمل المسجلة");
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
-
-        if (action === "addAttendance") {
-            const empId = decoded.id;
-            const empName = decoded.name || (await db.from('employees').select('name').eq('id', empId).single()).data?.name;
-
-            const { data: sites } = await db.from('sites').select('*');
-            let matchedSite = null;
-            for (let s of (sites || [])) {
-                if (getDistance(data.latitude, data.longitude, s.latitude, s.longitude) <= s.radius) { matchedSite = s; break; }
-            }
-            if (!matchedSite) {
-                const { data: reqs } = await db.from('siteRequests').select('*').eq('employeeId', empId).eq('status', 'approved_today');
-                for (let r of (reqs || [])) {
-                    if (getDistance(data.latitude, data.longitude, r.latitude, r.longitude) <= (r.tempRadius || 100)) {
-                        matchedSite = { id: r.id, name: r.suggestedName, transportPrice: r.transportPrice }; break;
-                    }
-                }
-            }
-            if (!matchedSite) throw new Error("أنت خارج نطاق العمل المسجل");
-
-            const { data: setRows } = await systemSupabase.from('settings').select('*').eq('key', 'workStartTime');
-            const workStart = (setRows && setRows.length > 0) ? setRows[0].value : "09:00";
-            const now = new Date();
-            const checkInTimeStr = now.toLocaleTimeString('en-US', {hour12:false, hour:'2-digit', minute:'2-digit'});
+            // Calculate status
+            let checkInDate = new Date(data.checkIn);
+            let dayOfWeek = checkInDate.getDay();
             let status = "present";
-<<<<<<< HEAD
-            if (now.getDay() === 5 || now.getDay() === 6) status = "overtime";
-=======
             
             const { data: setRows } = await supabase.from('settings').select('*').eq('key', 'workStartTime');
             let workStart = (setRows && setRows.length > 0) ? setRows[0].value : "09:00";
@@ -626,7 +439,6 @@ export default async function handler(req, res) {
             });
 
             if (dayOfWeek === 5 || dayOfWeek === 6) status = "overtime";
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
             else if (checkInTimeStr > workStart) status = "late";
             
             // --- HOLIDAY CHECK ---
@@ -635,20 +447,6 @@ export default async function handler(req, res) {
             if (holiday) {
                 status = "overtime";
             }
-<<<<<<< HEAD
-=======
-
-            // Resolve proper transport price
-            const finalTransport = await fetchResolvedTransportPrice(data.employeeId, matchedSite.id, matchedSite.transportPrice, isRequest);
-
-            // --- OVERTIME AMOUNT CALCULATION ---
-            let overtimeAmount = 0;
-            if (status === "overtime") {
-                const { data: emp } = await supabase.from('employees').select('salary').eq('id', String(data.employeeId)).maybeSingle();
-                const salary = emp ? (emp.salary || 0) : 0;
-                overtimeAmount = parseFloat((salary / 30).toFixed(2));
-            }
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
 
             // Resolve proper transport price
             const finalTransport = await fetchResolvedTransportPrice(data.employeeId, matchedSite.id, matchedSite.transportPrice, isRequest);
@@ -661,13 +459,6 @@ export default async function handler(req, res) {
                 overtimeAmount = parseFloat((salary / 30).toFixed(2));
             }
 
-<<<<<<< HEAD
-            const { error } = await db.from('attendance').insert([{
-                employeeId: empId, employeeName: empName, siteId: matchedSite.id, siteName: matchedSite.name,
-                checkIn: now.toISOString(), latitude: data.latitude, longitude: data.longitude, status,
-                transportPrice: matchedSite.transportPrice || 0
-            }]);
-=======
             const payload = {
                 employeeId: data.employeeId,
                 employeeName: data.employeeName,
@@ -683,7 +474,6 @@ export default async function handler(req, res) {
             };
 
             const { error } = await supabase.from('attendance').insert([payload]);
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
             if (error) throw error;
             
             // Sync enriched payload to GS
@@ -692,19 +482,8 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, message: "تم تسجيل الحضور بنجاح" });
         }
 
+        // --- CHECK OUT ---
         if (action === "checkoutAttendance") {
-<<<<<<< HEAD
-<<<<<<< HEAD
-            const empId = decoded.id;
-            const { data: existing } = await db.from('attendance').select('*').eq('employeeId', empId).is('checkOut', null).order('checkIn', { ascending: false }).limit(1);
-            if (!existing || existing.length === 0) throw new Error("لا يوجد عملية حضور مفتوحة");
-
-            const now = new Date();
-            const hours = ((now - new Date(existing[0].checkIn)) / 36e5).toFixed(2);
-            const { error } = await db.from('attendance').update({ checkOut: now.toISOString(), totalHours: hours }).eq('id', existing[0].id);
-=======
-=======
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
             // Server-side Face Verification
             const { data: empData } = await supabase.from('employees').select('faceDescriptor').eq('id', String(data.employeeId)).maybeSingle();
             if (empData && empData.faceDescriptor && data.faceDescriptor) {
@@ -752,7 +531,6 @@ export default async function handler(req, res) {
             const { error } = await supabase.from('attendance')
                 .update(updatePayload)
                 .eq('id', existing[0].id);
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
             if (error) throw error;
 
             // Sync enriched payload to GS
@@ -763,26 +541,6 @@ export default async function handler(req, res) {
             });
 
             return res.status(200).json({ success: true, message: "تم تسجيل الانصراف بنجاح" });
-<<<<<<< HEAD
-=======
-        }
-
-        // --- ALLOWANCE REQUESTS MGMT ---
-        if (action === "approveExtraAllowance") {
-            const { error } = await supabase.from('attendance')
-                .update({ extraAmountStatus: 'approved' })
-                .eq('id', data.id);
-            if (error) throw error;
-            return res.status(200).json({ success: true, message: "تمت الموافقة على البدل الإضافي" });
-        }
-
-        if (action === "rejectExtraAllowance") {
-            const { error } = await supabase.from('attendance')
-                .update({ extraAmountStatus: 'rejected' })
-                .eq('id', data.id);
-            if (error) throw error;
-            return res.status(200).json({ success: true, message: "تم رفض طلب البدل الإضافي" });
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
         }
 
         // --- ALLOWANCE REQUESTS MGMT ---
@@ -801,19 +559,6 @@ export default async function handler(req, res) {
             if (error) throw error;
             return res.status(200).json({ success: true, message: "تم رفض طلب البدل الإضافي" });
         }
-<<<<<<< HEAD
-
-        if (action === "saveSite" || action === "updateSite") {
-            if (!decoded || decoded.role !== 'hr') throw new Error("غير مصرح لك");
-            if (!data.id) data.id = generateUUID();
-            const payload = { ...data }; delete payload.action;
-            const { error } = await db.from('sites').upsert([payload]);
-            if (error) throw error;
-            return res.status(200).json({ success: true });
-        }
-
-        // Default Proxy Fallback
-=======
         
         // --- EMPLOYEE MGMT ---
         if (action === "getEmployees") {
@@ -1138,14 +883,13 @@ export default async function handler(req, res) {
         }
 
         // --- FINAL FALLBACK ---
-<<<<<<< HEAD
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
-=======
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
         const proxyRes = await fetch(GOOGLE_SCRIPT_URL, {
-            method: 'POST', body: JSON.stringify(data), headers: { 'Content-Type': 'text/plain' }
+            method: req.method === 'POST' ? 'POST' : 'GET',
+            body: req.method === 'POST' ? JSON.stringify(data) : undefined,
+            headers: { 'Content-Type': 'text/plain' }
         });
-        return res.status(200).json(await proxyRes.json());
+        const proxyJson = await proxyRes.json();
+        return res.status(200).json(proxyJson);
 
     } catch (e) {
         console.error("Handler Error:", e);

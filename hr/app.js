@@ -11,32 +11,6 @@ let latesChartInstance = null;
 let parseMapLinkTimer = null;
 let parseMapLinkRequestId = 0;
 let isInitialDataLoaded = false;
-let attendancePage = 0;
-const attendanceLimit = 50;
-let attendanceTotal = 0;
-
-async function callApi(payload, method = 'POST') {
-    const headers = { 
-        'Content-Type': 'text/plain' 
-    };
-    const token = localStorage.getItem('hrToken');
-    if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-    }
-
-    let url = API_URL;
-    let fetchOptions = { method: method, headers: headers };
-
-    if (method === 'GET') {
-        const params = new URLSearchParams(payload).toString();
-        url = `${API_URL}?${params}`;
-    } else {
-        fetchOptions.body = JSON.stringify(payload);
-    }
-
-    const response = await fetch(url, fetchOptions);
-    return await response.json();
-}
 
 async function callApi(payload, method = 'POST') {
     const headers = { 
@@ -95,39 +69,28 @@ function checkSession() {
 async function loginHR() {
     const email = document.getElementById('hrIdentifier').value.trim();
     const pass = document.getElementById('hrPass').value.trim();
-    if (!email || !pass) return showToast("أدخل بيانات الدخول", "error");
+    if (!email || !pass) return;
 
     const btn = document.querySelector('#hrLoginSection .auth-form button');
-    setLoading(btn, true);
+    if (btn) btn.innerText = 'جاري التحقق...';
 
     try {
-<<<<<<< HEAD
-<<<<<<< HEAD
-        const response = await fetch(API_URL, {
-            method: 'POST',
-            body: JSON.stringify({ action: 'login', identifier: email, password: pass, role: 'hr' }),
-            headers: { 'Content-Type': 'application/json' }
-        });
-        const result = await response.json();
-=======
         const result = await callApi({ action: 'login', identifier: email, password: pass, role: 'hr' });
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
-=======
-        const result = await callApi({ action: 'login', identifier: email, password: pass, role: 'hr' });
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
         
         if (result.success) {
             localStorage.setItem('hrToken', result.token);
             localStorage.setItem('hrSession', JSON.stringify(result.data));
-            showToast("تم تسجيل الدخول بنجاح", "success");
             checkSession();
         } else {
-            showToast(result.message || 'خطأ في بيانات الدخول أو لا تملك صلاحيات HR', 'error');
+            document.getElementById('loginError').innerText = result.message || 'خطأ في بيانات الدخول أو لا تملك صلاحيات HR';
+            document.getElementById('loginError').classList.remove('hidden');
         }
     } catch (e) {
-        showToast('فشل الاتصال بالخادم: ' + e.message, 'error');
+        document.getElementById('loginError').innerText = 'فشل الاتصال بالخادم: ' + e.message;
+        document.getElementById('loginError').classList.remove('hidden');
+        console.error(e);
     }
-    setLoading(btn, false);
+    if (btn) btn.innerText = 'دخول';
 }
 
 function logout() {
@@ -152,7 +115,7 @@ function showTab(tabName) {
 
     localStorage.setItem('hrActiveTab', tabName);
     
-    if (tabName === 'attendance') fetchAttendance(0);
+    if (tabName === 'attendance') fetchAttendance();
     if (tabName === 'employees') fetchEmployees();
     if (tabName === 'sites') fetchSites();
     if (tabName === 'siteRequests') fetchSiteRequests();
@@ -171,24 +134,9 @@ function showTab(tabName) {
 async function initDashboard(forceRefresh = false) {
     if (isInitialDataLoaded && !forceRefresh) return;
     
-    const kpis = document.querySelectorAll('.kpi-value');
-    kpis.forEach(el => el.classList.add('skeleton'));
-
     document.getElementById('loader').classList.remove('hidden');
-    const token = localStorage.getItem('hrToken');
     try {
-<<<<<<< HEAD
-<<<<<<< HEAD
-        const res = await fetch(`${API_URL}?action=getDashboardData`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const result = await res.json();
-=======
         const result = await callApi({ action: 'getDashboardData' }, 'GET');
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
-=======
-        const result = await callApi({ action: 'getDashboardData' }, 'GET');
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
         
         if (result.success) {
             allAttendanceData = result.attendance || [];
@@ -207,7 +155,6 @@ async function initDashboard(forceRefresh = false) {
     } catch (e) {
         console.error("Initial load failed", e);
     }
-    kpis.forEach(el => el.classList.remove('skeleton'));
     document.getElementById('loader').classList.add('hidden');
 }
 
@@ -221,59 +168,20 @@ function renderActiveTab(tabName) {
     if (tabName === 'settings') renderSettings(appSettings);
 }
 
-async function fetchAttendance(page = 0) {
-    attendancePage = page;
-    const offset = attendancePage * attendanceLimit;
-    
+async function fetchAttendance(force = false) {
+    if (!force && allAttendanceData.length) {
+        renderAttendanceTable(allAttendanceData);
+        return;
+    }
     document.getElementById('loader').classList.remove('hidden');
-    const token = localStorage.getItem('hrToken');
     try {
-<<<<<<< HEAD
-<<<<<<< HEAD
-        const res = await fetch(`${API_URL}?action=getAttendance&limit=${attendanceLimit}&offset=${offset}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const result = await res.json();
-=======
         const result = await callApi({ action: 'getAttendance' }, 'GET');
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
-=======
-        const result = await callApi({ action: 'getAttendance' }, 'GET');
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
         if(result.success) {
             allAttendanceData = result.data;
-            attendanceTotal = result.total || 0;
             renderAttendanceTable(allAttendanceData);
-            updatePaginationUI();
         }
     } catch(e) { console.error(e); }
     document.getElementById('loader').classList.add('hidden');
-}
-
-function updatePaginationUI() {
-    const pagination = document.getElementById('attendancePagination');
-    const info = document.getElementById('attendancePageInfo');
-    if (!pagination || !info) return;
-
-    const totalPages = Math.ceil(attendanceTotal / attendanceLimit);
-    if (attendanceTotal <= attendanceLimit) {
-        pagination.classList.add('hidden');
-    } else {
-        pagination.classList.remove('hidden');
-        info.innerText = `صفحة ${attendancePage + 1} من ${totalPages}`;
-    }
-}
-
-function nextAttendancePage() {
-    if ((attendancePage + 1) * attendanceLimit < attendanceTotal) {
-        fetchAttendance(attendancePage + 1);
-    }
-}
-
-function prevAttendancePage() {
-    if (attendancePage > 0) {
-        fetchAttendance(attendancePage - 1);
-    }
 }
 
 async function refreshData() {
@@ -293,14 +201,7 @@ function renderAttendanceTable(data) {
         });
     }
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-    filtered.forEach(record => {
-=======
-=======
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
     [...filtered].reverse().forEach(record => {
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
         const cInObj = new Date(record.checkIn);
         const checkInTime = !isNaN(cInObj) ? cInObj.toLocaleString('ar-EG') : (record.checkIn || '-');
         
@@ -310,35 +211,6 @@ function renderAttendanceTable(data) {
             checkOutTime = !isNaN(cOutObj) ? cOutObj.toLocaleString('ar-EG') : (record.checkOut || '-');
         }
         
-<<<<<<< HEAD
-<<<<<<< HEAD
-        let statusText = 'حاضر';
-        let statusColor = 'var(--secondary)';
-        if (record.status === 'late') { statusText = 'متأخر'; statusColor = 'var(--danger)'; }
-        else if (record.status === 'overtime') { statusText = 'عمل إضافي'; statusColor = '#3b82f6'; }
-
-        const statusSpan = document.createElement('span');
-        statusSpan.textContent = statusText;
-        statusSpan.style.color = statusColor;
-
-        const row = createSafeRow([
-            record.employeeName,
-            record.siteName,
-            checkInTime,
-            checkOutTime,
-            record.totalHours && !isNaN(parseFloat(record.totalHours)) ? parseFloat(record.totalHours).toFixed(2) + ' ساعات' : '-',
-            (record.transportPrice || 0) + ' ج.م',
-            statusSpan
-        ]);
-        
-        // Add accessibility labels for mobile
-        const labels = ["الموظف", "الموقع", "وقت الحضور", "وقت الانصراف", "إجمالي الساعات", "بدل الانتقال", "الحالة"];
-        row.querySelectorAll('td').forEach((td, i) => td.setAttribute('data-label', labels[i]));
-        
-        tbody.appendChild(row);
-=======
-=======
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
         const statusMeta = getStatusMeta(record.status);
         const extra = (record.extraAmountStatus === 'approved') ? parseFloat(record.requestedExtraAmount || 0) : 0;
         const totalPayable = (parseFloat(record.transportPrice || 0) + parseFloat(record.overtimeAmount || 0) + extra).toFixed(2);
@@ -354,7 +226,6 @@ function renderAttendanceTable(data) {
                 <td data-label="الحالة"><span style="color:${statusMeta.color}">${statusMeta.text}</span></td>
             </tr>
         `;
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
     });
 }
 
@@ -414,14 +285,11 @@ function resetEmployeeDetailedReportView(message) {
 
     const tbody = document.getElementById('employeeDetailTableBody');
     if (!tbody) return;
-    tbody.innerHTML = '';
-    const tr = document.createElement('tr');
-    const td = document.createElement('td');
-    td.colSpan = 7;
-    td.className = 'employee-report-empty';
-    td.textContent = message || 'لا توجد بيانات معروضة بعد.';
-    tr.appendChild(td);
-    tbody.appendChild(tr);
+    tbody.innerHTML = `
+        <tr>
+            <td colspan="7" class="employee-report-empty">لا توجد بيانات معروضة بعد.</td>
+        </tr>
+    `;
 }
 
 function populateEmployeeDetailEmployees() {
@@ -520,14 +388,11 @@ async function generateEmployeeDetailedReport() {
 
     const tbody = document.getElementById('employeeDetailTableBody');
     if (sortedRecords.length === 0) {
-        tbody.innerHTML = '';
-        const tr = document.createElement('tr');
-        const td = document.createElement('td');
-        td.colSpan = 7;
-        td.className = 'employee-report-empty';
-        td.textContent = 'لا توجد عمليات لهذا الموظف خلال الفترة المحددة.';
-        tr.appendChild(td);
-        tbody.appendChild(tr);
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="7" class="employee-report-empty">لا توجد عمليات لهذا الموظف خلال الفترة المحددة.</td>
+            </tr>
+        `;
         return;
     }
 
@@ -547,34 +412,6 @@ async function generateEmployeeDetailedReport() {
                 : (record.checkOut || '-');
         }
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-        const statusMeta = getStatusMeta(record.status);
-        const statusSpan = document.createElement('span');
-        statusSpan.style.color = statusMeta.color;
-        statusSpan.textContent = statusMeta.text;
-
-        const parsedHours = parseFloat(record.totalHours);
-        const hoursText = !isNaN(parsedHours) ? `${parsedHours.toFixed(2)} ساعة` : '-';
-        const parsedTransport = parseFloat(record.transportPrice || 0);
-        const transportText = `${isNaN(parsedTransport) ? 0 : parsedTransport.toFixed(2)} ج.م`;
-
-        const row = createSafeRow([
-            dateText,
-            record.siteName || '-',
-            checkInText,
-            checkOutText,
-            statusSpan,
-            hoursText,
-            transportText
-        ]);
-        
-        const labels = ["التاريخ", "الموقع", "وقت الحضور", "وقت الانصراف", "الحالة", "الساعات", "البدل"];
-        row.querySelectorAll('td').forEach((td, i) => td.setAttribute('data-label', labels[i]));
-        tbody.appendChild(row);
-=======
-=======
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
         const otAmount = parseFloat(record.overtimeAmount || 0);
         
         tbody.innerHTML += `
@@ -589,7 +426,6 @@ async function generateEmployeeDetailedReport() {
                 <td data-label="الملاحظات">${record.note || '-'}</td>
             </tr>
         `;
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
     });
 }
 
@@ -729,42 +565,6 @@ function generateReport() {
         names.push(data.name);
         lates.push(data.lates);
 
-<<<<<<< HEAD
-        const absentSpan = document.createElement('span');
-        if (absentDays > 0) {
-            absentSpan.style.color = 'var(--danger)';
-            absentSpan.textContent = absentDays + ' أيام';
-        } else {
-            absentSpan.textContent = '0 أيام';
-        }
-
-        const lateSpan = document.createElement('span');
-        if (data.lates > 0) {
-            lateSpan.style.color = 'var(--danger)';
-            lateSpan.textContent = data.lates + ' مرات';
-        } else {
-            lateSpan.textContent = '0 مرات';
-        }
-
-        const otSpan = document.createElement('span');
-        otSpan.style.color = '#3b82f6';
-        otSpan.textContent = (data.overtime || 0) + ' أيام';
-
-        const row = createSafeRow([
-            empId,
-            data.name,
-            data.daysPresent + ' أيام',
-            absentSpan,
-            lateSpan,
-            otSpan,
-            data.totalTransport.toFixed(2) + ' ج.م',
-            data.totalHours.toFixed(2) + ' ساعات'
-        ]);
-        
-        const labels = ["ID الموظف", "اسم الموظف", "أيام الحضور", "أيام الغياب", "التأخير", "العمل الإضافي", "بدل الانتقال", "إجمالي الساعات"];
-        row.querySelectorAll('td').forEach((td, i) => td.setAttribute('data-label', labels[i]));
-        tbody.appendChild(row);
-=======
         tbody.innerHTML += `
             <tr>
                 <td data-label="ID الموظف">${empId}</td>
@@ -776,7 +576,6 @@ function generateReport() {
                 <td data-label="إجمالي المستحق">${(data.totalTransport + (data.totalOvertimeAmount || 0) + (data.totalExtraAllowanceAmount || 0)).toFixed(2)} ج.م</td>
             </tr>
         `;
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
     }
 
     document.getElementById('kpiTotalLates').innerText = kpiTotalLates;
@@ -840,31 +639,15 @@ async function fetchEmployees(force = false) {
         renderEmployeesTable(allEmployees);
         return;
     }
-    const tbody = document.getElementById('employeesTableBody');
-    if (tbody) tbody.classList.add('skeleton');
-    
     document.getElementById('loader').classList.remove('hidden');
-    const token = localStorage.getItem('hrToken');
     try {
-<<<<<<< HEAD
-<<<<<<< HEAD
-        const res = await fetch(`${API_URL}?action=getEmployees`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const result = await res.json();
-=======
         const result = await callApi({ action: 'getEmployees' }, 'GET');
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
-=======
-        const result = await callApi({ action: 'getEmployees' }, 'GET');
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
         if(result.success) {
             allEmployees = result.data;
             populateEmployeeDetailEmployees();
             renderEmployeesTable(allEmployees);
         }
     } catch(e) { console.error(e); }
-    if (tbody) tbody.classList.remove('skeleton');
     document.getElementById('loader').classList.add('hidden');
 }
 
@@ -872,40 +655,18 @@ function renderEmployeesTable(data) {
     const tbody = document.getElementById('employeesTableBody');
     tbody.innerHTML = '';
     data.forEach(record => {
-        const actionsCell = document.createElement('div');
-        actionsCell.style.display = 'flex';
-        actionsCell.style.gap = '8px';
-        actionsCell.style.justifyContent = 'center';
-        actionsCell.style.padding = '10px';
-        
-        const editBtn = document.createElement('button');
-        editBtn.className = 'btn-primary';
-        editBtn.style.padding = '5px 12px';
-        editBtn.style.fontSize = '0.85rem';
-        editBtn.style.width = 'auto';
-        editBtn.textContent = 'تعديل ✏️';
-        editBtn.onclick = () => editEmployee(record.id);
-
-        const delBtn = document.createElement('button');
-        delBtn.className = 'btn-danger';
-        delBtn.style.cssText = 'padding:5px 12px; font-size:0.85rem; width:auto; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);';
-        delBtn.textContent = 'حذف 🗑️';
-        delBtn.onclick = () => deleteEntity('deleteEmployee', record.id, record.name);
-
-        actionsCell.appendChild(editBtn);
-        actionsCell.appendChild(delBtn);
-
-        const row = createSafeRow([
-            record.name,
-            record.email,
-            record.phone || '-',
-            record.role,
-            record.faceDescriptor ? '✅ مسجل' : '❌ لا يوجد',
-            actionsCell
-        ]);
-        
-        const labels = ["الاسم", "البريد", "الهاتف", "الصلاحية", "البصمة", "الإجراءات"];
-        row.querySelectorAll('td').forEach((td, i) => td.setAttribute('data-label', labels[i]));
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td data-label="الاسم">${record.name}</td>
+            <td data-label="البريد">${record.email}</td>
+            <td data-label="الهاتف">${record.phone || '-'}</td>
+            <td data-label="الصلاحية">${record.role}</td>
+            <td data-label="البصمة">${record.faceDescriptor ? '✅ مسجل' : '❌ لا يوجد'}</td>
+            <td data-label="الإجراءات" style="display:flex; gap:8px; justify-content:center; padding:10px;">
+                <button class="btn-primary" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="editEmployee('${record.id}')">تعديل ✏️</button>
+                <button class="btn-danger" style="padding:5px 12px; font-size:0.85rem; width:auto; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" onclick="deleteEntity('deleteEmployee', '${record.id}', '${record.name}')">حذف 🗑️</button>
+            </td>
+        `;
         tbody.appendChild(row);
     });
 }
@@ -915,34 +676,45 @@ async function fetchSites(force = false) {
         renderSitesTable(allSites);
         return;
     }
-    const tbody = document.getElementById('sitesTableBody');
-    if (tbody) tbody.classList.add('skeleton');
-
     document.getElementById('loader').classList.remove('hidden');
-    const token = localStorage.getItem('hrToken');
     try {
-<<<<<<< HEAD
-<<<<<<< HEAD
-        const res = await fetch(`${API_URL}?action=getSites`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const result = await res.json();
-=======
         const result = await callApi({ action: 'getSites' }, 'GET');
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
-=======
-        const result = await callApi({ action: 'getSites' }, 'GET');
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
         if(result.success) {
             allSites = result.data;
             renderSitesTable(allSites);
         }
     } catch(e) { console.error("Fetch Sites Error:", e); }
-    if (tbody) tbody.classList.remove('skeleton');
     document.getElementById('loader').classList.add('hidden');
 }
 
-// Duplicate renderSitesTable removed.
+function renderSitesTable(data) {
+    const tbody = document.getElementById('sitesTableBody');
+    tbody.innerHTML = '';
+    data.forEach(record => {
+        const isTemporary = Boolean(record.isTemporary);
+        const siteName = isTemporary
+            ? `${record.name} <small style="color:#f59e0b;">(مؤقت - اليوم فقط)</small>`
+            : record.name;
+        const actions = isTemporary
+            ? '<span style="color:var(--text-muted);">-</span>'
+            : `
+                <button class="btn-primary" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="editSite('${record.id}')">تعديل ✏️</button>
+                <button class="btn-danger" style="padding:5px 12px; font-size:0.85rem; width:auto; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" onclick="deleteEntity('deleteSite', '${record.id}', '${record.name}')">حذف 🗑️</button>
+            `;
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td data-label="اسم الموقع">${siteName}</td>
+            <td data-label="خط العرض">${record.latitude}</td>
+            <td data-label="خط الطول">${record.longitude}</td>
+            <td data-label="النطاق">${record.radius} متر</td>
+            <td data-label="رابط الموقع">${record.mapLink ? `<a href="${record.mapLink}" target="_blank" style="color:var(--primary); text-decoration:underline;">فتح الرابط 📍</a>` : '-'}</td>
+            <td data-label="الإجراءات" style="display:flex; gap:8px; justify-content:center; padding:10px;">
+                ${actions}
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
 
 async function editEmployee(id) {
     const emp = allEmployees.find(e => String(e.id) === String(id));
@@ -989,35 +761,17 @@ function toggleAdvancedEmpOptions() {
 }
 
 async function deleteEntity(action, id, name) {
-    if(!(await showConfirm(`هل أنت متأكد من حذف "${name}"؟ لا يمكن التراجع عن هذا الإجراء.`))) return;
+    if(!confirm(`هل أنت متأكد من حذف "${name}"؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
     
-    const token = localStorage.getItem('hrToken');
-    setLoading(document.body, true);
+    document.getElementById('loader').classList.remove('hidden');
     try {
-<<<<<<< HEAD
-<<<<<<< HEAD
-        const res = await fetch(API_URL, { 
-            method: 'POST', 
-            body: JSON.stringify({ action, id }), 
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            } 
-        });
-        const result = await res.json();
-=======
         const result = await callApi({ action, id });
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
-=======
-        const result = await callApi({ action, id });
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
         if(result.success) {
-            showToast(`تم حذف ${name} بنجاح`, "success");
             if(action === 'deleteEmployee') fetchEmployees();
             else fetchSites();
-        } else showToast("خطأ في الحذف: " + result.message, "error");
-    } catch(e) { showToast("خطأ في الاتصال", "error"); }
-    setLoading(document.body, false);
+        } else alert("خطأ في الحذف: " + result.message);
+    } catch(e) { console.error(e); alert("خطأ في الاتصال"); }
+    document.getElementById('loader').classList.add('hidden');
 }
 
 async function openEmployeeModal(mode = 'add', emp = null) {
@@ -1051,41 +805,27 @@ async function openEmployeeModal(mode = 'add', emp = null) {
         const price = allowance ? allowance.transportPrice : (site.transportPrice || 0);
 
         const div = document.createElement('div');
-        div.style.cssText = 'display:flex; align-items:center; gap:10px; margin-bottom:8px; padding:5px; border-bottom:1px solid rgba(255,255,255,0.05);';
+        div.style.display = 'flex';
+        div.style.alignItems = 'center';
+        div.style.gap = '10px';
+        div.style.marginBottom = '8px';
+        div.style.padding = '5px';
+        div.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
 
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.className = 'site-checkbox';
-        checkbox.value = site.id;
-        checkbox.checked = isAssigned;
-        checkbox.style.cssText = 'width:18px; height:18px;';
+        div.innerHTML = `
+            <input type="checkbox" class="site-checkbox" value="${site.id}" ${isAssigned ? 'checked' : ''} style="width:18px; height:18px;">
+            <span style="flex:1; font-size:0.9rem;">${site.name}</span>
+            <div style="display:flex; align-items:center; gap:5px;">
+                <input type="number" class="site-price-input" data-site-id="${site.id}" value="${price}" 
+                    style="width:70px; padding:4px; border-radius:4px; background:rgba(0,0,0,0.3); border:1px solid var(--card-border); color:white; font-size:0.85rem;"
+                    ${!isAssigned ? 'disabled' : ''}>
+                <span style="font-size:0.75rem; color:var(--text-muted);">ج.م</span>
+            </div>
+        `;
 
-        const nameSpan = document.createElement('span');
-        nameSpan.style.cssText = 'flex:1; font-size:0.9rem;';
-        nameSpan.textContent = site.name;
-
-        const priceContainer = document.createElement('div');
-        priceContainer.style.cssText = 'display:flex; align-items:center; gap:5px;';
-
-        const priceInput = document.createElement('input');
-        priceInput.type = 'number';
-        priceInput.className = 'site-price-input';
-        priceInput.setAttribute('data-site-id', site.id);
-        priceInput.value = price;
-        priceInput.disabled = !isAssigned;
-        priceInput.style.cssText = 'width:70px; padding:4px; border-radius:4px; background:rgba(0,0,0,0.3); border:1px solid var(--card-border); color:white; font-size:0.85rem;';
-
-        const currencySpan = document.createElement('span');
-        currencySpan.style.cssText = 'font-size:0.75rem; color:var(--text-muted);';
-        currencySpan.textContent = 'ج.م';
-
-        priceContainer.appendChild(priceInput);
-        priceContainer.appendChild(currencySpan);
-
-        div.appendChild(checkbox);
-        div.appendChild(nameSpan);
-        div.appendChild(priceContainer);
-
+        // Toggle price input based on checkbox
+        const checkbox = div.querySelector('.site-checkbox');
+        const priceInput = div.querySelector('.site-price-input');
         checkbox.addEventListener('change', () => {
             priceInput.disabled = !checkbox.checked;
         });
@@ -1118,7 +858,7 @@ async function saveEmployee() {
     document.querySelectorAll('#empSitesContainer > div').forEach(div => {
         const checkbox = div.querySelector('.site-checkbox');
         const priceInput = div.querySelector('.site-price-input');
-        if (checkbox && checkbox.checked) {
+        if (checkbox.checked) {
             const siteId = checkbox.value;
             const price = parseFloat(priceInput.value) || 0;
             selectedSites.push(siteId);
@@ -1126,8 +866,8 @@ async function saveEmployee() {
         }
     });
 
-    if(!phone) return showToast("أدخل رقم الهاتف", "error");
-    if(!name || !email) return showToast("أكمل البيانات", "error");
+    if(!phone) return alert("أدخل رقم الهاتف");
+    if(!name || !email) return alert("أكمل البيانات");
     
     const autoGeneratedPassword = (!editId && !pass)
         ? ('TMP' + Math.floor(100000 + Math.random() * 900000))
@@ -1147,40 +887,21 @@ async function saveEmployee() {
         salary: salary
     };
     
-    const token = localStorage.getItem('hrToken');
-    const btn = document.querySelector('#employeeModal .btn-primary');
-    setLoading(btn, true);
+    document.getElementById('loader').classList.remove('hidden');
     try {
-<<<<<<< HEAD
-<<<<<<< HEAD
-        const res = await fetch(API_URL, { 
-            method: 'POST', 
-            body: JSON.stringify(payload), 
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            } 
-        });
-        const result = await res.json();
-=======
         const result = await callApi(payload);
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
-=======
-        const result = await callApi(payload);
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
         if(result.success) {
             if (autoGeneratedPassword) {
-                showToast(`تم إنشاء الموظف. كلمة المرور المؤقتة: ${autoGeneratedPassword}`, 'info', 10000);
-            } else {
-                showToast('تم حفظ بيانات الموظف بنجاح', 'success');
+                alert(`تم إنشاء كلمة مرور مؤقتة تلقائيًا: ${autoGeneratedPassword}`);
             }
             closeEmployeeModal();
             fetchEmployees();
-        } else showToast("خطأ في الحفظ: " + result.message, 'error');
+        } else alert("خطأ في الحفظ: " + result.message);
     } catch(e) {
-        showToast("خطأ في الاتصال: " + e.message, 'error');
+        console.error(e);
+        alert("خطأ في الاتصال: " + e.message);
     }
-    setLoading(btn, false);
+    document.getElementById('loader').classList.add('hidden');
 }
 
 function openSiteModal() { document.getElementById('siteModal').classList.remove('hidden'); }
@@ -1275,56 +996,9 @@ function extractLatLngFromUrl(url) {
             }
         }
     }
+
     return null;
 }
-
-function renderSitesTable(data) {
-    const tbody = document.getElementById('sitesTableBody');
-    tbody.innerHTML = '';
-    data.forEach(record => {
-        const actionsCell = document.createElement('div');
-        actionsCell.style.cssText = 'display:flex; gap:8px; justify-content:center; padding:10px;';
-        
-        const editBtn = document.createElement('button');
-        editBtn.className = 'btn-primary';
-        editBtn.style.cssText = 'padding:5px 12px; font-size:0.85rem; width:auto;';
-        editBtn.textContent = 'تعديل ✏️';
-        editBtn.onclick = () => editSite(record.id);
-
-        const delBtn = document.createElement('button');
-        delBtn.className = 'btn-danger';
-        delBtn.style.cssText = 'padding:5px 12px; font-size:0.85rem; width:auto; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);';
-        delBtn.textContent = 'حذف 🗑️';
-        delBtn.onclick = () => deleteEntity('deleteSite', record.id, record.name);
-
-        actionsCell.appendChild(editBtn);
-        actionsCell.appendChild(delBtn);
-
-        const mapLink = document.createElement('a');
-        if (record.mapLink) {
-            mapLink.href = record.mapLink;
-            mapLink.target = '_blank';
-            mapLink.style.cssText = 'color:var(--primary); text-decoration:underline;';
-            mapLink.textContent = 'فتح الرابط 📍';
-        } else {
-            mapLink.textContent = 'لا يوجد';
-        }
-
-        const row = createSafeRow([
-            record.name,
-            record.latitude,
-            record.longitude,
-            record.radius + ' م',
-            mapLink,
-            actionsCell
-        ]);
-        
-        const labels = ["اسم الموقع", "خط العرض", "خط الطول", "النطاق", "رابط الموقع", "الإجراءات"];
-        row.querySelectorAll('td').forEach((td, i) => td.setAttribute('data-label', labels[i]));
-        tbody.appendChild(row);
-    });
-}
-
 async function saveSite() {
     const editId = document.getElementById('editSiteId').value;
     const name = document.getElementById('siteName').value.trim();
@@ -1332,7 +1006,7 @@ async function saveSite() {
     const lng = document.getElementById('siteLng').value.trim();
     const radius = document.getElementById('siteRadius').value.trim();
     
-    if(!name || !lat || !lng || !radius) return showToast("الرجاء إكمال كافة البيانات", "error");
+    if(!name || !lat || !lng || !radius) return alert("الرجاء إكمال كافة البيانات");
     
     const payload = {
         action: editId ? 'updateSite' : 'saveSite',
@@ -1341,29 +1015,10 @@ async function saveSite() {
         mapLink: document.getElementById('siteMapLink').value.trim()
     };
     
-    const token = localStorage.getItem('hrToken');
-    const btn = document.querySelector('#siteModal .btn-primary');
-    setLoading(btn, true);
+    document.getElementById('loader').classList.remove('hidden');
     try {
-<<<<<<< HEAD
-<<<<<<< HEAD
-        const res = await fetch(API_URL, { 
-            method: 'POST', 
-            body: JSON.stringify(payload), 
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            } 
-        });
-        const result = await res.json();
-=======
         const result = await callApi(payload);
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
-=======
-        const result = await callApi(payload);
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
         if(result.success) {
-            showToast('تم حفظ بيانات الموقع بنجاح', 'success');
             closeSiteModal();
             fetchSites();
             // Clear inputs
@@ -1372,9 +1027,9 @@ async function saveSite() {
             document.getElementById('siteLat').value = '';
             document.getElementById('siteLng').value = '';
             document.getElementById('siteRadius').value = '20';
-        } else { showToast("خطأ في الحفظ: " + (result.message||''), 'error'); }
-    } catch(e) { showToast("خطأ في الاتصال: " + e.message, 'error'); }
-    setLoading(btn, false);
+        } else { alert("خطأ في الحفظ: " + (result.message||'')); }
+    } catch(e) { console.error(e); alert("خطأ في الاتصال: " + e.message); }
+    document.getElementById('loader').classList.add('hidden');
 }
 
 // Sidebar Toggle Logic
@@ -1426,7 +1081,7 @@ async function saveSettings() {
     const dailyEnabled = document.getElementById('setDailyReport').checked;
     const monthlyEnabled = document.getElementById('setMonthlyReport').checked;
 
-    setLoading('tab-settings', true);
+    document.getElementById('loader').classList.remove('hidden');
     try {
         const payload = {
             action: 'updateSettings',
@@ -1439,34 +1094,18 @@ async function saveSettings() {
             }
         };
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-        const token = localStorage.getItem('hrToken');
-        const res = await fetch(API_URL, {
-            method: 'POST',
-            body: JSON.stringify(payload),
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            }
-        });
-        const result = await res.json();
-=======
         const result = await callApi(payload);
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
-=======
-        const result = await callApi(payload);
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
         
         if (result.success) {
-            showToast("✅ تم حفظ الإعدادات بنجاح", "success");
+            alert("✅ تم حفظ الإعدادات بنجاح");
         } else {
-            showToast("❌ خطأ: " + result.message, "error");
+            alert("❌ خطأ: " + result.message);
         }
     } catch (e) {
-        showToast("حدث خطأ في الاتصال", "error");
+        console.error("Save settings error", e);
+        alert("حدث خطأ في الاتصال");
     }
-    setLoading('tab-settings', false);
+    document.getElementById('loader').classList.add('hidden');
 }
 
 async function triggerSmartSync() {
@@ -1541,9 +1180,6 @@ async function fetchSiteRequests(force = false) {
         renderSiteRequestsTable(allSiteRequests);
         return;
     }
-    const tbody = document.getElementById('siteRequestsTableBody');
-    if (tbody) tbody.classList.add('skeleton');
-
     document.getElementById('loader').classList.remove('hidden');
     try {
         const result = await callApi({ action: 'getSiteRequests' }, 'GET');
@@ -1552,7 +1188,6 @@ async function fetchSiteRequests(force = false) {
             renderSiteRequestsTable(allSiteRequests);
         }
     } catch(e) { console.error("Fetch Site Requests error:", e); }
-    if (tbody) tbody.classList.remove('skeleton');
     document.getElementById('loader').classList.add('hidden');
 }
 
@@ -1576,83 +1211,40 @@ function renderSiteRequestsTable(data) {
 
         const canOverrideAutoApprovedToday = req.status === 'approved_today' && req.isAutoApproved && req.isActiveToday;
         const canManageRequest = req.status === 'pending' || canOverrideAutoApprovedToday;
-        
-        const actionsCell = document.createElement('div');
-        if (canManageRequest) {
-            actionsCell.style.display = 'flex';
-            actionsCell.style.gap = '8px';
-            
-            const appBtn = document.createElement('button');
-            appBtn.className = 'btn-primary';
-            appBtn.style.cssText = 'padding:5px 12px; font-size:0.85rem; width:auto; background:var(--secondary);';
-            appBtn.textContent = 'موافقة ✓';
-            appBtn.onclick = () => approveRequest(req.id, req.suggestedName);
+        const actions = canManageRequest ? `
+            <div style="display:flex; gap:8px;">
+                <button class="btn-primary" style="padding:5px 12px; font-size:0.85rem; width:auto; background:var(--secondary);" onclick="approveRequest('${req.id}', '${req.suggestedName}')">موافقة ✓</button>
+                <button class="btn-danger" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="rejectRequest('${req.id}')">رفض ✕</button>
+            </div>
+        ` : '-';
 
-            const rejBtn = document.createElement('button');
-            rejBtn.className = 'btn-danger';
-            rejBtn.style.cssText = 'padding:5px 12px; font-size:0.85rem; width:auto;';
-            rejBtn.textContent = 'رفض ✕';
-            rejBtn.onclick = () => rejectRequest(req.id);
-
-            actionsCell.appendChild(appBtn);
-            actionsCell.appendChild(rejBtn);
-        } else {
-            actionsCell.textContent = '-';
-        }
-
-        const mapLink = document.createElement('a');
-        if (req.mapLink) {
-            mapLink.href = req.mapLink;
-            mapLink.target = '_blank';
-            mapLink.style.cssText = 'color:var(--primary); text-decoration:underline;';
-            mapLink.textContent = 'فتح الرابط 📍';
-        } else {
-            mapLink.textContent = 'لا يوجد';
-        }
-
-        const receiptLink = document.createElement('a');
-        if (req.receiptUrl) {
-            receiptLink.href = req.receiptUrl;
-            receiptLink.target = '_blank';
-            receiptLink.style.cssText = 'color:var(--secondary); text-decoration:underline;';
-            receiptLink.textContent = req.receiptName || 'عرض المرفق';
-        } else {
-            receiptLink.textContent = '-';
-        }
-
-        const statusSpan = document.createElement('span');
-        statusSpan.textContent = statusText;
-        statusSpan.style.color = statusColor;
+        const mapLinkHtml = req.mapLink
+            ? `<a href="${req.mapLink}" target="_blank" style="color:var(--primary); text-decoration:underline;">فتح الرابط 📍</a>`
+            : 'لا يوجد';
+        const noteText = (req.note || '').trim() || '-';
+        const receiptHtml = req.receiptUrl
+            ? `<a href="${req.receiptUrl}" target="_blank" style="color:var(--secondary); text-decoration:underline;">${req.receiptName || 'عرض المرفق'}</a>`
+            : '-';
 
         const dateObj = req.timestamp ? new Date(req.timestamp) : null;
         const createdStr = (dateObj && !isNaN(dateObj)) ? dateObj.toLocaleString('ar-EG') : (req.timestamp || '-');
         const approvedObj = req.approvedAt ? new Date(req.approvedAt) : null;
         const approvedStr = (approvedObj && !isNaN(approvedObj)) ? approvedObj.toLocaleString('ar-EG') : '';
-        
-        const dateCell = document.createElement('div');
-        dateCell.textContent = createdStr;
-        if (approvedStr) {
-            const small = document.createElement('small');
-            small.style.cssText = 'display:block; color:var(--text-muted);';
-            small.textContent = `اعتماد: ${approvedStr}`;
-            dateCell.appendChild(small);
-        }
+        const dateStr = approvedStr ? `${createdStr}<br><small style="color:var(--text-muted);">اعتماد: ${approvedStr}</small>` : createdStr;
 
-        const row = createSafeRow([
-            req.employeeName,
-            req.suggestedName,
-            mapLink,
-            (req.note || '').trim() || '-',
-            receiptLink,
-            req.latitude + ', ' + req.longitude,
-            dateCell,
-            statusSpan,
-            actionsCell
-        ]);
-        
-        const labels = ["الموظف", "اسم الموقع المقترح", "رابط الخريطة", "ملاحظة الانتقالات", "مرفق", "الإحداثيات", "التاريخ", "الحالة", "الإجراءات"];
-        row.querySelectorAll('td').forEach((td, i) => td.setAttribute('data-label', labels[i]));
-        tbody.appendChild(row);
+        tbody.innerHTML += `
+            <tr>
+                <td data-label="الموظف">${req.employeeName}</td>
+                <td data-label="اسم الموقع المقترح">${req.suggestedName}</td>
+                <td data-label="رابط الخريطة">${mapLinkHtml}</td>
+                <td data-label="ملاحظة الانتقالات">${noteText}</td>
+                <td data-label="مرفق">${receiptHtml}</td>
+                <td data-label="الإحداثيات" dir="ltr">${req.latitude}, ${req.longitude}</td>
+                <td data-label="التاريخ">${dateStr}</td>
+                <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
+                <td data-label="الإجراءات">${actions}</td>
+            </tr>
+        `;
     });
 }
 async function approveRequest(id, suggestedName) {
@@ -1677,38 +1269,11 @@ async function confirmApproval(mode) {
     const transportPrice = document.getElementById('approveTransportPrice').value;
     const radius = document.getElementById('approveRadius').value;
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-    setLoading('approveRequestModal', true);
-    const token = localStorage.getItem('hrToken');
-    try {
-        const res = await fetch(API_URL, {
-            method: 'POST',
-            body: JSON.stringify({ 
-                action: 'approveSiteRequest', 
-                id: id, 
-                name: name, 
-                transportPrice: transportPrice, 
-                radius: radius,
-                mode: mode 
-            }),
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            }
-=======
     const matchedRequest = allSiteRequests.find(req => String(req.id) === String(id));
     const mapLink = matchedRequest ? matchedRequest.mapLink : '';
 
     document.getElementById('loader').classList.remove('hidden');
     try {
-=======
-    const matchedRequest = allSiteRequests.find(req => String(req.id) === String(id));
-    const mapLink = matchedRequest ? matchedRequest.mapLink : '';
-
-    document.getElementById('loader').classList.remove('hidden');
-    try {
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
         const result = await callApi({ 
             action: 'approveSiteRequest', 
             id: id, 
@@ -1717,210 +1282,39 @@ async function confirmApproval(mode) {
             radius: radius,
             mode: mode,
             mapLink: mapLink
-<<<<<<< HEAD
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
-=======
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
         });
-        if(result.success) {
-            showToast(result.message, "success");
-            closeApproveModal();
-            await Promise.all([fetchSiteRequests(true), fetchSites(true)]);
-        } else showToast("خطأ: " + result.message, "error");
-    } catch(e) { showToast("خطأ في الاتصال", "error"); }
-    setLoading('approveRequestModal', false);
-}
-
-async function rejectRequest(id) {
-    if(!(await showConfirm("هل أنت متأكد من رفض هذا الموقع؟"))) return;
-
-    const token = localStorage.getItem('hrToken');
-    setLoading(document.body, true);
-    try {
-<<<<<<< HEAD
-<<<<<<< HEAD
-        const res = await fetch(API_URL, {
-            method: 'POST',
-            body: JSON.stringify({ action: 'rejectSiteRequest', id: id }),
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            }
-        });
-        const result = await res.json();
-=======
-        const result = await callApi({ action: 'rejectSiteRequest', id: id });
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
-=======
-        const result = await callApi({ action: 'rejectSiteRequest', id: id });
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
-        if(result.success) {
-            showToast(result.message, "success");
-            await fetchSiteRequests(true);
-        } else showToast("خطأ: " + result.message, "error");
-    } catch(e) { showToast("خطأ في الاتصال", "error"); }
-    setLoading(document.body, false);
-}
-
-async function clearProcessedRequests() {
-    if(!(await showConfirm("هل أنت متأكد من مسح جميع الطلبات المعالجة؟ لا يمكن التراجع عن هذا الإجراء."))) return;
-
-    const token = localStorage.getItem('hrToken');
-    setLoading(document.body, true);
-    try {
-<<<<<<< HEAD
-        const res = await fetch(API_URL, {
-            method: 'POST',
-            body: JSON.stringify({ action: 'clearProcessedRequests' }),
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            }
-        });
-        const result = await res.json();
-=======
-        const result = await callApi({ action: 'clearProcessedRequests' });
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
-        if(result.success) {
-            showToast(result.message, "success");
-            await initDashboard(true); // Refresh all data to sync
-        } else showToast("خطأ: " + result.message, "error");
-    } catch(e) { showToast("خطأ في الاتصال", "error"); }
-    setLoading(document.body, false);
-}
-async function fetchHolidays() {
-    document.getElementById('loader').classList.remove('hidden');
-    try {
-        const result = await callApi({ action: 'getHolidays' }, 'GET');
-        if(result.success) {
-            allHolidays = result.data || [];
-            renderHolidaysTable(allHolidays);
-        }
-    } catch(e) { console.error(e); }
-    document.getElementById('loader').classList.add('hidden');
-}
-
-function renderHolidaysTable(data) {
-    const tbody = document.getElementById('holidaysTableBody');
-    if (!tbody) return;
-    tbody.innerHTML = '';
-    [...data].forEach(h => {
-        tbody.innerHTML += `
-            <tr>
-                <td>${h.date}</td>
-                <td>${h.name}</td>
-                <td>
-                    <button class="btn-danger" style="padding:5px 10px; width:auto;" onclick="deleteHoliday('${h.id}', '${h.date}')">حذف 🗑️</button>
-                </td>
-            </tr>
-        `;
-    });
-}
-
-function openHolidayModal() {
-    document.getElementById('holidayDate').value = '';
-    document.getElementById('holidayName').value = '';
-    document.getElementById('holidayModal').classList.remove('hidden');
-}
-
-function closeHolidayModal() {
-    document.getElementById('holidayModal').classList.add('hidden');
-}
-
-async function saveHoliday() {
-    const date = document.getElementById('holidayDate').value;
-    const name = document.getElementById('holidayName').value.trim();
-    if (!date || !name) return alert("يرجى اختيار التاريخ والاسم");
-
-    document.getElementById('loader').classList.remove('hidden');
-    try {
-        const result = await callApi({ action: 'addHoliday', date, name });
-        if(result.success) {
-            closeHolidayModal();
-            fetchHolidays();
-        } else alert("خطأ: " + result.message);
-    } catch(e) { alert("خطأ في الاتصال"); }
-    document.getElementById('loader').classList.add('hidden');
-}
-
-async function deleteHoliday(id, date) {
-    if(!confirm(`هل أنت متأكد من حذف العطلة الخاصة بيوم ${date}؟`)) return;
-    document.getElementById('loader').classList.remove('hidden');
-    try {
-<<<<<<< HEAD
-        const res = await fetch(API_URL, {
-            method: 'POST',
-            body: JSON.stringify({ action: 'deleteHoliday', id, date }),
-            headers: { 'Content-Type': 'text/plain' }
-        });
-        const result = await res.json();
-        if(result.success) fetchHolidays();
-        else alert("خطأ: " + result.message);
-    } catch(e) { alert("خطأ في الاتصال"); }
-    document.getElementById('loader').classList.add('hidden');
-}
-
-// ------ EXTRA ALLOWANCE MGMT ------
-function renderAllowanceRequestsTable(data) {
-    const tbody = document.getElementById('allowanceRequestsTableBody');
-    if (!tbody) return;
-    tbody.innerHTML = '';
-    
-    // Sort by checking so newest are first
-    const pending = data.filter(a => a.extraAmountStatus === 'pending');
-    
-    if (pending.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px; color:var(--text-muted);">لا توجد طلبات معلقة حالياً</td></tr>';
-        return;
-    }
-
-    [...pending].reverse().forEach(req => {
-        const dateObj = new Date(req.checkIn);
-        const dateStr = dateObj.toLocaleString('ar-EG');
-        
-        tbody.innerHTML += `
-            <tr>
-                <td data-label="الموظف">${req.employeeName}</td>
-                <td data-label="الموقع المتواجد به">${req.siteName}</td>
-                <td data-label="المبلغ المطلوب" style="font-weight:bold; color:var(--secondary);">${req.requestedExtraAmount} ج.م</td>
-                <td data-label="السبب / الملاحظة">${req.extraAmountReason || '-'}</td>
-                <td data-label="تاريخ الطلب">${dateStr}</td>
-                <td data-label="الحالة"><span style="color:var(--warning)">قيد الانتظار</span></td>
-                <td data-label="الإجراءات">
-                    <div style="display:flex; gap:8px;">
-                        <button class="btn-primary" style="padding:5px 12px; font-size:0.85rem; width:auto; background:var(--secondary);" onclick="approveExtraAllowance('${req.id}')">موافقة ✓</button>
-                        <button class="btn-danger" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="rejectExtraAllowance('${req.id}')">رفض ✕</button>
-                    </div>
-                </td>
-            </tr>
-        `;
-    });
-}
-
-async function approveExtraAllowance(id) {
-    if(!confirm("هل أنت متأكد من الموافقة على هذا المبلغ الإضافي؟")) return;
-    document.getElementById('loader').classList.remove('hidden');
-    try {
-        const result = await callApi({ action: 'approveExtraAllowance', id: id });
-=======
-        const result = await callApi({ action: 'clearProcessedRequests' });
->>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
         if(result.success) {
             alert(result.message);
-            await initDashboard(true); // Refresh data
+            closeApproveModal();
+            await Promise.all([fetchSiteRequests(true), fetchSites(true)]);
         } else alert("خطأ: " + result.message);
     } catch(e) { console.error(e); alert("خطأ في الاتصال"); }
     document.getElementById('loader').classList.add('hidden');
 }
 
-async function rejectExtraAllowance(id) {
-    if(!confirm("هل أنت متأكد من رفض هذا الطلب؟")) return;
+async function rejectRequest(id) {
+    if(!confirm("هل أنت متأكد من رفض هذا الموقع؟")) return;
+
     document.getElementById('loader').classList.remove('hidden');
     try {
-        const result = await callApi({ action: 'rejectExtraAllowance', id: id });
+        const result = await callApi({ action: 'rejectSiteRequest', id: id });
         if(result.success) {
             alert(result.message);
-            await initDashboard(true); // Refresh data
+            await fetchSiteRequests(true);
+        } else alert("خطأ: " + result.message);
+    } catch(e) { console.error(e); alert("خطأ في الاتصال"); }
+    document.getElementById('loader').classList.add('hidden');
+}
+
+async function clearProcessedRequests() {
+    if(!confirm("هل أنت متأكد من مسح جميع الطلبات التي تمت الموافقة عليها أو رفضها أو انتهت صلاحتها؟ هذا الإجراء لا يمكن التراجع عنه.")) return;
+
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const result = await callApi({ action: 'clearProcessedRequests' });
+        if(result.success) {
+            alert(result.message);
+            await initDashboard(true); // Refresh all data to sync
         } else alert("خطأ: " + result.message);
     } catch(e) { console.error(e); alert("خطأ في الاتصال"); }
     document.getElementById('loader').classList.add('hidden');
