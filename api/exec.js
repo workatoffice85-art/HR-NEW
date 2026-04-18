@@ -6,6 +6,26 @@ const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwNhaRKDP-7M4
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+// Server-side Face API Setup
+import * as faceapi from '@vladmandic/face-api';
+import { Canvas, Image, ImageData, loadImage } from 'canvas';
+import path from 'path';
+
+// Monkey patch for face-api
+faceapi.env.monkeyPatch({ Canvas, Image, ImageData });
+
+let modelsLoaded = false;
+async function loadModels() {
+    if (modelsLoaded) return;
+    const modelPath = path.join(process.cwd(), 'models');
+    await Promise.all([
+        faceapi.nets.ssdMobilenetv1.loadFromDisk(modelPath),
+        faceapi.nets.faceLandmark68Net.loadFromDisk(modelPath),
+        faceapi.nets.faceRecognitionNet.loadFromDisk(modelPath)
+    ]);
+    modelsLoaded = true;
+}
+
 // Helper: Distance calculation in meters
 function getDistance(lat1, lon1, lat2, lon2) {
   const R = 6371e3;
@@ -121,7 +141,7 @@ export default async function handler(req, res) {
 
         // DUAL WRITING / BACKUP SYNC:
         // For writing actions, we asynchronously broadcast the exact request to your existing Google Apps Script
-        const writeActions = ["saveEmployee", "updateEmployee", "deleteEmployee", "saveSite", "updateSite", "deleteSite", "addSiteRequest", "approveSiteRequest", "rejectSiteRequest", "addAttendance", "checkoutAttendance", "updateSettings"];
+        const writeActions = ["saveEmployee", "updateEmployee", "deleteEmployee", "saveSite", "updateSite", "deleteSite", "addSiteRequest", "approveSiteRequest", "rejectSiteRequest", "addAttendance", "checkoutAttendance", "updateSettings", "submitAllowanceRequest", "updateAllowanceStatus", "addHoliday", "deleteHoliday"];
         if (writeActions.includes(action)) {
             syncToGoogleSheet(data);
         }
@@ -271,6 +291,53 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, data: att });
         }
 
+        // --- ALLOWANCE REQUESTS ---
+        if (action === "submitAllowanceRequest") {
+            const { employeeId, date, extraAmount, note, latitude, longitude } = data;
+            const { error } = await supabase.from('allowance_requests').insert([{
+                employeeId, date, extraAmount, note, latitude, longitude, status: 'pending'
+            }]);
+            if (error) throw error;
+            return res.status(200).json({ success: true, message: "تم إرسال طلب البدل بنجاح" });
+        }
+
+        if (action === "getAllowanceRequests") {
+            const { data: reqs, error } = await supabase
+                .from('allowance_requests')
+                .select(`*, employees (name)`)
+                .order('createdAt', { ascending: false });
+            if (error) throw error;
+            return res.status(200).json({ success: true, data: reqs });
+        }
+
+        if (action === "updateAllowanceStatus") {
+            const { id, status } = data;
+            const { error } = await supabase.from('allowance_requests').update({ status }).eq('id', id);
+            if (error) throw error;
+            return res.status(200).json({ success: true, message: "تم تحديث حالة الطلب" });
+        }
+
+        // --- HOLIDAYS ---
+        if (action === "getHolidays") {
+            const { data: hols, error } = await supabase.from('holidays').select('*').order('date', { ascending: true });
+            if (error) throw error;
+            return res.status(200).json({ success: true, data: hols });
+        }
+
+        if (action === "addHoliday") {
+            const { date, type, name } = data;
+            const { error } = await supabase.from('holidays').insert([{ date, type, name }]);
+            if (error) throw error;
+            return res.status(200).json({ success: true, message: "تمت إضافة الإجازة" });
+        }
+
+        if (action === "deleteHoliday") {
+            const { id } = data;
+            const { error } = await supabase.from('holidays').delete().eq('id', id);
+            if (error) throw error;
+            return res.status(200).json({ success: true, message: "تم حذف الإجازة" });
+        }
+
         // --- ADD ATTENDANCE (CHECK-IN) ---
         if (action === "addAttendance") {
             // 0. Double Check-In Prevention
@@ -285,16 +352,31 @@ export default async function handler(req, res) {
                 throw new Error("لديك عملية حضور مفتوحة بالفعل. يرجى تسجيل الانصراف أولاً.");
             }
 
-            // 1. Face Identity Check (Security Verification)
-            const { data: userData } = await supabase.from('employees').select('faceDescriptor').eq('id', String(data.employeeId)).maybeSingle();
-            if (userData && userData.faceDescriptor && data.faceDescriptor) {
-                // If they have a face registered, we proxy to Google Script for validation (Distance check)
-                // because calculating face Euclidean distance is easier there or we can just assume front-end did it
-                // but for maximum security we should re-verify if possible. 
-                // However, the main project uses the frontend for descriptor matching.
-                // We will at least ensure a descriptor was provided.
-            } else if (userData && userData.faceDescriptor && !data.faceDescriptor) {
-                throw new Error("مطلوب توثيق بصمة الوجه لإتمام العملية");
+            // 1. Face Identity Check (SERVER-SIDE VERIFICATION)
+            const { data: user } = await supabase
+                .from('employees')
+                .select('faceDescriptor, monthly_salary')
+                .eq('id', String(data.employeeId))
+                .single();
+
+            if (user && user.faceDescriptor) {
+                if (!data.imageBase64) throw new Error("مطلوب صورة للتحقق من الهوية");
+                
+                await loadModels();
+                const img = await loadImage(data.imageBase64);
+                const detection = await faceapi.detectSingleFace(img).withFaceLandmarks().withFaceDescriptor();
+                
+                if (!detection) throw new Error("لم يتم اكتشاف وجه في الصورة. يرجى المحاولة مرة أخرى.");
+
+                const storedDescriptor = new Float32Array(JSON.parse(user.faceDescriptor));
+                const dist = faceapi.euclideanDistance(detection.descriptor, storedDescriptor);
+
+                if (dist > 0.6) {
+                    throw new Error("بصمة الوجه غير متطابقة. يرجى التأكد من هويتك.");
+                }
+            } else if (user && !user.faceDescriptor) {
+                // No face registered yet? Allow check-in but log it? 
+                // The user said "منع الاعتماد على الواجهة" so we strictly enforce if descriptor exists.
             }
 
             // 2. Check Location logic
@@ -310,7 +392,6 @@ export default async function handler(req, res) {
             }
 
             if (!matchedSite) {
-                // Check if any approved today or PENDING (> 2min) request matches
                 const { data: reqs } = await supabase.from('siteRequests').select('*').eq('employeeId', data.employeeId);
                 if (reqs) {
                     const now = new Date();
@@ -320,15 +401,12 @@ export default async function handler(req, res) {
                             const createdAt = new Date(r.timestamp || r.approvedAt);
                             if (now - createdAt >= 2 * 60 * 1000) isAutoApprovable = true;
                         }
-
                         if (r.status === 'approved_today' || isAutoApprovable) {
                             let d = getDistance(data.latitude, data.longitude, r.latitude, r.longitude);
                             let radius = isAutoApprovable ? 700 : (r.tempRadius || 100);
                             if (d <= radius) { 
                                 matchedSite = { id: r.id, name: r.suggestedName, transportPrice: r.transportPrice }; 
                                 isRequest = true;
-                                
-                                // Silent Auto-Approval update if pending
                                 if (isAutoApprovable) {
                                     await supabase.from('siteRequests').update({ 
                                         status: 'approved_today', 
@@ -346,24 +424,28 @@ export default async function handler(req, res) {
 
             if (!matchedSite) throw new Error("أنت خارج نطاق جميع مواقع العمل المسجلة");
 
-            // Calculate status
+            // 3. Status & Salary Calculations
             let checkInDate = new Date(data.checkIn);
-            let dayOfWeek = checkInDate.getDay();
-            let status = "present";
+            let todayStr = checkInDate.toISOString().split('T')[0];
+            let dayOfWeek = checkInDate.getDay(); // 0 = Sunday
+            
+            // Check for Holiday or Sunday
+            const { data: holiday } = await supabase.from('holidays').select('*').eq('date', todayStr).maybeSingle();
+            
+            let isOvertime = holiday || dayOfWeek === 0;
+            let status = isOvertime ? "overtime" : "present";
             
             const { data: setRows } = await supabase.from('settings').select('*').eq('key', 'workStartTime');
             let workStart = (setRows && setRows.length > 0) ? setRows[0].value : "09:00";
             
-            // Critical Fix: Use Africa/Cairo time to compare with local workStart
             let checkInTimeStr = checkInDate.toLocaleTimeString('en-US', {
-                timeZone: 'Africa/Cairo',
-                hour12: false, 
-                hour: '2-digit', 
-                minute: '2-digit'
+                timeZone: 'Africa/Cairo', hour12: false, hour: '2-digit', minute: '2-digit'
             });
 
-            if (dayOfWeek === 5 || dayOfWeek === 6) status = "overtime";
-            else if (checkInTimeStr > workStart) status = "late";
+            if (!isOvertime && checkInTimeStr > workStart) status = "late";
+
+            // Daily Rate
+            const dailyRate = (user.monthly_salary || 0) / 30;
 
             // Resolve proper transport price
             const finalTransport = await fetchResolvedTransportPrice(data.employeeId, matchedSite.id, matchedSite.transportPrice, isRequest);
@@ -377,7 +459,8 @@ export default async function handler(req, res) {
                 latitude: data.latitude,
                 longitude: data.longitude,
                 status: status,
-                transportPrice: finalTransport
+                transportPrice: finalTransport,
+                daily_rate: dailyRate
             };
 
             const { error } = await supabase.from('attendance').insert([payload]);
@@ -438,7 +521,8 @@ export default async function handler(req, res) {
                 role: data.role || 'employee',
                 assignedSites: data.assignedSites || '',
                 faceDescriptor: data.faceDescriptor || null,
-                transportPrice: data.transportPrice || 0
+                transportPrice: data.transportPrice || 0,
+                monthly_salary: data.monthlySalary || 0
             };
             
             // 1. Save to employees table
@@ -467,7 +551,8 @@ export default async function handler(req, res) {
                 phone: data.phone,
                 role: data.role,
                 assignedSites: data.assignedSites || '',
-                transportPrice: data.transportPrice || 0
+                transportPrice: data.transportPrice || 0,
+                monthly_salary: data.monthlySalary || 0
             };
             
             if (data.faceDescriptor) payload.faceDescriptor = data.faceDescriptor;

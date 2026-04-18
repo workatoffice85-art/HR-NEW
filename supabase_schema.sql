@@ -11,7 +11,8 @@ CREATE TABLE IF NOT EXISTS employees (
     role TEXT NOT NULL DEFAULT 'employee',
     "assignedSites" TEXT,
     "faceDescriptor" TEXT,
-    "transportPrice" NUMERIC DEFAULT 0
+    "transportPrice" NUMERIC DEFAULT 0,
+    "monthly_salary" NUMERIC DEFAULT 0
 );
 
 -- Table: sites
@@ -69,11 +70,47 @@ CREATE TABLE IF NOT EXISTS attendance (
     longitude NUMERIC,
     status TEXT,
     "totalHours" NUMERIC,
-    "transportPrice" NUMERIC
+    "transportPrice" NUMERIC,
+    "daily_rate" NUMERIC DEFAULT 0,
+    "extra_day_amount" NUMERIC DEFAULT 0,
+    "overtime_amount" NUMERIC DEFAULT 0,
+    "allowance_amount" NUMERIC DEFAULT 0
 );
 
 -- Table: settings
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT
+);
+
+-- Table: holidays
+CREATE TABLE IF NOT EXISTS holidays (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    date DATE UNIQUE NOT NULL,
+    type TEXT NOT NULL,
+    name TEXT
+);
+
+-- Table: allowance_requests
+CREATE TABLE IF NOT EXISTS allowance_requests (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    "employeeId" TEXT REFERENCES employees(id) ON DELETE CASCADE,
+    date DATE NOT NULL,
+    "extraAmount" NUMERIC DEFAULT 0,
+    note TEXT,
+    latitude NUMERIC,
+    longitude NUMERIC,
+    status TEXT DEFAULT 'pending',
+    "createdAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Table: locations
+CREATE TABLE IF NOT EXISTS locations (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL,
+    latitude NUMERIC NOT NULL,
+    longitude NUMERIC NOT NULL,
+    radius NUMERIC DEFAULT 100,
+    "transportPrice" NUMERIC DEFAULT 0,
+    UNIQUE(latitude, longitude)
 );
