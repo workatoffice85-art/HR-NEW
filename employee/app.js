@@ -19,8 +19,13 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function showSection(id) {
-    document.querySelectorAll('.glass-card').forEach(el => el.classList.add('hidden'));
-    document.getElementById(id).classList.remove('hidden');
+    const sections = ['loginSection', 'otpSection', 'verifyOTPSection', 'registrationSection', 'dashboardSection', 'myReportsSection'];
+    sections.forEach(s => {
+        const el = document.getElementById(s);
+        if (el) el.classList.add('hidden');
+    });
+    const target = document.getElementById(id);
+    if (target) target.classList.remove('hidden');
 }
 
 function checkSession() {
