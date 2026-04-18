@@ -246,11 +246,7 @@ function processAttendanceStatus(data) {
     if (data && data.length > 0) {
         const lastRecord = data[data.length - 1];
         const isCheckedIn = (lastRecord.checkIn && !lastRecord.checkOut);
-        
-        const checkInDate = new Date(lastRecord.checkIn).toDateString();
-        const today = new Date().toDateString();
-
-        if (isCheckedIn && checkInDate === today) {
+        if (isCheckedIn) {
             setAppState('in', lastRecord.checkIn);
         } else {
             setAppState('out');
@@ -268,11 +264,7 @@ async function checkCurrentStatus() {
             const lastRecord = result.data[result.data.length - 1];
             const isCheckedIn = (lastRecord.checkIn && !lastRecord.checkOut);
             
-            // Check if check-in was today (to avoid keeping old open sessions from yesterday)
-            const checkInDate = new Date(lastRecord.checkIn).toDateString();
-            const today = new Date().toDateString();
-
-            if (isCheckedIn && checkInDate === today) {
+            if (isCheckedIn) {
                 setAppState('in', lastRecord.checkIn);
             } else {
                 setAppState('out');
@@ -282,7 +274,7 @@ async function checkCurrentStatus() {
         }
     } catch(e) {
         console.error("Status check failed", e);
-        setAppState('out'); // Fallback to check-in
+        setAppState('out'); 
     }
 }
 
@@ -564,13 +556,29 @@ async function submitSiteRequest() {
 
 // ------ ALLOWANCE REQUEST LOGIC ------ //
 function openAllowanceModal() {
-    document.getElementById('allowanceRequestModal').classList.remove('hidden');
-    document.getElementById('allowanceDate').value = new Date().toISOString().split('T')[0];
-    fetchEligibleSites(); // trigger initial check
+    try {
+        const modal = document.getElementById('allowanceRequestModal');
+        const dateInput = document.getElementById('allowanceDate');
+        if (modal) {
+            modal.classList.remove('hidden');
+            modal.style.display = 'flex'; // Ensure it shows even with inline flex
+        }
+        if (dateInput) {
+            dateInput.value = new Date().toISOString().split('T')[0];
+        }
+        fetchEligibleSites(); 
+    } catch (e) {
+        console.error("Error opening allowance modal", e);
+        alert("حدث خطأ أثناء فتح النافذة");
+    }
 }
 
 function closeAllowanceModal() {
-    document.getElementById('allowanceRequestModal').classList.add('hidden');
+    const modal = document.getElementById('allowanceRequestModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.style.display = 'none';
+    }
 }
 
 async function fetchEligibleSites() {
