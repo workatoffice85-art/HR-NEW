@@ -70,6 +70,8 @@
             <a class="nav-link" onclick="showTab('employees')">إدارة الموظفين</a>
             <a class="nav-link" onclick="showTab('sites')">إدارة المواقع</a>
             <a class="nav-link" onclick="showTab('siteRequests')">طلبات تسجيل المواقع 📍</a>
+            <a class="nav-link" onclick="showTab('allowanceRequests')">طلبات البدلات الإضافية 💰</a>
+            <a class="nav-link" onclick="showTab('holidays')">العطلات الرسمية 📅</a>
             <a class="nav-link" onclick="showTab('settings')">الإعدادات ⚙️</a>
             <a class="nav-link" onclick="logout()" style="color:var(--danger); margin-top:50px;">تسجيل خروج</a>
         </div>
@@ -95,7 +97,8 @@
                                 <th>الموقع</th>
                                 <th>وقت الحضور</th>
                                 <th>وقت الانصراف</th>
-                                <th>بدل الانتقال</th>
+                                <th>إجمالي المستحق</th>
+                                <th>الملاحظات</th>
                                 <th>الحالة</th>
                             </tr>
                         </thead>
@@ -137,10 +140,10 @@
                                 <th>ID الموظف</th>
                                 <th>اسم الموظف</th>
                                 <th>أيام الحضور</th>
-                                 <th>أيام الغياب</th>
+                                <th>أيام الغياب</th>
                                 <th>التأخير</th>
                                 <th>العمل الإضافي</th>
-                                <th>بدل الانتقال</th>
+                                <th>إجمالي المستحق</th>
                             </tr>
                         </thead>
                         <tbody id="reportsTableBody"></tbody>
@@ -195,11 +198,13 @@
                                 <th>وقت الانصراف</th>
                                 <th>الحالة</th>
                                 <th>البدل</th>
+                                <th>الإضافي</th>
+                                <th>الملاحظات</th>
                             </tr>
                         </thead>
                         <tbody id="employeeDetailTableBody">
                             <tr>
-                                <td colspan="7" class="employee-report-empty">لا توجد بيانات معروضة بعد.</td>
+                                <td colspan="8" class="employee-report-empty">لا توجد بيانات معروضة بعد.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -273,7 +278,7 @@
                                 <th>الموظف</th>
                                 <th>اسم الموقع المقترح</th>
                                 <th>رابط الخريطة</th>
-                                <th>ملاحظة الانتقالات</th>
+                                <th>ملاحظة الموظف</th>
                                 <th>مرفق</th>
                                 <th>الإحداثيات (Lat, Lng)</th>
                                 <th>التاريخ</th>
@@ -282,6 +287,55 @@
                             </tr>
                         </thead>
                         <tbody id="siteRequestsTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Allowance Requests Tab -->
+            <div id="tab-allowanceRequests" class="tab-content hidden">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                    <h2>طلبات البدلات الإضافية (تغطية مصاريف)</h2>
+                    <div style="display:flex; gap:10px;">
+                        <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="refreshData()">تحديث مجمع 🔄</button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>الموظف</th>
+                                <th>الموقع المتواجد به</th>
+                                <th>المبلغ المطلوب</th>
+                                <th>السبب / الملاحظة</th>
+                                <th>تاريخ الطلب</th>
+                                <th>الحالة</th>
+                                <th>الإجراءات</th>
+                            </tr>
+                        </thead>
+                        <tbody id="allowanceRequestsTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Holidays Tab -->
+            <div id="tab-holidays" class="tab-content hidden">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                    <h2>إدارة العطلات الرسمية والمناسبات</h2>
+                    <button class="btn-primary" style="width:auto; background:var(--secondary);" onclick="openHolidayModal()">+ إضافة عطلة رسمية</button>
+                </div>
+                <div class="glass-card" style="margin-bottom:20px; padding:15px; border: 1px dashed var(--primary);">
+                    <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom:0;">📌 أي يوم يتم تسجيله هنا سيُعتبر يوم "عمل إضافي" تلقائياً لجميع الموظفين الذين يسجلون حضوراً فيه (حتى لو كان يوماً عادياً في الأسبوع).</p>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>التاريخ</th>
+                                <th>المناسبة / الوصف</th>
+                                <th>الإجراءات</th>
+                            </tr>
+                        </thead>
+                        <tbody id="holidaysTableBody"></tbody>
                     </table>
                 </div>
             </div>
@@ -374,6 +428,11 @@
                     <input type="number" id="empTransportPrice" value="0">
                     <small style="color: var(--text-muted);">يستخدم كخيار احتياطي فقط في حال عدم تحديد سعر للموقع أعلاه.</small>
                 </div>
+                <div class="input-group">
+                    <label>المرتب الشهري (ج.م) [لحساب الإضافي]</label>
+                    <input type="number" id="empSalary" value="0">
+                    <small style="color: var(--text-muted);">الأجر اليومي = المرتب / 30.</small>
+                </div>
             </div>
             
             <div style="display:flex; gap:10px;">
@@ -438,6 +497,24 @@
             <div style="display:flex; gap:10px; margin-top:10px;">
                 <button class="btn-primary" onclick="saveSite()">حفظ الموقع</button>
                 <button class="btn-danger" style="background:transparent; border:1px solid var(--danger);" onclick="closeSiteModal()">إلغاء</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="holidayModal" class="modal hidden">
+        <div class="modal-content">
+            <h3 style="margin-bottom:15px;">إضافة عطلة رسمية جديدة</h3>
+            <div class="input-group">
+                <label>تاريخ العطلة</label>
+                <input type="date" id="holidayDate">
+            </div>
+            <div class="input-group">
+                <label>اسم المناسبة / السبب</label>
+                <input type="text" id="holidayName" placeholder="مثال: عيد الميلاد، عطلة رسمية طارئة...">
+            </div>
+            <div style="display:flex; gap:10px;">
+                <button class="btn-primary" onclick="saveHoliday()">حفظ العطلة</button>
+                <button class="btn-danger" style="background:transparent; border:1px solid var(--danger);" onclick="closeHolidayModal()">إلغاء</button>
             </div>
         </div>
     </div>

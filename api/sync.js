@@ -154,7 +154,12 @@ function buildAttendancePayload(rawAttendance) {
         latitude: toNullableNumber(rawAttendance.latitude),
         longitude: toNullableNumber(rawAttendance.longitude),
         status: normalizeString(rawAttendance.status) || 'present',
-        transportPrice: toSafeNumber(rawAttendance.transportPrice, 0)
+        transportPrice: toSafeNumber(rawAttendance.transportPrice, 0),
+        note: normalizeString(rawAttendance.note),
+        overtimeAmount: toSafeNumber(rawAttendance.overtimeAmount, 0),
+        requestedExtraAmount: toSafeNumber(rawAttendance.requestedExtraAmount, 0),
+        extraAmountReason: normalizeString(rawAttendance.extraAmountReason),
+        extraAmountStatus: normalizeString(rawAttendance.extraAmountStatus) || 'none'
     };
 }
 
