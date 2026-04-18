@@ -231,7 +231,7 @@ export default async function handler(req, res) {
         if (action === "getDashboardData") {
             const [empRes, siteRes, attRes, reqRes, setRes, allRes] = await Promise.all([
                 supabase.from('employees').select('*'),
-                supabase.from('sites').select('*').eq('isTemporary', false),
+                supabase.from('sites').select('*'),
                 supabase.from('attendance').select('*'),
                 supabase.from('siteRequests').select('*'),
                 supabase.from('settings').select('*'),
@@ -618,21 +618,20 @@ export default async function handler(req, res) {
                 .eq('id', id);
             if (errReq) throw errReq;
 
-            // 2. If permanent, add to sites table
-            if (mode === 'permanent' || mode === 'always') {
-                const sitePayload = {
-                    id: String(Math.floor(10000 + Math.random() * 90000)),
-                    name: name || reqData.suggestedName,
-                    latitude: reqData.latitude,
-                    longitude: reqData.longitude,
-                    radius: radius || 100,
-                    transportPrice: transportPrice || 120,
-                    mapLink: mapLink || reqData.mapLink,
-                    isTemporary: false
-                };
-                const { error: errSite } = await supabase.from('sites').insert([sitePayload]);
-                if (errSite) throw errSite;
-            }
+            // 2. Add to sites table (always, but mark if temporary)
+            const isTemp = (mode === 'daily' || mode === 'today');
+            const sitePayload = {
+                id: String(Math.floor(10000 + Math.random() * 90000)),
+                name: name || reqData.suggestedName,
+                latitude: reqData.latitude,
+                longitude: reqData.longitude,
+                radius: radius || 100,
+                transportPrice: transportPrice || 120,
+                mapLink: mapLink || reqData.mapLink,
+                isTemporary: isTemp
+            };
+            const { error: errSite } = await supabase.from('sites').insert([sitePayload]);
+            if (errSite) throw errSite;
             
             return res.status(200).json({ success: true, message: "تمت الموافقة على الطلب بنجاح" });
         }
