@@ -562,6 +562,96 @@ async function submitSiteRequest() {
     document.getElementById('loader').classList.add('hidden');
 }
 
+// ------ ALLOWANCE REQUEST LOGIC ------ //
+function openAllowanceModal() {
+    document.getElementById('allowanceRequestModal').classList.remove('hidden');
+    document.getElementById('allowanceDate').value = new Date().toISOString().split('T')[0];
+    fetchEligibleSites(); // trigger initial check
+}
+
+function closeAllowanceModal() {
+    document.getElementById('allowanceRequestModal').classList.add('hidden');
+}
+
+async function fetchEligibleSites() {
+    const date = document.getElementById('allowanceDate').value;
+    const select = document.getElementById('allowanceSiteSelect');
+    const container = document.getElementById('eligibleSitesContainer');
+    
+    if (!date) return;
+
+    try {
+        const res = await fetch(`${API_URL}?action=getEligibleAttendance&employeeId=${currentUser.id}&date=${date}`);
+        const result = await res.json();
+        
+        select.innerHTML = '';
+        if (result.success && result.data.length > 0) {
+            result.data.forEach(att => {
+                const time = new Date(att.checkIn).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'});
+                const option = document.createElement('option');
+                option.value = att.id;
+                option.dataset.siteId = att.siteId;
+                option.dataset.siteName = att.siteName;
+                option.innerText = `${att.siteName} (بصمة الساعة ${time})`;
+                select.appendChild(option);
+            });
+            container.classList.remove('hidden');
+        } else {
+            const option = document.createElement('option');
+            option.value = "";
+            option.innerText = "لا يوجد سجل حضور لهذا اليوم";
+            select.appendChild(option);
+            container.classList.remove('hidden');
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function submitAllowanceRequest() {
+    const date = document.getElementById('allowanceDate').value;
+    const attId = document.getElementById('allowanceSiteSelect').value;
+    const amount = document.getElementById('allowanceExtraAmount').value;
+    const note = document.getElementById('allowanceNote').value;
+
+    if (!attId) return alert("يجب اختيار يوم به سجل حضور");
+    if (!amount || parseFloat(amount) <= 0) return alert("يرجى إدخال مبلغ صحيح");
+
+    const selectedOption = document.getElementById('allowanceSiteSelect').selectedOptions[0];
+    
+    const payload = {
+        action: 'addAllowanceRequest',
+        employeeId: currentUser.id,
+        employeeName: currentUser.name,
+        attendanceId: attId,
+        siteId: selectedOption.dataset.siteId,
+        siteName: selectedOption.dataset.siteName,
+        requestDate: date,
+        amount: amount,
+        note: note
+    };
+
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+        if (result.success) {
+            alert(result.message);
+            closeAllowanceModal();
+        } else {
+            alert("خطأ: " + result.message);
+        }
+    } catch (e) {
+        console.error(e);
+        alert("فشل الاتصال بالسيرفر");
+    }
+    document.getElementById('loader').classList.add('hidden');
+}
+
 // ------ MY REPORTS SYSTEM ------ //
 function showMyReports() {
     showSection('myReportsSection');

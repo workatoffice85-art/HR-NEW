@@ -5,6 +5,7 @@ let allAttendanceData = [];
 let allEmployees = [];
 let allSites = [];
 let allSiteRequests = [];
+let allAllowanceRequests = [];
 let appSettings = {};
 let latesChartInstance = null;
 let parseMapLinkTimer = null;
@@ -99,6 +100,7 @@ function showTab(tabName) {
     if (tabName === 'employees') fetchEmployees();
     if (tabName === 'sites') fetchSites();
     if (tabName === 'siteRequests') fetchSiteRequests();
+    if (tabName === 'allowanceRequests') fetchAllowanceRequests();
     if (tabName === 'reports') generateReport();
     if (tabName === 'employeeDetails') initEmployeeDetailedTab();
     if (tabName === 'settings') fetchSettings();
@@ -123,6 +125,7 @@ async function initDashboard(forceRefresh = false) {
             allEmployees = result.employees || [];
             allSites = result.sites || [];
             allSiteRequests = result.siteRequests || [];
+            allAllowanceRequests = result.allowanceRequests || [];
             appSettings = result.settings || {};
             
             isInitialDataLoaded = true;
@@ -142,6 +145,7 @@ function renderActiveTab(tabName) {
     if (tabName === 'employees') renderEmployeesTable(allEmployees);
     if (tabName === 'sites') renderSitesTable(allSites);
     if (tabName === 'siteRequests') renderRequestsTable(allSiteRequests);
+    if (tabName === 'allowanceRequests') renderAllowanceRequestsTable(allAllowanceRequests);
     if (tabName === 'settings') renderSettings(appSettings);
 }
 
@@ -1322,5 +1326,97 @@ async function clearProcessedRequests() {
             await initDashboard(true); // Refresh all data to sync
         } else alert("خطأ: " + result.message);
     } catch(e) { console.error(e); alert("خطأ في الاتصال"); }
+    document.getElementById('loader').classList.add('hidden');
+}
+
+// ------ ALLOWANCE UPGRADE SYSTEM ------ //
+async function fetchAllowanceRequests(force = false) {
+    if (!force && typeof allAllowanceRequests !== 'undefined' && allAllowanceRequests.length > 0) {
+        renderAllowanceRequestsTable(allAllowanceRequests);
+        return;
+    }
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(`${API_URL}?action=getAllowanceRequests`);
+        const result = await res.json();
+        if (result.success) {
+            allAllowanceRequests = result.data || [];
+            renderAllowanceRequestsTable(allAllowanceRequests);
+        }
+    } catch (e) { console.error(e); }
+    document.getElementById('loader').classList.add('hidden');
+}
+
+function renderAllowanceRequestsTable(data) {
+    const tbody = document.getElementById('allowanceRequestsTableBody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    [...data].forEach(req => {
+        let statusText = 'قيد الانتظار';
+        let statusColor = 'var(--warning)';
+        let actions = `
+            <button class="btn-primary" style="padding:5px 10px; font-size:0.8rem; width:auto; background:#22c55e;" onclick="handleAllowanceUpgrade('${req.id}', 'approved')">موافقة</button>
+            <button class="btn-danger" style="padding:5px 10px; font-size:0.8rem; width:auto; background:transparent; border:1px solid var(--danger); color:var(--danger);" onclick="handleAllowanceUpgrade('${req.id}', 'rejected')">رفض</button>
+        `;
+
+        if (req.status === 'approved') {
+            statusText = 'تمت الموافقة ✓';
+            statusColor = 'var(--secondary)';
+            actions = '<span style="color:var(--text-muted); font-size:0.8rem;">تمت المعالجة</span>';
+        } else if (req.status === 'rejected') {
+            statusText = 'مرفوض ❌';
+            statusColor = 'var(--danger)';
+            actions = '<span style="color:var(--text-muted); font-size:0.8rem;">تمت المعالجة</span>';
+        }
+
+        const createdAt = new Date(req.createdAt).toLocaleString('ar-EG');
+
+        tbody.innerHTML += `
+            <tr>
+                <td data-label="الموظف">${req.employeeName}</td>
+                <td data-label="اليوم">${req.requestDate}</td>
+                <td data-label="الموقع">${req.siteName}</td>
+                <td data-label="المبلغ">${req.amount} ج.م</td>
+                <td data-label="الملاحظة">${req.note || '-'}</td>
+                <td data-label="التاريخ">${createdAt}</td>
+                <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
+                <td data-label="الإجراءات" style="display:flex; gap:5px;">${actions}</td>
+            </tr>
+        `;
+    });
+}
+
+async function handleAllowanceUpgrade(requestId, status) {
+    const note = prompt(status === 'approved' ? "ملاحظة الموافقة (اختياري):" : "سبب الرفض:");
+    if (status === 'rejected' && note === null) return;
+
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const payload = {
+            action: 'handleAllowanceRequest',
+            requestId: requestId,
+            status: status,
+            adminId: hrSession.id,
+            adminName: hrSession.name,
+            adminNote: note || ''
+        };
+
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+        if (result.success) {
+            alert(result.message);
+            fetchAllowanceRequests(true);
+        } else {
+            alert("خطأ: " + result.message);
+        }
+    } catch (e) {
+        console.error(e);
+        alert("فشل الاتصال بالسيرفر");
+    }
     document.getElementById('loader').classList.add('hidden');
 }

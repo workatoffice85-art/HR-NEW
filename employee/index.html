@@ -235,8 +235,14 @@
             </div>
 
             <!-- Request Site Button (Hidden by default) -->
+            <button id="btnAllowanceRequest" class="btn-primary"
+                style="margin-top:10px; background:#8b5cf6;" onclick="openAllowanceModal()">
+                💰 طلب زيادة بدلات
+            </button>
+
+            <!-- Request Site Button (Hidden by default, shown when outside range) -->
             <button id="btnRequestSite" class="btn-primary hidden"
-                style="margin-top:15px; background:var(--warning); color:#000;" onclick="openRequestModal()">
+                style="margin-top:10px; background:var(--warning); color:#000;" onclick="openRequestModal()">
                 📍 طلب تسجيل هذا الموقع كفرع عمل
             </button>
 
@@ -245,6 +251,36 @@
             <button class="btn-primary"
                 style="margin-top:10px; background:transparent; border:1px solid rgba(255,255,255,0.2)"
                 onclick="logout()">تسجيل خروج</button>
+        </div>
+
+        <div id="allowanceRequestModal" class="modal hidden"
+            style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); display:flex; align-items:center; justify-content:center; z-index:1000;">
+            <div class="glass-card" style="width:90%; max-width:400px; padding:25px;">
+                <h3 style="margin-bottom:15px;">طلب زيادة بدلات</h3>
+                <div class="input-group">
+                    <label>اختر اليوم</label>
+                    <input type="date" id="allowanceDate" onchange="fetchEligibleSites()">
+                </div>
+                <div id="eligibleSitesContainer" class="input-group hidden">
+                    <label>الموقع (يتم التحديد تلقائياً)</label>
+                    <select id="allowanceSiteSelect">
+                        <option value="">اختر اليوم أولاً</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label>المبلغ الإضافي المطلوب (ج.م)</label>
+                    <input type="number" id="allowanceExtraAmount" placeholder="0">
+                </div>
+                <div class="input-group">
+                    <label>ملاحظة</label>
+                    <textarea id="allowanceNote" placeholder="سبب الطلب..." rows="3"></textarea>
+                </div>
+                <div style="display:flex; gap:10px;">
+                    <button class="btn-primary" style="background:#8b5cf6;" onclick="submitAllowanceRequest()">إرسال الطلب</button>
+                    <button class="btn-danger" style="background:transparent; border:1px solid var(--danger);"
+                        onclick="closeAllowanceModal()">إلغاء</button>
+                </div>
+            </div>
         </div>
 
         <div id="requestSiteModal" class="modal hidden"

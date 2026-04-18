@@ -77,3 +77,30 @@ CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT
 );
+
+-- Table: allowanceRequests
+CREATE TABLE IF NOT EXISTS "allowanceRequests" (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    "employeeId" TEXT REFERENCES employees(id) ON DELETE CASCADE,
+    "employeeName" TEXT,
+    "siteId" TEXT,
+    "siteName" TEXT,
+    "attendanceId" UUID REFERENCES attendance(id) ON DELETE CASCADE,
+    "requestDate" TEXT NOT NULL,
+    "amount" NUMERIC NOT NULL,
+    "note" TEXT,
+    "status" TEXT DEFAULT 'pending',
+    "adminNote" TEXT,
+    "createdAt" TEXT
+);
+
+-- Table: approvalLogs
+CREATE TABLE IF NOT EXISTS "approvalLogs" (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    "requestId" UUID REFERENCES "allowanceRequests"(id) ON DELETE CASCADE,
+    "adminId" TEXT,
+    "adminName" TEXT,
+    "action" TEXT,
+    "details" TEXT,
+    "timestamp" TEXT
+);

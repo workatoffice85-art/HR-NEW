@@ -121,7 +121,13 @@ export default async function handler(req, res) {
 
         // DUAL WRITING / BACKUP SYNC:
         // For writing actions, we asynchronously broadcast the exact request to your existing Google Apps Script
-        const writeActions = ["saveEmployee", "updateEmployee", "deleteEmployee", "saveSite", "updateSite", "deleteSite", "addSiteRequest", "approveSiteRequest", "rejectSiteRequest", "addAttendance", "checkoutAttendance", "updateSettings"];
+        const writeActions = [
+            "saveEmployee", "updateEmployee", "deleteEmployee", 
+            "saveSite", "updateSite", "deleteSite", 
+            "addSiteRequest", "approveSiteRequest", "rejectSiteRequest", 
+            "addAttendance", "checkoutAttendance", "updateSettings",
+            "addAllowanceRequest", "handleAllowanceRequest"
+        ];
         if (writeActions.includes(action)) {
             syncToGoogleSheet(data);
         }
@@ -635,6 +641,107 @@ export default async function handler(req, res) {
             const { error } = await supabase.from('siteRequests').update({ status: 'rejected' }).eq('id', data.id);
             if (error) throw error;
             return res.status(200).json({ success: true, message: "تم رفض الطلب بنجاح" });
+        }
+
+        // --- ALLOWANCE UPGRADE SYSTEM ---
+        if (action === "getEligibleAttendance") {
+            const { employeeId, date } = data;
+            // date comes as YYYY-MM-DD
+            const { data: att, error } = await supabase
+                .from('attendance')
+                .select('*')
+                .eq('employeeId', employeeId)
+                .ilike('checkIn', `${date}%`);
+            
+            if (error) throw error;
+            return res.status(200).json({ success: true, data: att || [] });
+        }
+
+        if (action === "addAllowanceRequest") {
+            const payload = {
+                employeeId: data.employeeId,
+                employeeName: data.employeeName,
+                attendanceId: data.attendanceId,
+                siteId: data.siteId,
+                siteName: data.siteName,
+                requestDate: data.requestDate,
+                amount: parseFloat(data.amount),
+                note: data.note,
+                status: 'pending',
+                createdAt: new Date().toISOString()
+            };
+            const { error } = await supabase.from('allowanceRequests').insert([payload]);
+            if (error) throw error;
+            return res.status(200).json({ success: true, message: "تم إرسال طلب زيادة البدلات بنجاح" });
+        }
+
+        if (action === "getAllowanceRequests") {
+            let query = supabase.from('allowanceRequests').select('*');
+            if (data.employeeId) query = query.eq('employeeId', data.employeeId);
+            const { data: reqs, error } = await query.order('createdAt', { ascending: false });
+            if (error) throw error;
+            return res.status(200).json({ success: true, data: reqs || [] });
+        }
+
+        if (action === "handleAllowanceRequest") {
+            const { requestId, status, adminId, adminName, adminNote } = data;
+            
+            // 1. Fetch the request
+            const { data: reqData, error: errReq } = await supabase
+                .from('allowanceRequests')
+                .select('*')
+                .eq('id', requestId)
+                .single();
+            
+            if (errReq || !reqData) throw new Error("الطلب غير موجود");
+            if (reqData.status !== 'pending') throw new Error("تمت معالجة هذا الطلب مسبقاً");
+
+            if (status === 'approved') {
+                // 2. Fetch current attendance record
+                const { data: attData, error: errAtt } = await supabase
+                    .from('attendance')
+                    .select('transportPrice')
+                    .eq('id', reqData.attendanceId)
+                    .single();
+                
+                if (errAtt || !attData) throw new Error("سجل الحضور المرتبط بالطلب غير موجود");
+
+                const newPrice = parseFloat(attData.transportPrice || 0) + parseFloat(reqData.amount);
+
+                // 3. Update attendance
+                const { error: errUpdAtt } = await supabase
+                    .from('attendance')
+                    .update({ transportPrice: newPrice })
+                    .eq('id', reqData.attendanceId);
+                
+                if (errUpdAtt) throw errUpdAtt;
+            }
+
+            // 4. Update request status
+            const { error: errUpdReq } = await supabase
+                .from('allowanceRequests')
+                .update({ 
+                    status: status, 
+                    adminNote: adminNote || '' 
+                })
+                .eq('id', requestId);
+            
+            if (errUpdReq) throw errUpdReq;
+
+            // 5. Add Log
+            await supabase.from('approvalLogs').insert([{
+                requestId: requestId,
+                adminId: adminId,
+                adminName: adminName,
+                action: status,
+                details: adminNote || (status === 'approved' ? 'تمت الموافقة على الطلب' : 'تم رفض الطلب'),
+                timestamp: new Date().toISOString()
+            }]);
+
+            return res.status(200).json({ 
+                success: true, 
+                message: status === 'approved' ? "تمت الموافقة وتحديث البدلات بنجاح" : "تم رفض الطلب" 
+            });
         }
 
         // --- SETTINGS ---
