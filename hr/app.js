@@ -38,6 +38,29 @@ async function callApi(payload, method = 'POST') {
     return await response.json();
 }
 
+async function callApi(payload, method = 'POST') {
+    const headers = { 
+        'Content-Type': 'text/plain' 
+    };
+    const token = localStorage.getItem('hrToken');
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    let url = API_URL;
+    let fetchOptions = { method: method, headers: headers };
+
+    if (method === 'GET') {
+        const params = new URLSearchParams(payload).toString();
+        url = `${API_URL}?${params}`;
+    } else {
+        fetchOptions.body = JSON.stringify(payload);
+    }
+
+    const response = await fetch(url, fetchOptions);
+    return await response.json();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     // Set default dates
     const now = new Date();
@@ -79,12 +102,16 @@ async function loginHR() {
 
     try {
 <<<<<<< HEAD
+<<<<<<< HEAD
         const response = await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify({ action: 'login', identifier: email, password: pass, role: 'hr' }),
             headers: { 'Content-Type': 'application/json' }
         });
         const result = await response.json();
+=======
+        const result = await callApi({ action: 'login', identifier: email, password: pass, role: 'hr' });
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
 =======
         const result = await callApi({ action: 'login', identifier: email, password: pass, role: 'hr' });
 >>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
@@ -151,10 +178,14 @@ async function initDashboard(forceRefresh = false) {
     const token = localStorage.getItem('hrToken');
     try {
 <<<<<<< HEAD
+<<<<<<< HEAD
         const res = await fetch(`${API_URL}?action=getDashboardData`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const result = await res.json();
+=======
+        const result = await callApi({ action: 'getDashboardData' }, 'GET');
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
 =======
         const result = await callApi({ action: 'getDashboardData' }, 'GET');
 >>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
@@ -198,10 +229,14 @@ async function fetchAttendance(page = 0) {
     const token = localStorage.getItem('hrToken');
     try {
 <<<<<<< HEAD
+<<<<<<< HEAD
         const res = await fetch(`${API_URL}?action=getAttendance&limit=${attendanceLimit}&offset=${offset}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const result = await res.json();
+=======
+        const result = await callApi({ action: 'getAttendance' }, 'GET');
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
 =======
         const result = await callApi({ action: 'getAttendance' }, 'GET');
 >>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
@@ -259,8 +294,11 @@ function renderAttendanceTable(data) {
     }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     filtered.forEach(record => {
 =======
+=======
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
     [...filtered].reverse().forEach(record => {
 >>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
         const cInObj = new Date(record.checkIn);
@@ -272,6 +310,7 @@ function renderAttendanceTable(data) {
             checkOutTime = !isNaN(cOutObj) ? cOutObj.toLocaleString('ar-EG') : (record.checkOut || '-');
         }
         
+<<<<<<< HEAD
 <<<<<<< HEAD
         let statusText = 'حاضر';
         let statusColor = 'var(--secondary)';
@@ -298,6 +337,8 @@ function renderAttendanceTable(data) {
         
         tbody.appendChild(row);
 =======
+=======
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
         const statusMeta = getStatusMeta(record.status);
         const extra = (record.extraAmountStatus === 'approved') ? parseFloat(record.requestedExtraAmount || 0) : 0;
         const totalPayable = (parseFloat(record.transportPrice || 0) + parseFloat(record.overtimeAmount || 0) + extra).toFixed(2);
@@ -507,6 +548,7 @@ async function generateEmployeeDetailedReport() {
         }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
         const statusMeta = getStatusMeta(record.status);
         const statusSpan = document.createElement('span');
         statusSpan.style.color = statusMeta.color;
@@ -531,6 +573,8 @@ async function generateEmployeeDetailedReport() {
         row.querySelectorAll('td').forEach((td, i) => td.setAttribute('data-label', labels[i]));
         tbody.appendChild(row);
 =======
+=======
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
         const otAmount = parseFloat(record.overtimeAmount || 0);
         
         tbody.innerHTML += `
@@ -803,10 +847,14 @@ async function fetchEmployees(force = false) {
     const token = localStorage.getItem('hrToken');
     try {
 <<<<<<< HEAD
+<<<<<<< HEAD
         const res = await fetch(`${API_URL}?action=getEmployees`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const result = await res.json();
+=======
+        const result = await callApi({ action: 'getEmployees' }, 'GET');
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
 =======
         const result = await callApi({ action: 'getEmployees' }, 'GET');
 >>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
@@ -874,10 +922,14 @@ async function fetchSites(force = false) {
     const token = localStorage.getItem('hrToken');
     try {
 <<<<<<< HEAD
+<<<<<<< HEAD
         const res = await fetch(`${API_URL}?action=getSites`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const result = await res.json();
+=======
+        const result = await callApi({ action: 'getSites' }, 'GET');
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
 =======
         const result = await callApi({ action: 'getSites' }, 'GET');
 >>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
@@ -943,6 +995,7 @@ async function deleteEntity(action, id, name) {
     setLoading(document.body, true);
     try {
 <<<<<<< HEAD
+<<<<<<< HEAD
         const res = await fetch(API_URL, { 
             method: 'POST', 
             body: JSON.stringify({ action, id }), 
@@ -952,6 +1005,9 @@ async function deleteEntity(action, id, name) {
             } 
         });
         const result = await res.json();
+=======
+        const result = await callApi({ action, id });
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
 =======
         const result = await callApi({ action, id });
 >>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
@@ -1096,6 +1152,7 @@ async function saveEmployee() {
     setLoading(btn, true);
     try {
 <<<<<<< HEAD
+<<<<<<< HEAD
         const res = await fetch(API_URL, { 
             method: 'POST', 
             body: JSON.stringify(payload), 
@@ -1105,6 +1162,9 @@ async function saveEmployee() {
             } 
         });
         const result = await res.json();
+=======
+        const result = await callApi(payload);
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
 =======
         const result = await callApi(payload);
 >>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
@@ -1286,6 +1346,7 @@ async function saveSite() {
     setLoading(btn, true);
     try {
 <<<<<<< HEAD
+<<<<<<< HEAD
         const res = await fetch(API_URL, { 
             method: 'POST', 
             body: JSON.stringify(payload), 
@@ -1295,6 +1356,9 @@ async function saveSite() {
             } 
         });
         const result = await res.json();
+=======
+        const result = await callApi(payload);
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
 =======
         const result = await callApi(payload);
 >>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
@@ -1376,6 +1440,7 @@ async function saveSettings() {
         };
 
 <<<<<<< HEAD
+<<<<<<< HEAD
         const token = localStorage.getItem('hrToken');
         const res = await fetch(API_URL, {
             method: 'POST',
@@ -1386,6 +1451,9 @@ async function saveSettings() {
             }
         });
         const result = await res.json();
+=======
+        const result = await callApi(payload);
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
 =======
         const result = await callApi(payload);
 >>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
@@ -1610,6 +1678,7 @@ async function confirmApproval(mode) {
     const radius = document.getElementById('approveRadius').value;
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     setLoading('approveRequestModal', true);
     const token = localStorage.getItem('hrToken');
     try {
@@ -1633,6 +1702,13 @@ async function confirmApproval(mode) {
 
     document.getElementById('loader').classList.remove('hidden');
     try {
+=======
+    const matchedRequest = allSiteRequests.find(req => String(req.id) === String(id));
+    const mapLink = matchedRequest ? matchedRequest.mapLink : '';
+
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
         const result = await callApi({ 
             action: 'approveSiteRequest', 
             id: id, 
@@ -1641,6 +1717,9 @@ async function confirmApproval(mode) {
             radius: radius,
             mode: mode,
             mapLink: mapLink
+<<<<<<< HEAD
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
+=======
 >>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
         });
         if(result.success) {
@@ -1659,6 +1738,7 @@ async function rejectRequest(id) {
     setLoading(document.body, true);
     try {
 <<<<<<< HEAD
+<<<<<<< HEAD
         const res = await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify({ action: 'rejectSiteRequest', id: id }),
@@ -1668,6 +1748,9 @@ async function rejectRequest(id) {
             }
         });
         const result = await res.json();
+=======
+        const result = await callApi({ action: 'rejectSiteRequest', id: id });
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
 =======
         const result = await callApi({ action: 'rejectSiteRequest', id: id });
 >>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
@@ -1704,6 +1787,143 @@ async function clearProcessedRequests() {
         } else showToast("خطأ: " + result.message, "error");
     } catch(e) { showToast("خطأ في الاتصال", "error"); }
     setLoading(document.body, false);
+}
+async function fetchHolidays() {
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const result = await callApi({ action: 'getHolidays' }, 'GET');
+        if(result.success) {
+            allHolidays = result.data || [];
+            renderHolidaysTable(allHolidays);
+        }
+    } catch(e) { console.error(e); }
+    document.getElementById('loader').classList.add('hidden');
+}
+
+function renderHolidaysTable(data) {
+    const tbody = document.getElementById('holidaysTableBody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    [...data].forEach(h => {
+        tbody.innerHTML += `
+            <tr>
+                <td>${h.date}</td>
+                <td>${h.name}</td>
+                <td>
+                    <button class="btn-danger" style="padding:5px 10px; width:auto;" onclick="deleteHoliday('${h.id}', '${h.date}')">حذف 🗑️</button>
+                </td>
+            </tr>
+        `;
+    });
+}
+
+function openHolidayModal() {
+    document.getElementById('holidayDate').value = '';
+    document.getElementById('holidayName').value = '';
+    document.getElementById('holidayModal').classList.remove('hidden');
+}
+
+function closeHolidayModal() {
+    document.getElementById('holidayModal').classList.add('hidden');
+}
+
+async function saveHoliday() {
+    const date = document.getElementById('holidayDate').value;
+    const name = document.getElementById('holidayName').value.trim();
+    if (!date || !name) return alert("يرجى اختيار التاريخ والاسم");
+
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const result = await callApi({ action: 'addHoliday', date, name });
+        if(result.success) {
+            closeHolidayModal();
+            fetchHolidays();
+        } else alert("خطأ: " + result.message);
+    } catch(e) { alert("خطأ في الاتصال"); }
+    document.getElementById('loader').classList.add('hidden');
+}
+
+async function deleteHoliday(id, date) {
+    if(!confirm(`هل أنت متأكد من حذف العطلة الخاصة بيوم ${date}؟`)) return;
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+<<<<<<< HEAD
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'deleteHoliday', id, date }),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+        if(result.success) fetchHolidays();
+        else alert("خطأ: " + result.message);
+    } catch(e) { alert("خطأ في الاتصال"); }
+    document.getElementById('loader').classList.add('hidden');
+}
+
+// ------ EXTRA ALLOWANCE MGMT ------
+function renderAllowanceRequestsTable(data) {
+    const tbody = document.getElementById('allowanceRequestsTableBody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    
+    // Sort by checking so newest are first
+    const pending = data.filter(a => a.extraAmountStatus === 'pending');
+    
+    if (pending.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px; color:var(--text-muted);">لا توجد طلبات معلقة حالياً</td></tr>';
+        return;
+    }
+
+    [...pending].reverse().forEach(req => {
+        const dateObj = new Date(req.checkIn);
+        const dateStr = dateObj.toLocaleString('ar-EG');
+        
+        tbody.innerHTML += `
+            <tr>
+                <td data-label="الموظف">${req.employeeName}</td>
+                <td data-label="الموقع المتواجد به">${req.siteName}</td>
+                <td data-label="المبلغ المطلوب" style="font-weight:bold; color:var(--secondary);">${req.requestedExtraAmount} ج.م</td>
+                <td data-label="السبب / الملاحظة">${req.extraAmountReason || '-'}</td>
+                <td data-label="تاريخ الطلب">${dateStr}</td>
+                <td data-label="الحالة"><span style="color:var(--warning)">قيد الانتظار</span></td>
+                <td data-label="الإجراءات">
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn-primary" style="padding:5px 12px; font-size:0.85rem; width:auto; background:var(--secondary);" onclick="approveExtraAllowance('${req.id}')">موافقة ✓</button>
+                        <button class="btn-danger" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="rejectExtraAllowance('${req.id}')">رفض ✕</button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    });
+}
+
+async function approveExtraAllowance(id) {
+    if(!confirm("هل أنت متأكد من الموافقة على هذا المبلغ الإضافي؟")) return;
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const result = await callApi({ action: 'approveExtraAllowance', id: id });
+=======
+        const result = await callApi({ action: 'clearProcessedRequests' });
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
+        if(result.success) {
+            alert(result.message);
+            await initDashboard(true); // Refresh data
+        } else alert("خطأ: " + result.message);
+    } catch(e) { console.error(e); alert("خطأ في الاتصال"); }
+    document.getElementById('loader').classList.add('hidden');
+}
+
+async function rejectExtraAllowance(id) {
+    if(!confirm("هل أنت متأكد من رفض هذا الطلب؟")) return;
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const result = await callApi({ action: 'rejectExtraAllowance', id: id });
+        if(result.success) {
+            alert(result.message);
+            await initDashboard(true); // Refresh data
+        } else alert("خطأ: " + result.message);
+    } catch(e) { console.error(e); alert("خطأ في الاتصال"); }
+    document.getElementById('loader').classList.add('hidden');
 }
 async function fetchHolidays() {
     document.getElementById('loader').classList.remove('hidden');

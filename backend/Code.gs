@@ -793,7 +793,11 @@ function doGet(e) {
         employees: _getEmployeesData(ss),
         sites: _getSitesData(ss),
 <<<<<<< HEAD
+<<<<<<< HEAD
         attendance: _getAttendanceData(ss, null, since),
+=======
+        attendance: _getAttendanceData(ss, null, e.parameter.since),
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
 =======
         attendance: _getAttendanceData(ss, null, e.parameter.since),
 >>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
@@ -2077,7 +2081,11 @@ function _getSitesData(ss, employeeId) {
 
 function _getAttendanceData(ss, employeeId, since) {
 <<<<<<< HEAD
+<<<<<<< HEAD
   var s = getOrCreateSheet("attendance", ["employeeId","employeeName","siteId","siteName","checkIn","checkOut","latitude","longitude","status","totalHours","transportPrice"]);
+=======
+  var s = getOrCreateSheet("attendance", ["employeeId","employeeName","siteId","siteName","checkIn","checkOut","latitude","longitude","status","transportPrice"]);
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
 =======
   var s = getOrCreateSheet("attendance", ["employeeId","employeeName","siteId","siteName","checkIn","checkOut","latitude","longitude","status","transportPrice"]);
 >>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
@@ -2110,6 +2118,7 @@ function _getAttendanceData(ss, employeeId, since) {
     return true;
   });
 <<<<<<< HEAD
+<<<<<<< HEAD
   if (employeeId) records = records.filter(function(r) { return String(r.employeeId) === String(employeeId); });
   if (since) {
     var sinceTime = new Date(since).getTime();
@@ -2121,6 +2130,8 @@ function _getAttendanceData(ss, employeeId, since) {
       });
     }
   }
+=======
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
 =======
 >>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
   return records;

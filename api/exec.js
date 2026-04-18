@@ -18,6 +18,9 @@ import jwt from 'jsonwebtoken';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+<<<<<<< HEAD
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
+=======
 >>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
 const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwNhaRKDP-7M4dXSQend8RbYPkXRgs5nzN0-BmNzxEO8IkBN9lt6KDtJCdOqpovhJEY1Q/exec';
 const JWT_SECRET = process.env.JWT_SECRET || 'hr-system-secret-2026';
@@ -34,7 +37,10 @@ function getDistance(lat1, lon1, lat2, lon2) {
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
 function euclideanDistance(desc1, desc2) {
     if (!desc1 || !desc2 || desc1.length !== desc2.length) return Infinity;
     let sum = 0;
@@ -136,12 +142,15 @@ async function syncToGoogleSheet(body) {
 
 export default async function handler(req, res) {
 <<<<<<< HEAD
+<<<<<<< HEAD
     // CORS headers (Tightened)
     res.setHeader('Access-Control-Allow-Credentials', true);
     res.setHeader('Access-Control-Allow-Origin', '*'); // Should be production domain in real env
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,POST');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 =======
+=======
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
         return res.status(500).json({ success: false, message: "Missing Supabase configuration. Please set environment variables." });
     }
@@ -151,6 +160,9 @@ export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
     res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization');
+<<<<<<< HEAD
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
+=======
 >>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
 
     if (req.method === 'OPTIONS') return res.status(200).end();
@@ -172,6 +184,22 @@ export default async function handler(req, res) {
 <<<<<<< HEAD
         // --- AUTH EXCEPTION ---
 =======
+        // --- AUTHENTICATION ENFORCEMENT ---
+        const protectedActions = [
+            "getDashboardData", "getEmployees", "getSites", "getSiteRequests", 
+            "addAttendance", "checkoutAttendance", "updateEmployee", "deleteEmployee", 
+            "saveSite", "updateSite", "deleteSite", "updateSettings", 
+            "addHoliday", "deleteHoliday", "getHolidays", "getSettings", "getAttendance"
+        ];
+        
+        if (protectedActions.includes(action)) {
+            const authHeader = req.headers.authorization;
+            const token = authHeader && authHeader.split(' ')[1];
+            if (!token || !verifyToken(token)) {
+                return res.status(401).json({ success: false, message: "غير مصرح لك بالوصول (يجب تسجيل الدخول)" });
+            }
+        }
+
         // --- AUTHENTICATION ENFORCEMENT ---
         const protectedActions = [
             "getDashboardData", "getEmployees", "getSites", "getSiteRequests", 
@@ -269,6 +297,9 @@ export default async function handler(req, res) {
                 success: true,
                 message: "تم تسجيل الدخول بنجاح",
                 token: token,
+<<<<<<< HEAD
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
+=======
 >>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
                 data: {
                     id: user.id, name: user.name, email: user.email, phone: user.phone, role: user.role,
@@ -278,6 +309,7 @@ export default async function handler(req, res) {
             });
         }
 
+<<<<<<< HEAD
 <<<<<<< HEAD
         // --- AUTHORIZATION GATE ---
         const publicActions = ["sendOTP", "verifyOTP", "saveEmployee"]; 
@@ -325,6 +357,8 @@ export default async function handler(req, res) {
                 attendance: attRes.data || [], siteRequests: reqRes.data || [],
                 settings: settings
 =======
+=======
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
         // --- NEW HELPER: RESOLVE TRANSPORT PRICE ---
         async function fetchResolvedTransportPrice(employeeId, siteId, currentPrice, isRequest) {
             const empIdStr = String(employeeId);
@@ -385,6 +419,9 @@ export default async function handler(req, res) {
                 siteRequests: reqRes.data || [],
                 settings: settings,
                 siteAllowances: allRes.data || []
+<<<<<<< HEAD
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
+=======
 >>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
             });
         }
@@ -466,6 +503,9 @@ export default async function handler(req, res) {
             const { data: sites } = await supabase.from('sites').select('*');
             let matchedSite = null;
             let isRequest = false;
+<<<<<<< HEAD
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
+=======
 >>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
 
             if (sites) {
@@ -477,6 +517,7 @@ export default async function handler(req, res) {
             }
 
             if (!matchedSite) {
+<<<<<<< HEAD
 <<<<<<< HEAD
                 const { data: reqs } = await db.from('siteRequests').select('*').eq('employeeId', empId).eq('status', 'approved_today');
 =======
@@ -493,6 +534,13 @@ export default async function handler(req, res) {
                             matchedSite = { id: r.id, name: r.suggestedName, transportPrice: r.transportPrice, isTemporary: true };
                             break;
 =======
+=======
+                // Check if any approved today or PENDING (> 2min) request matches
+                const { data: reqs } = await supabase.from('siteRequests').select('*').eq('employeeId', data.employeeId);
+                if (reqs) {
+                    const now = new Date();
+                    for (let r of reqs) {
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
                         let isAutoApprovable = false;
                         if (r.status === 'pending') {
                             const createdAt = new Date(r.timestamp || r.approvedAt);
@@ -517,15 +565,23 @@ export default async function handler(req, res) {
                                 }
                                 break; 
                             }
+<<<<<<< HEAD
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
+=======
 >>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
                         }
                     }
                 }
             }
 <<<<<<< HEAD
+<<<<<<< HEAD
             return res.status(200).json({ success: true, matchedSite, minDistance, closestSiteName });
         }
 =======
+=======
+
+            if (!matchedSite) throw new Error("أنت خارج نطاق جميع مواقع العمل المسجلة");
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
 
             if (!matchedSite) throw new Error("أنت خارج نطاق جميع مواقع العمل المسجلة");
 >>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
@@ -579,6 +635,20 @@ export default async function handler(req, res) {
             if (holiday) {
                 status = "overtime";
             }
+<<<<<<< HEAD
+=======
+
+            // Resolve proper transport price
+            const finalTransport = await fetchResolvedTransportPrice(data.employeeId, matchedSite.id, matchedSite.transportPrice, isRequest);
+
+            // --- OVERTIME AMOUNT CALCULATION ---
+            let overtimeAmount = 0;
+            if (status === "overtime") {
+                const { data: emp } = await supabase.from('employees').select('salary').eq('id', String(data.employeeId)).maybeSingle();
+                const salary = emp ? (emp.salary || 0) : 0;
+                overtimeAmount = parseFloat((salary / 30).toFixed(2));
+            }
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
 
             // Resolve proper transport price
             const finalTransport = await fetchResolvedTransportPrice(data.employeeId, matchedSite.id, matchedSite.transportPrice, isRequest);
@@ -624,6 +694,7 @@ export default async function handler(req, res) {
 
         if (action === "checkoutAttendance") {
 <<<<<<< HEAD
+<<<<<<< HEAD
             const empId = decoded.id;
             const { data: existing } = await db.from('attendance').select('*').eq('employeeId', empId).is('checkOut', null).order('checkIn', { ascending: false }).limit(1);
             if (!existing || existing.length === 0) throw new Error("لا يوجد عملية حضور مفتوحة");
@@ -632,6 +703,8 @@ export default async function handler(req, res) {
             const hours = ((now - new Date(existing[0].checkIn)) / 36e5).toFixed(2);
             const { error } = await db.from('attendance').update({ checkOut: now.toISOString(), totalHours: hours }).eq('id', existing[0].id);
 =======
+=======
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
             // Server-side Face Verification
             const { data: empData } = await supabase.from('employees').select('faceDescriptor').eq('id', String(data.employeeId)).maybeSingle();
             if (empData && empData.faceDescriptor && data.faceDescriptor) {
@@ -690,6 +763,26 @@ export default async function handler(req, res) {
             });
 
             return res.status(200).json({ success: true, message: "تم تسجيل الانصراف بنجاح" });
+<<<<<<< HEAD
+=======
+        }
+
+        // --- ALLOWANCE REQUESTS MGMT ---
+        if (action === "approveExtraAllowance") {
+            const { error } = await supabase.from('attendance')
+                .update({ extraAmountStatus: 'approved' })
+                .eq('id', data.id);
+            if (error) throw error;
+            return res.status(200).json({ success: true, message: "تمت الموافقة على البدل الإضافي" });
+        }
+
+        if (action === "rejectExtraAllowance") {
+            const { error } = await supabase.from('attendance')
+                .update({ extraAmountStatus: 'rejected' })
+                .eq('id', data.id);
+            if (error) throw error;
+            return res.status(200).json({ success: true, message: "تم رفض طلب البدل الإضافي" });
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
         }
 
         // --- ALLOWANCE REQUESTS MGMT ---
@@ -1045,6 +1138,9 @@ export default async function handler(req, res) {
         }
 
         // --- FINAL FALLBACK ---
+<<<<<<< HEAD
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
+=======
 >>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
         const proxyRes = await fetch(GOOGLE_SCRIPT_URL, {
             method: 'POST', body: JSON.stringify(data), headers: { 'Content-Type': 'text/plain' }

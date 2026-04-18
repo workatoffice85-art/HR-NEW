@@ -64,12 +64,16 @@ async function login() {
 
     try {
 <<<<<<< HEAD
+<<<<<<< HEAD
         const response = await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify({ action: 'login', identifier: email, password: pass }),
             headers: { 'Content-Type': 'application/json' }
         });
         const result = await response.json();
+=======
+        const result = await callApi({ action: 'login', identifier: email, password: pass });
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
 =======
         const result = await callApi({ action: 'login', identifier: email, password: pass });
 >>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
@@ -99,6 +103,7 @@ async function requestOTP() {
     setLoading('btnRequestOTP', true);
     try {
 <<<<<<< HEAD
+<<<<<<< HEAD
        const res = await fetch(API_URL, {
             method:'POST', body: JSON.stringify({action:'sendOTP', email: tempEmail, phone: tempPhone}), headers:{'Content-Type':'text/plain'}
        });
@@ -110,12 +115,17 @@ async function requestOTP() {
            showToast(result.message, 'error');
        }
 =======
+=======
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
         const result = await callApi({action:'sendOTP', email: tempEmail, phone: tempPhone});
         if(result.success) {
             showSection('verifyOTPSection');
         } else {
             showError('otpError', result.message);
         }
+<<<<<<< HEAD
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
+=======
 >>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
     } catch(e) {
         showToast('خطأ في الشبكة: ' + e.message, 'error');
@@ -482,6 +492,9 @@ async function verifyLocation() {
         document.getElementById('btnRequestSite').classList.remove('hidden');
         lastDetectedSite = null;
         document.getElementById('extraAllowanceLocationNote').innerText = `* سيتم ربط هذا الطلب تلقائياً بالموقع الحالي (جاري التحديد...)`;
+<<<<<<< HEAD
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
+=======
 >>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
     }
     updateActionButtonsState();
@@ -503,6 +516,7 @@ async function handleCheckIn() {
     const token = localStorage.getItem('empToken');
     const payload = {
 <<<<<<< HEAD
+<<<<<<< HEAD
         action: 'addAttendance', 
         latitude: lastLocation.lat, 
         longitude: lastLocation.lng,
@@ -519,6 +533,16 @@ async function handleCheckIn() {
             } 
         });
         const result = await res.json();
+=======
+        action: 'addAttendance', employeeId: currentUser.id, employeeName: currentUser.name,
+        checkIn: new Date().toISOString(), latitude: lastLocation.lat, longitude: lastLocation.lng,
+        faceDescriptor: JSON.stringify(currentFaceDescriptor),
+        note: document.getElementById('attendanceNote').value.trim()
+    };
+
+    try {
+        const result = await callApi(payload);
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
 =======
         action: 'addAttendance', employeeId: currentUser.id, employeeName: currentUser.name,
         checkIn: new Date().toISOString(), latitude: lastLocation.lat, longitude: lastLocation.lng,
@@ -547,6 +571,7 @@ async function handleCheckOut() {
     const token = localStorage.getItem('empToken');
     const payload = { 
 <<<<<<< HEAD
+<<<<<<< HEAD
         action: 'checkoutAttendance',
         latitude: lastLocation.lat, 
         longitude: lastLocation.lng,
@@ -562,6 +587,17 @@ async function handleCheckOut() {
             } 
         });
         const result = await res.json();
+=======
+        action: 'checkoutAttendance', employeeId: currentUser.id, 
+        checkOut: new Date().toISOString(), latitude: lastLocation.lat, longitude: lastLocation.lng,
+        faceDescriptor: JSON.stringify(currentFaceDescriptor),
+        note: document.getElementById('attendanceNote').value.trim(),
+        requestedExtraAmount: document.getElementById('extraAllowanceAmount').value,
+        extraAmountReason: document.getElementById('extraAllowanceReason').value.trim()
+    };
+    try {
+        const result = await callApi(payload);
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
 =======
         action: 'checkoutAttendance', employeeId: currentUser.id, 
         checkOut: new Date().toISOString(), latitude: lastLocation.lat, longitude: lastLocation.lng,
@@ -795,6 +831,7 @@ function renderMyReports(data, monthStr) {
             }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
             const statusSpan = document.createElement('span');
             statusSpan.style.color = statusColor;
             statusSpan.textContent = statusText;
@@ -846,6 +883,8 @@ function renderMyReports(data, monthStr) {
 
             tbody.appendChild(row);
 =======
+=======
+>>>>>>> 807f258f64b4c67c4f03fc92c8a45fe3e7c5a20b
             const totalPayable = (parseFloat(item.transport) + parseFloat(item.overtimeAmount) + parseFloat(item.extraAmount || 0)).toFixed(2);
             tbody.innerHTML += `
                 <tr>
