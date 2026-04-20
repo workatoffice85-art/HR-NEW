@@ -409,7 +409,10 @@ async function generateEmployeeDetailedReport() {
         const recordDate = new Date(record.checkIn);
         const dateKey = !isNaN(recordDate) ? recordDate.toDateString() : null;
         if (dateKey) {
-            presentDates.add(dateKey);
+            // Only count as regular attendance if not overtime
+            if (record.status !== 'overtime') {
+                presentDates.add(dateKey);
+            }
             if (record.status === 'late') lateDates.add(dateKey);
             if (record.status === 'overtime') overtimeDates.add(dateKey);
         }
@@ -569,10 +572,13 @@ function generateReport() {
         }
         
         const empStats = reportAcc[empId];
-        
-        if (!empStats.uniqueDates.has(recordDate)) {
-            empStats.uniqueDates.add(recordDate);
-            empStats.daysPresent += 1;
+
+        // Only count as regular attendance if not overtime
+        if (record.status !== 'overtime') {
+            if (!empStats.uniqueDates.has(recordDate)) {
+                empStats.uniqueDates.add(recordDate);
+                empStats.daysPresent += 1;
+            }
         }
 
         if(record.status === 'late') {
