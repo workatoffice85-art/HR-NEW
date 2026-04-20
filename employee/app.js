@@ -15,39 +15,6 @@ let tempPhone = ""; // used during registration
 let allOfficialHolidays = [];
 const MODEL_URL = '../models';
 
-// Cache for performance
-let dataCache = {
-    attendance: { data: [], timestamp: 0, ttl: 15000 }, // 15 seconds for attendance (changes frequently)
-    sites: { data: [], timestamp: 0, ttl: 60000 }, // 1 minute
-    holidays: { data: [], timestamp: 0, ttl: 300000 } // 5 minutes
-};
-
-function isCacheValid(cacheKey) {
-    const cache = dataCache[cacheKey];
-    if (!cache) return false;
-    return Date.now() - cache.timestamp < cache.ttl;
-}
-
-function setCache(cacheKey, data) {
-    if (dataCache[cacheKey]) {
-        dataCache[cacheKey].data = data;
-        dataCache[cacheKey].timestamp = Date.now();
-    }
-}
-
-function getCache(cacheKey) {
-    if (dataCache[cacheKey] && isCacheValid(cacheKey)) {
-        return dataCache[cacheKey].data;
-    }
-    return null;
-}
-
-function invalidateCache(cacheKey) {
-    if (dataCache[cacheKey]) {
-        dataCache[cacheKey].timestamp = 0;
-    }
-}
-
 document.addEventListener('DOMContentLoaded', () => {
     checkSession();
 });
@@ -249,13 +216,10 @@ async function initSystem() {
         if (dataResult.success) {
             sitesData = dataResult.sites || [];
             allAttendanceData = dataResult.attendance || [];
-            setCache('sites', sitesData);
-            setCache('attendance', allAttendanceData);
 
             // Load official holidays
             if (holidaysResult.success) {
                 allOfficialHolidays = holidaysResult.data || [];
-                setCache('holidays', allOfficialHolidays);
             }
 
             // Process initial status
@@ -306,24 +270,9 @@ function processAttendanceStatus(data) {
 
 async function checkCurrentStatus() {
     try {
-        const cached = getCache('attendance');
-        if (cached && cached.length > 0) {
-            const lastRecord = cached[cached.length - 1];
-            const isCheckedIn = (lastRecord.checkIn && !lastRecord.checkOut);
-            
-            if (isCheckedIn) {
-                setAppState('in', lastRecord.checkIn);
-            } else {
-                setAppState('out');
-            }
-            return;
-        }
-
         const res = await fetch(`${API_URL}?action=getAttendance&employeeId=${currentUser.id}`);
         const result = await res.json();
         if (result.success && result.data.length > 0) {
-            allAttendanceData = result.data;
-            setCache('attendance', result.data);
             const lastRecord = result.data[result.data.length - 1];
             const isCheckedIn = (lastRecord.checkIn && !lastRecord.checkOut);
             
@@ -520,7 +469,6 @@ async function handleCheckIn() {
         const result = await res.json();
         if(result.success) {
             alert(result.message);
-            invalidateCache('attendance');
             setAppState('in', payload.checkIn);
         } else if (result.openSession && result.openSessionId) {
             // There's a same-day open session — offer to force-close it
@@ -595,7 +543,6 @@ async function handleCheckOut() {
         const result = await res.json();
         if(result.success) {
             alert(result.message);
-            invalidateCache('attendance');
             setAppState('out');
         }
         else alert('خطأ: ' + result.message);
@@ -792,13 +739,23 @@ async function fetchMyReports() {
 
     document.getElementById('loader').classList.remove('hidden');
     try {
-        // Try cache first, but force refresh for reports
-        const res = await fetch(`${API_URL}?action=getAttendance&employeeId=${currentUser.id}`);
-        const result = await res.json();
-        if(result.success) {
-            allAttendanceData = result.data;
-            setCache('attendance', result.data);
-            renderMyReports(result.data, monthVal);
+        // Fetch attendance and employee data in parallel
+        const [attRes, empRes] = await Promise.all([
+            fetch(`${API_URL}?action=getAttendance&employeeId=${currentUser.id}`),
+            fetch(`${API_URL}?action=getEmployees`)
+        ]);
+        const attResult = await attRes.json();
+        const empResult = await empRes.json();
+
+        if(attResult.success) {
+            // Update currentUser with fresh data including salary
+            if(empResult.success && empResult.data) {
+                const empData = empResult.data.find(e => String(e.id) === String(currentUser.id));
+                if(empData) {
+                    currentUser = { ...currentUser, salary: empData.salary };
+                }
+            }
+            renderMyReports(attResult.data, monthVal);
         }
     } catch(e) { console.error('خطأ في جلب التقارير', e); }
     document.getElementById('loader').classList.add('hidden');
