@@ -223,10 +223,10 @@ export default async function handler(req, res) {
                     email: user.email,
                     phone: user.phone,
                     role: user.role,
+                    salary: user.salary || 0,
                     assignedSites: user.assignedSites ? String(user.assignedSites).split(',').map((s) => s.trim()).filter(Boolean) : [],
                     faceDescriptor: user.faceDescriptor,
-                    transportPrice: user.transportPrice,
-                    salary: user.salary || 0
+                    transportPrice: user.transportPrice
                 }
             });
         }
@@ -265,12 +265,12 @@ export default async function handler(req, res) {
         // --- DASHBOARD DATA (GET) ---
         if (action === "getDashboardData") {
             const [empRes, siteRes, attRes, reqRes, setRes, allRes] = await Promise.all([
-                supabase.from('employees').select('*'),
-                supabase.from('sites').select('*'),
-                supabase.from('attendance').select('*'),
-                supabase.from('siteRequests').select('*'),
-                supabase.from('settings').select('*'),
-                supabase.from('siteAllowances').select('*')
+                supabase.from('employees').select('id,name,email,phone,role,assignedSites,faceDescriptor,salary,transportPrice'),
+                supabase.from('sites').select('id,name,latitude,longitude,radius,transportPrice,mapLink,isTemporary').eq('isTemporary', false),
+                supabase.from('attendance').select('id,employeeId,employeeName,siteId,siteName,checkIn,checkOut,status,transportPrice').order('checkIn', { ascending: false }),
+                supabase.from('siteRequests').select('id,employeeId,employeeName,latitude,longitude,suggestedName,status,timestamp,transportPrice,note,tempRadius,approvedAt').order('timestamp', { ascending: false }),
+                supabase.from('settings').select('key,value'),
+                supabase.from('siteAllowances').select('employeeId,siteId,transportPrice')
             ]);
             let settings = {};
             if (setRes.data) {
@@ -298,14 +298,14 @@ export default async function handler(req, res) {
         if (action === "getPortalInitialData") {
             const empId = data.employeeId;
             const [siteRes, attRes] = await Promise.all([
-                supabase.from('sites').select('*'),
-                supabase.from('attendance').select('*').eq('employeeId', empId).order('checkIn', { ascending: true })
+                supabase.from('sites').select('id,name,latitude,longitude,radius,transportPrice,mapLink').eq('isTemporary', false),
+                supabase.from('attendance').select('id,employeeId,employeeName,siteId,siteName,checkIn,checkOut,status,transportPrice').eq('employeeId', empId).order('checkIn', { ascending: true })
             ]);
             return res.status(200).json({ success: true, sites: siteRes.data || [], attendance: attRes.data || [] });
         }
 
         if (action === "getAttendance") {
-            let query = supabase.from('attendance').select('*').order('checkIn', { ascending: true });
+            let query = supabase.from('attendance').select('id,employeeId,employeeName,siteId,siteName,checkIn,checkOut,latitude,longitude,status,totalHours,transportPrice').order('checkIn', { ascending: false });
             if (data.employeeId) query = query.eq('employeeId', data.employeeId);
             const { data: att, error } = await query;
             if (error) throw error;
@@ -359,7 +359,7 @@ export default async function handler(req, res) {
             }
 
             // 2. Check Location logic
-            const { data: sites } = await supabase.from('sites').select('*');
+            const { data: sites } = await supabase.from('sites').select('id,name,latitude,longitude,radius,transportPrice').eq('isTemporary', false);
             let matchedSite = null;
             let isRequest = false;
 
@@ -372,7 +372,7 @@ export default async function handler(req, res) {
 
             if (!matchedSite) {
                 // Check if any approved today or PENDING (> 2min) request matches
-                const { data: reqs } = await supabase.from('siteRequests').select('*').eq('employeeId', data.employeeId);
+                const { data: reqs } = await supabase.from('siteRequests').select('id,latitude,longitude,suggestedName,transportPrice,status,timestamp,approvedAt,tempRadius,note').eq('employeeId', data.employeeId);
                 if (reqs) {
                     const now = new Date();
                     for (let r of reqs) {
@@ -523,10 +523,10 @@ export default async function handler(req, res) {
 
         // --- EMPLOYEE MGMT ---
         if (action === "getEmployees") {
-            const { data: emps, error } = await supabase.from('employees').select('*');
+            const { data: emps, error } = await supabase.from('employees').select('id,name,email,phone,role,assignedSites,faceDescriptor,salary,transportPrice');
             if (error) throw error;
 
-            const { data: alls } = await supabase.from('siteAllowances').select('*');
+            const { data: alls } = await supabase.from('siteAllowances').select('employeeId,siteId,transportPrice');
             const employees = (emps || []).map(emp => ({
                 ...emp,
                 siteAllowances: (alls || []).filter(a => String(a.employeeId) === String(emp.id))
@@ -609,7 +609,7 @@ export default async function handler(req, res) {
 
         // --- SITE MGMT ---
         if (action === "getSites") {
-            const { data: sites, error } = await supabase.from('sites').select('*').eq('isTemporary', false);
+            const { data: sites, error } = await supabase.from('sites').select('id,name,latitude,longitude,radius,transportPrice,mapLink').eq('isTemporary', false);
             if (error) throw error;
             return res.status(200).json({ success: true, data: sites || [] });
         }
@@ -650,7 +650,7 @@ export default async function handler(req, res) {
 
         // --- SITE REQUESTS ---
         if (action === "getSiteRequests") {
-            const { data: reqs, error } = await supabase.from('siteRequests').select('*');
+            const { data: reqs, error } = await supabase.from('siteRequests').select('id,employeeId,employeeName,latitude,longitude,suggestedName,mapLink,status,timestamp,transportPrice,note,receiptUrl,receiptName,tempRadius,approvedAt').order('timestamp', { ascending: false });
             if (error) throw error;
             return res.status(200).json({ success: true, data: reqs || [] });
         }
@@ -752,9 +752,11 @@ export default async function handler(req, res) {
             // date comes as YYYY-MM-DD
             const { data: att, error } = await supabase
                 .from('attendance')
-                .select('*')
+                .select('id,employeeId,employeeName,siteId,siteName,checkIn')
                 .eq('employeeId', employeeId)
-                .ilike('checkIn', `${date}%`);
+                .gte('checkIn', `${date}T00:00:00.000Z`)
+                .lte('checkIn', `${date}T23:59:59.999Z`)
+                .order('checkIn', { ascending: true });
             
             if (error) throw error;
             return res.status(200).json({ success: true, data: att || [] });
@@ -779,7 +781,7 @@ export default async function handler(req, res) {
         }
 
         if (action === "getAllowanceRequests") {
-            let query = supabase.from('allowanceRequests').select('*');
+            let query = supabase.from('allowanceRequests').select('id,employeeId,employeeName,siteId,siteName,attendanceId,requestDate,amount,note,status,adminNote,createdAt');
             if (data.employeeId) query = query.eq('employeeId', data.employeeId);
             const { data: reqs, error } = await query.order('createdAt', { ascending: false });
             if (error) throw error;
@@ -792,7 +794,7 @@ export default async function handler(req, res) {
             // 1. Fetch the request
             const { data: reqData, error: errReq } = await supabase
                 .from('allowanceRequests')
-                .select('*')
+                .select('id,employeeId,employeeName,siteId,siteName,attendanceId,requestDate,amount,note,status')
                 .eq('id', requestId)
                 .single();
             
@@ -803,7 +805,7 @@ export default async function handler(req, res) {
                 // 2. Fetch current attendance record
                 const { data: attData, error: errAtt } = await supabase
                     .from('attendance')
-                    .select('transportPrice')
+                    .select('id,transportPrice')
                     .eq('id', reqData.attendanceId)
                     .single();
                 
@@ -849,7 +851,7 @@ export default async function handler(req, res) {
 
         // --- OFFICIAL HOLIDAYS ---
         if (action === "getOfficialHolidays") {
-            const { data: holidays, error } = await supabase.from('official_holidays').select('*').order('holidayDate', { ascending: true });
+            const { data: holidays, error } = await supabase.from('official_holidays').select('id,holidayDate,holidayName').order('holidayDate', { ascending: true });
             if (error) throw error;
             return res.status(200).json({ success: true, data: holidays || [] });
         }
@@ -959,7 +961,7 @@ export default async function handler(req, res) {
 
         // --- SETTINGS ---
         if (action === "getSettings") {
-            const { data: sets, error } = await supabase.from('settings').select('*');
+            const { data: sets, error } = await supabase.from('settings').select('key,value');
             if (error) throw error;
             let settings = {};
             if (sets) sets.forEach(s => settings[s.key] = s.value);
