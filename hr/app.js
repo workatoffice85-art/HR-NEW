@@ -286,6 +286,7 @@ function resetEmployeeDetailedReportView(message) {
     document.getElementById('employeeDetailPresent').innerText = '0';
     document.getElementById('employeeDetailAbsent').innerText = '0';
     document.getElementById('employeeDetailLate').innerText = '0';
+    document.getElementById('employeeDetailOvertime').innerText = '0';
     document.getElementById('employeeDetailTransport').innerText = '0.00';
     document.getElementById('employeeDetailMeta').innerText = message || 'اختر موظفًا وحدد الفترة الزمنية ثم اضغط "عرض التقرير".';
 
@@ -362,6 +363,7 @@ async function generateEmployeeDetailedReport() {
     const sortedRecords = [...employeeRecords].sort((a, b) => new Date(b.checkIn) - new Date(a.checkIn));
     const presentDates = new Set();
     const lateDates = new Set();
+    const overtimeDates = new Set();
     let totalTransport = 0;
 
     sortedRecords.forEach(record => {
@@ -370,8 +372,8 @@ async function generateEmployeeDetailedReport() {
         if (dateKey) {
             presentDates.add(dateKey);
             if (record.status === 'late') lateDates.add(dateKey);
+            if (record.status === 'overtime') overtimeDates.add(dateKey);
         }
-
     });
 
     totalTransport = calculateUniqueDailyTransport(sortedRecords);
@@ -383,6 +385,7 @@ async function generateEmployeeDetailedReport() {
     document.getElementById('employeeDetailPresent').innerText = String(daysPresent);
     document.getElementById('employeeDetailAbsent').innerText = String(daysAbsent);
     document.getElementById('employeeDetailLate').innerText = String(lateDates.size);
+    document.getElementById('employeeDetailOvertime').innerText = String(overtimeDates.size);
     document.getElementById('employeeDetailTransport').innerText = totalTransport.toFixed(2);
 
     const selectedLabel = employeeSelect.options[employeeSelect.selectedIndex]
@@ -509,6 +512,7 @@ function generateReport() {
                  name: record.employeeName,
                  uniqueDates: new Set(),
                  lateDates: new Set(),
+                 overtimeDates: new Set(),
                  transportByDate: {},
                  daysPresent: 0,
                  lates: 0,
@@ -530,7 +534,12 @@ function generateReport() {
                 empStats.lates += 1;
             }
         }
-        if(record.status === 'overtime') empStats.overtime += 1;
+        if(record.status === 'overtime') {
+            if (!empStats.overtimeDates.has(recordDate)) {
+                empStats.overtimeDates.add(recordDate);
+                empStats.overtime += 1;
+            }
+        }
         const transportValue = toTransportNumber(record.transportPrice);
         if (!(recordDate in empStats.transportByDate)) {
             empStats.transportByDate[recordDate] = transportValue;
