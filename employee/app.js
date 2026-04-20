@@ -736,14 +736,26 @@ function showMyReports() {
 async function fetchMyReports() {
     const monthVal = document.getElementById('empReportMonth').value;
     if(!monthVal) return;
-    
+
     document.getElementById('loader').classList.remove('hidden');
     try {
-        // Fetch only this employee's attendance using GET param
-        const res = await fetch(`${API_URL}?action=getAttendance&employeeId=${currentUser.id}`);
-        const result = await res.json();
-        if(result.success) {
-            renderMyReports(result.data, monthVal);
+        // Fetch attendance and employee data in parallel
+        const [attRes, empRes] = await Promise.all([
+            fetch(`${API_URL}?action=getAttendance&employeeId=${currentUser.id}`),
+            fetch(`${API_URL}?action=getEmployees`)
+        ]);
+        const attResult = await attRes.json();
+        const empResult = await empRes.json();
+
+        if(attResult.success) {
+            // Update currentUser with fresh data including salary
+            if(empResult.success && empResult.data) {
+                const empData = empResult.data.find(e => String(e.id) === String(currentUser.id));
+                if(empData) {
+                    currentUser = { ...currentUser, salary: empData.salary };
+                }
+            }
+            renderMyReports(attResult.data, monthVal);
         }
     } catch(e) { console.error('خطأ في جلب التقارير', e); }
     document.getElementById('loader').classList.add('hidden');
@@ -832,8 +844,8 @@ function renderMyReports(data, monthStr) {
     const tbody = document.getElementById('myReportsTableBody');
     tbody.innerHTML = '';
 
-    // Create a set of dates where user was present for quick lookup
-    const presentDates = new Set(presentRecords.map(r => new Date(r.checkIn).toDateString()));
+    // Create a set of dates where user was present for quick lookup (exclude overtime)
+    const presentDates = new Set(presentRecords.filter(r => r.status !== 'overtime').map(r => new Date(r.checkIn).toDateString()));
     const lateDates = new Set(presentRecords.filter(r => r.status === 'late').map(r => new Date(r.checkIn).toDateString()));
     const overtimeDates = new Set(presentRecords.filter(r => r.status === 'overtime').map(r => new Date(r.checkIn).toDateString()));
 
