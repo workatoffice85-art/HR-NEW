@@ -411,13 +411,25 @@ export default async function handler(req, res) {
             const dayOfWeek = cairoNow.getDay();
             let status = "present";
 
-            const { data: setRows } = await supabase.from('settings').select('*').eq('key', 'workStartTime');
-            let workStart = (setRows && setRows.length > 0) ? setRows[0].value : "09:00";
+            // Get settings for work start time and weekend days
+            const { data: setRows } = await supabase.from('settings').select('*').in('key', ['workStartTime', 'weekendDays']);
+            let workStart = "09:00";
+            let weekendDays = [5, 6]; // Default: Friday, Saturday
+
+            if (setRows && setRows.length > 0) {
+                const workStartRow = setRows.find(r => r.key === 'workStartTime');
+                if (workStartRow) workStart = workStartRow.value;
+
+                const weekendRow = setRows.find(r => r.key === 'weekendDays');
+                if (weekendRow && weekendRow.value) {
+                    weekendDays = weekendRow.value.split(',').map(d => parseInt(d.trim())).filter(d => !isNaN(d));
+                }
+            }
 
             // Use server Cairo time for authoritative status calculation
             const checkInTimeStr = getCairoTimeString(serverNow);
 
-            if (dayOfWeek === 5 || dayOfWeek === 6) status = "overtime";
+            if (weekendDays.includes(dayOfWeek)) status = "overtime";
             else if (checkInTimeStr > workStart) status = "late";
 
             // Resolve proper transport price
@@ -526,6 +538,7 @@ export default async function handler(req, res) {
                 role: data.role || 'employee',
                 assignedSites: data.assignedSites || '',
                 faceDescriptor: data.faceDescriptor || null,
+                salary: data.salary || 0,
                 transportPrice: data.transportPrice || 0
             };
             
@@ -555,6 +568,7 @@ export default async function handler(req, res) {
                 phone: data.phone,
                 role: data.role,
                 assignedSites: data.assignedSites || '',
+                salary: data.salary || 0,
                 transportPrice: data.transportPrice || 0
             };
             

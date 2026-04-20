@@ -235,6 +235,12 @@ function renderAttendanceTable(data) {
     });
 }
 
+function getWeekendDaysFromSettings() {
+    // Default: Friday (5) and Saturday (6)
+    const weekendDaysStr = appSettings.weekendDays || "5,6";
+    return weekendDaysStr.split(',').map(d => parseInt(d.trim())).filter(d => !isNaN(d));
+}
+
 function getWorkingDaysCount(startDate, endDate) {
     let workingDaysCount = 0;
     const tempDate = new Date(startDate);
@@ -243,8 +249,10 @@ function getWorkingDaysCount(startDate, endDate) {
     const finalDate = new Date(endDate);
     finalDate.setHours(23, 59, 59, 999);
 
+    const weekendDays = getWeekendDaysFromSettings();
+
     while (tempDate <= finalDate) {
-        if (tempDate.getDay() !== 5 && tempDate.getDay() !== 6) {
+        if (!weekendDays.includes(tempDate.getDay())) {
             workingDaysCount += 1;
         }
         tempDate.setDate(tempDate.getDate() + 1);
@@ -287,6 +295,7 @@ function resetEmployeeDetailedReportView(message) {
     document.getElementById('employeeDetailAbsent').innerText = '0';
     document.getElementById('employeeDetailLate').innerText = '0';
     document.getElementById('employeeDetailOvertime').innerText = '0';
+    document.getElementById('employeeDetailOvertimePay').innerText = '0.00';
     document.getElementById('employeeDetailTransport').innerText = '0.00';
     document.getElementById('employeeDetailMeta').innerText = message || 'اختر موظفًا وحدد الفترة الزمنية ثم اضغط "عرض التقرير".';
 
@@ -382,10 +391,18 @@ async function generateEmployeeDetailedReport() {
     const daysPresent = presentDates.size;
     const daysAbsent = Math.max(workingDaysCount - daysPresent, 0);
 
+    // Calculate overtime pay based on employee salary
+    const employee = allEmployees.find(e => String(e.id) === String(employeeId));
+    const salary = employee ? parseFloat(employee.salary || 0) : 0;
+    const overtimeDays = overtimeDates.size;
+    const dailyRate = salary / 30;
+    const overtimePay = dailyRate * overtimeDays;
+
     document.getElementById('employeeDetailPresent').innerText = String(daysPresent);
     document.getElementById('employeeDetailAbsent').innerText = String(daysAbsent);
     document.getElementById('employeeDetailLate').innerText = String(lateDates.size);
-    document.getElementById('employeeDetailOvertime').innerText = String(overtimeDates.size);
+    document.getElementById('employeeDetailOvertime').innerText = String(overtimeDays);
+    document.getElementById('employeeDetailOvertimePay').innerText = overtimePay.toFixed(2);
     document.getElementById('employeeDetailTransport').innerText = totalTransport.toFixed(2);
 
     const selectedLabel = employeeSelect.options[employeeSelect.selectedIndex]
@@ -551,6 +568,12 @@ function generateReport() {
     Object.keys(reportAcc).forEach(empId => {
         const map = reportAcc[empId].transportByDate;
         reportAcc[empId].totalTransport = Object.values(map).reduce((sum, value) => sum + value, 0);
+
+        // Calculate overtime pay based on employee salary
+        const employee = allEmployees.find(e => String(e.id) === String(empId));
+        const salary = employee ? parseFloat(employee.salary || 0) : 0;
+        const dailyRate = salary / 30;
+        reportAcc[empId].overtimePay = dailyRate * reportAcc[empId].overtime;
     });
 
     // Calculate working days passed in the selected range
@@ -582,6 +605,7 @@ function generateReport() {
                 <td data-label="أيام الغياب"><span style="color:${absentDays > 0 ? 'var(--danger)' : 'inherit'}">${absentDays > 0 ? absentDays : 0} أيام</span></td>
                 <td data-label="التأخير"><span style="color:${data.lates > 0 ? 'var(--danger)' : 'inherit'}">${data.lates} مرات</span></td>
                 <td data-label="العمل الإضافي"><span style="color:#3b82f6">${data.overtime || 0} أيام</span></td>
+                <td data-label="مبلغ العمل الإضافي"><span style="color:#3b82f6">${data.overtimePay.toFixed(2)} ج.م</span></td>
                 <td data-label="بدل الانتقال">${data.totalTransport.toFixed(2)} ج.م</td>
             </tr>
         `;
@@ -670,6 +694,7 @@ function renderEmployeesTable(data) {
             <td data-label="الاسم">${record.name}</td>
             <td data-label="البريد">${record.email}</td>
             <td data-label="الهاتف">${record.phone || '-'}</td>
+            <td data-label="المرتب">${record.salary ? parseFloat(record.salary).toFixed(0) + ' ج.م' : '-'}</td>
             <td data-label="الصلاحية">${record.role}</td>
             <td data-label="البصمة">${record.faceDescriptor ? '✅ مسجل' : '❌ لا يوجد'}</td>
             <td data-label="الإجراءات" style="display:flex; gap:8px; justify-content:center; padding:10px;">
@@ -738,7 +763,7 @@ async function editEmployee(id) {
     document.getElementById('empPass').value = ''; // Don't show password for security
     document.getElementById('empPass').placeholder = 'اتركها فارغة للاحتفاظ بكلمة المرور الحالية';
     document.getElementById('empRole').value = emp.role;
-    document.getElementById('empRole').value = emp.role;
+    document.getElementById('empSalary').value = emp.salary || 0;
     document.getElementById('empTransportPrice').value = emp.transportPrice || 0;
     
     // Assigned sites (can keep for compatibility or just use for initialization)
@@ -795,6 +820,7 @@ async function openEmployeeModal(mode = 'add', emp = null) {
         document.getElementById('empPass').value = '';
         document.getElementById('empPass').placeholder = 'اختياري: سيتم توليد كلمة مرور مؤقتة تلقائيًا';
         document.getElementById('empRole').value = 'employee';
+        document.getElementById('empSalary').value = 0;
         document.getElementById('empTransportPrice').value = 0;
         document.getElementById('empSites').value = '';
         document.getElementById('advancedEmpOptions').classList.add('hidden');
@@ -888,9 +914,10 @@ async function saveEmployee() {
         email: email, 
         password: pass || autoGeneratedPassword, 
         phone: phone, 
-        role: role, 
+        role: role,
         assignedSites: selectedSites.join(','),
         siteAllowances: siteAllowances,
+        salary: document.getElementById('empSalary').value || 0,
         transportPrice: document.getElementById('empTransportPrice').value || 0
     };
     
@@ -1085,6 +1112,29 @@ function renderSettings(data) {
     document.getElementById('setReportEmails').value = data.reportEmails || "";
     document.getElementById('setDailyReport').checked = data.dailyReportEnabled === "true";
     document.getElementById('setMonthlyReport').checked = data.monthlyReportEnabled === "true";
+
+    // Weekend days (default: Friday=5, Saturday=6)
+    const weekendDays = data.weekendDays || "5,6";
+    const weekendArray = weekendDays.split(',').map(d => parseInt(d.trim()));
+    document.getElementById('weekendFri').checked = weekendArray.includes(5);
+    document.getElementById('weekendSat').checked = weekendArray.includes(6);
+    document.getElementById('weekendSun').checked = weekendArray.includes(0);
+    document.getElementById('weekendMon').checked = weekendArray.includes(1);
+    document.getElementById('weekendTue').checked = weekendArray.includes(2);
+    document.getElementById('weekendWed').checked = weekendArray.includes(3);
+    document.getElementById('weekendThu').checked = weekendArray.includes(4);
+}
+
+function getWeekendDaysFromUI() {
+    const days = [];
+    if (document.getElementById('weekendFri').checked) days.push(5);
+    if (document.getElementById('weekendSat').checked) days.push(6);
+    if (document.getElementById('weekendSun').checked) days.push(0);
+    if (document.getElementById('weekendMon').checked) days.push(1);
+    if (document.getElementById('weekendTue').checked) days.push(2);
+    if (document.getElementById('weekendWed').checked) days.push(3);
+    if (document.getElementById('weekendThu').checked) days.push(4);
+    return days.join(',');
 }
 
 async function saveSettings() {
@@ -1093,6 +1143,7 @@ async function saveSettings() {
     const reportEmails = document.getElementById('setReportEmails').value;
     const dailyEnabled = document.getElementById('setDailyReport').checked;
     const monthlyEnabled = document.getElementById('setMonthlyReport').checked;
+    const weekendDays = getWeekendDaysFromUI();
 
     document.getElementById('loader').classList.remove('hidden');
     try {
@@ -1103,7 +1154,8 @@ async function saveSettings() {
                 workEndTime: workEndTime,
                 reportEmails: reportEmails,
                 dailyReportEnabled: dailyEnabled ? "true" : "false",
-                monthlyReportEnabled: monthlyEnabled ? "true" : "false"
+                monthlyReportEnabled: monthlyEnabled ? "true" : "false",
+                weekendDays: weekendDays
             }
         };
 

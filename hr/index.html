@@ -151,9 +151,10 @@
                                 <th>ID الموظف</th>
                                 <th>اسم الموظف</th>
                                 <th>أيام الحضور</th>
-                                 <th>أيام الغياب</th>
+                                <th>أيام الغياب</th>
                                 <th>التأخير</th>
                                 <th>العمل الإضافي</th>
+                                <th>مبلغ العمل الإضافي</th>
                                 <th>بدل الانتقال</th>
                             </tr>
                         </thead>
@@ -198,6 +199,10 @@
                         <div class="kpi-value" id="employeeDetailOvertime">0</div>
                     </div>
                     <div class="kpi-card">
+                        <h3>مبلغ العمل الإضافي</h3>
+                        <div class="kpi-value" id="employeeDetailOvertimePay">0.00</div>
+                    </div>
+                    <div class="kpi-card">
                         <h3>إجمالي البدلات</h3>
                         <div class="kpi-value" id="employeeDetailTransport">0.00</div>
                     </div>
@@ -239,6 +244,7 @@
                                 <th style="padding: 15px;">الاسم</th>
                                 <th style="padding: 15px;">البريد</th>
                                 <th style="padding: 15px;">الهاتف</th>
+                                <th style="padding: 15px;">المرتب</th>
                                 <th style="padding: 15px;">الصلاحية</th>
                                 <th style="padding: 15px;">البصمة</th>
                                 <th style="padding: 15px;">الإجراءات</th>
@@ -344,6 +350,19 @@
                             <label>وقت انتهاء العمل (الانصراف)</label>
                             <input type="time" id="setWorkEndTime">
                         </div>
+                        <div class="input-group">
+                            <label>أيام الإجازة في الأسبوع</label>
+                            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                                <label style="display:flex; align-items:center; gap:5px;"><input type="checkbox" id="weekendFri" checked> الجمعة</label>
+                                <label style="display:flex; align-items:center; gap:5px;"><input type="checkbox" id="weekendSat" checked> السبت</label>
+                                <label style="display:flex; align-items:center; gap:5px;"><input type="checkbox" id="weekendSun"> الأحد</label>
+                                <label style="display:flex; align-items:center; gap:5px;"><input type="checkbox" id="weekendMon"> الإثنين</label>
+                                <label style="display:flex; align-items:center; gap:5px;"><input type="checkbox" id="weekendTue"> الثلاثاء</label>
+                                <label style="display:flex; align-items:center; gap:5px;"><input type="checkbox" id="weekendWed"> الأربعاء</label>
+                                <label style="display:flex; align-items:center; gap:5px;"><input type="checkbox" id="weekendThu"> الخميس</label>
+                            </div>
+                            <small style="color:var(--text-muted);">أيام العمل الإضافي تُحسب في هذه الأيام فقط.</small>
+                        </div>
                         <button class="btn-primary" onclick="saveSettings()">حفظ الإعدادات</button>
                     </div>
                     
@@ -411,6 +430,11 @@
                         <option value="employee">موظف (Employee)</option>
                         <option value="hr">إدارة (HR)</option>
                     </select>
+                </div>
+                <div class="input-group">
+                    <label>المرتب الأساسي (ج.م)</label>
+                    <input type="number" id="empSalary" value="0">
+                    <small style="color: var(--text-muted);">يُستخدم لحساب قيمة العمل الإضافي (المرتب ÷ 30 × أيام العمل الإضافي).</small>
                 </div>
                 <div class="input-group">
                     <label>سعر الانتقال الافتراضي (ج.م)</label>
@@ -485,6 +509,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=1.4"></script>
+    <script src="app.js?v=1.5"></script>
 </body>
 </html>
