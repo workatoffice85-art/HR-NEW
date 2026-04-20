@@ -463,8 +463,61 @@ async function handleCheckIn() {
         if(result.success) {
             alert(result.message);
             setAppState('in', payload.checkIn);
-        } else alert('خطأ: ' + result.message);
+        } else if (result.openSession && result.openSessionId) {
+            // There's a same-day open session — offer to force-close it
+            const confirmed = confirm(
+                'لديك جلسة حضور مفتوحة من قبل بنفس اليوم.\n' +
+                'هل تريد إغلاقها وتسجيل حضور جديد الآن؟'
+            );
+            if (confirmed) {
+                await forceCloseAndRecheckIn(result.openSessionId, payload);
+            }
+        } else {
+            alert('خطأ: ' + result.message);
+        }
     } catch(e) { console.error(e); alert('حدث خطأ في الاتصال'); }
+    document.getElementById('loader').classList.add('hidden');
+}
+
+async function forceCloseAndRecheckIn(openSessionId, originalPayload) {
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        // Step 1: Close the old session
+        const closeRes = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({
+                action: 'checkoutAttendance',
+                employeeId: currentUser.id,
+                attendanceId: openSessionId,
+                checkOut: new Date().toISOString(),
+                latitude: lastLocation ? lastLocation.lat : 0,
+                longitude: lastLocation ? lastLocation.lng : 0,
+                faceDescriptor: JSON.stringify(currentFaceDescriptor)
+            }),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const closeResult = await closeRes.json();
+        if (!closeResult.success) {
+            return alert('فشل إغلاق الجلسة القديمة: ' + closeResult.message);
+        }
+
+        // Step 2: Re-attempt check-in
+        const retryRes = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify(originalPayload),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const retryResult = await retryRes.json();
+        if (retryResult.success) {
+            alert('✅ تم إغلاق الجلسة القديمة وتسجيل الحضور بنجاح!');
+            setAppState('in', originalPayload.checkIn);
+        } else {
+            alert('خطأ عند إعادة تسجيل الحضور: ' + retryResult.message);
+        }
+    } catch(e) {
+        console.error(e);
+        alert('حدث خطأ في الاتصال');
+    }
     document.getElementById('loader').classList.add('hidden');
 }
 

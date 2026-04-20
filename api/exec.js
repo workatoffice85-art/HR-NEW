@@ -281,14 +281,34 @@ export default async function handler(req, res) {
         if (action === "addAttendance") {
             // 0. Double Check-In Prevention
             const { data: openAtt } = await supabase.from('attendance')
-                .select('id')
+                .select('id, checkIn')
                 .eq('employeeId', data.employeeId)
                 .is('checkOut', null)
+                .neq('status', 'no_checkout')
                 .order('checkIn', { ascending: false })
                 .limit(1);
             
             if (openAtt && openAtt.length > 0) {
-                throw new Error("لديك عملية حضور مفتوحة بالفعل. يرجى تسجيل الانصراف أولاً.");
+                const openSession = openAtt[0];
+                const openDate = new Date(openSession.checkIn).toDateString();
+                const todayDate = new Date(data.checkIn).toDateString();
+
+                if (openDate !== todayDate) {
+                    // Session from a previous day — mark as 'no_checkout' (no fake time)
+                    const eod = new Date(openSession.checkIn);
+                    eod.setHours(23, 59, 59, 999);
+                    await supabase.from('attendance')
+                        .update({ checkOut: eod.toISOString(), totalHours: 0, status: 'no_checkout' })
+                        .eq('id', openSession.id);
+                } else {
+                    // Same-day open session — block and return openSessionId for frontend
+                    return res.status(200).json({
+                        success: false,
+                        openSession: true,
+                        openSessionId: openSession.id,
+                        message: "لديك عملية حضور مفتوحة بالفعل. يرجى تسجيل الانصراف أولاً."
+                    });
+                }
             }
 
             // 1. Face Identity Check (Security Verification)
@@ -393,12 +413,26 @@ export default async function handler(req, res) {
 
         // --- CHECK OUT ---
         if (action === "checkoutAttendance") {
-            const { data: existing, error: errExist } = await supabase.from('attendance')
-                .select('*')
-                .eq('employeeId', data.employeeId)
-                .is('checkOut', null)
-                .order('checkIn', { ascending: false })
-                .limit(1);
+            // Support checkout by specific ID (for force-close) or latest open session
+            let existing, errExist;
+            if (data.attendanceId) {
+                const result = await supabase.from('attendance')
+                    .select('*')
+                    .eq('id', data.attendanceId)
+                    .limit(1);
+                existing = result.data;
+                errExist = result.error;
+            } else {
+                const result = await supabase.from('attendance')
+                    .select('*')
+                    .eq('employeeId', data.employeeId)
+                    .is('checkOut', null)
+                    .neq('status', 'no_checkout')
+                    .order('checkIn', { ascending: false })
+                    .limit(1);
+                existing = result.data;
+                errExist = result.error;
+            }
             
             if (errExist || !existing || existing.length === 0) throw new Error("لا يوجد عملية حضور مفتوحة لنسجل الانصراف");
 

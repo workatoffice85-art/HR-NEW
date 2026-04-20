@@ -204,6 +204,9 @@ function renderAttendanceTable(data) {
         } else if (record.status === 'overtime') {
             statusText = 'عمل إضافي';
             statusColor = '#3b82f6';
+        } else if (record.status === 'no_checkout') {
+            statusText = 'لم يتم الانصراف';
+            statusColor = '#f59e0b';
         }
 
         tbody.innerHTML += `
