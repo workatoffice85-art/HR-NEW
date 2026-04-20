@@ -503,7 +503,8 @@ export default async function handler(req, res) {
             const { error } = await supabase.from('attendance')
                 .update({
                     checkOut: serverCheckoutTime,
-                    totalHours: totalHours
+                    totalHours: totalHours,
+                    status: existing[0].status // Keep the original status (overtime, late, present)
                 })
                 .eq('id', existing[0].id);
             if (error) throw error;
@@ -870,7 +871,26 @@ export default async function handler(req, res) {
                 }
                 throw error;
             }
-            return res.status(200).json({ success: true, message: "تم إضافة الإجازة الرسمية بنجاح" });
+
+            // Update existing attendance records on this date to overtime
+            const holidayStart = new Date(holidayDate);
+            holidayStart.setHours(0, 0, 0, 0);
+            const holidayEnd = new Date(holidayDate);
+            holidayEnd.setHours(23, 59, 59, 999);
+
+            const { data: attRecords } = await supabase.from('attendance')
+                .select('id')
+                .gte('checkIn', holidayStart.toISOString())
+                .lte('checkIn', holidayEnd.toISOString());
+
+            if (attRecords && attRecords.length > 0) {
+                const idsToUpdate = attRecords.map(r => r.id);
+                await supabase.from('attendance')
+                    .update({ status: 'overtime' })
+                    .in('id', idsToUpdate);
+            }
+
+            return res.status(200).json({ success: true, message: "تم إضافة الإجازة الرسمية بنجاح وتحديث السجلات" });
         }
 
         if (action === "deleteOfficialHoliday") {
@@ -878,9 +898,63 @@ export default async function handler(req, res) {
             if (!id) {
                 return res.status(200).json({ success: false, message: "معرف الإجازة مطلوب" });
             }
+
+            // Get the holiday date before deleting
+            const { data: holiday } = await supabase.from('official_holidays').select('holidayDate').eq('id', id).single();
+            if (!holiday) {
+                return res.status(200).json({ success: false, message: "الإجازة غير موجودة" });
+            }
+
             const { error } = await supabase.from('official_holidays').delete().eq('id', id);
             if (error) throw error;
-            return res.status(200).json({ success: true, message: "تم حذف الإجازة الرسمية بنجاح" });
+
+            // Re-calculate status for attendance records on this date
+            const holidayDate = holiday.holidayDate;
+            const holidayStart = new Date(holidayDate);
+            holidayStart.setHours(0, 0, 0, 0);
+            const holidayEnd = new Date(holidayDate);
+            holidayEnd.setHours(23, 59, 59, 999);
+
+            // Get settings for work start time and weekend days
+            const { data: setRows } = await supabase.from('settings').select('*').in('key', ['workStartTime', 'weekendDays']);
+            let workStart = "09:00";
+            let weekendDays = [5, 6]; // Default: Friday, Saturday
+
+            if (setRows && setRows.length > 0) {
+                const workStartRow = setRows.find(r => r.key === 'workStartTime');
+                if (workStartRow) workStart = workStartRow.value;
+
+                const weekendRow = setRows.find(r => r.key === 'weekendDays');
+                if (weekendRow && weekendRow.value) {
+                    weekendDays = weekendRow.value.split(',').map(d => parseInt(d.trim())).filter(d => !isNaN(d));
+                }
+            }
+
+            const { data: attRecords } = await supabase.from('attendance')
+                .select('*')
+                .gte('checkIn', holidayStart.toISOString())
+                .lte('checkIn', holidayEnd.toISOString());
+
+            if (attRecords && attRecords.length > 0) {
+                for (const record of attRecords) {
+                    const checkInDate = new Date(record.checkIn);
+                    const dayOfWeek = checkInDate.getDay();
+                    const checkInTimeStr = checkInDate.toTimeString().slice(0, 5);
+
+                    let newStatus = "present";
+                    if (weekendDays.includes(dayOfWeek)) {
+                        newStatus = "overtime";
+                    } else if (checkInTimeStr > workStart) {
+                        newStatus = "late";
+                    }
+
+                    await supabase.from('attendance')
+                        .update({ status: newStatus })
+                        .eq('id', record.id);
+                }
+            }
+
+            return res.status(200).json({ success: true, message: "تم حذف الإجازة الرسمية بنجاح وتحديث السجلات" });
         }
 
         // --- SETTINGS ---
