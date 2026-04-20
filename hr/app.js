@@ -301,7 +301,7 @@ function calculateUniqueDailyTransport(records) {
         const dateObj = new Date(record.checkIn);
         if (Number.isNaN(dateObj.getTime())) return;
 
-        const dayKey = `${String(record.employeeId || '')}|${dateObj.toDateString()}`;
+        const dayKey = `${String(record.employeeId || '')}|${dateObj.toISOString().split('T')[0]}`;
         const transportValue = toTransportNumber(record.transportPrice);
 
         if (!(dayKey in dailyTransport)) {
@@ -407,7 +407,7 @@ async function generateEmployeeDetailedReport() {
 
     sortedRecords.forEach(record => {
         const recordDate = new Date(record.checkIn);
-        const dateKey = !isNaN(recordDate) ? recordDate.toDateString() : null;
+        const dateKey = !isNaN(recordDate) ? recordDate.toISOString().split('T')[0] : null;
         if (dateKey) {
             // Only count as regular attendance if not overtime
             if (record.status !== 'overtime') {
@@ -555,8 +555,8 @@ function generateReport() {
 
     filtered.forEach(record => {
         const empId = record.employeeId;
-        const recordDate = new Date(record.checkIn).toDateString(); 
-        
+        const recordDate = new Date(record.checkIn).toISOString().split('T')[0];
+
         if(!reportAcc[empId]) {
              reportAcc[empId] = {
                  name: record.employeeName,

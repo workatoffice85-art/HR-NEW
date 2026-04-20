@@ -834,7 +834,7 @@ function renderMyReports(data, monthStr) {
 
         // Exclude weekends and official holidays
         if (!isWeekend && !isHoliday) {
-            workingDaysPassed.push(new Date(targetYear, targetMonth, i).toDateString());
+            workingDaysPassed.push(currentDateKey);
         }
     }
 
@@ -845,9 +845,9 @@ function renderMyReports(data, monthStr) {
     tbody.innerHTML = '';
 
     // Create a set of dates where user was present for quick lookup (exclude overtime)
-    const presentDates = new Set(presentRecords.filter(r => r.status !== 'overtime').map(r => new Date(r.checkIn).toDateString()));
-    const lateDates = new Set(presentRecords.filter(r => r.status === 'late').map(r => new Date(r.checkIn).toDateString()));
-    const overtimeDates = new Set(presentRecords.filter(r => r.status === 'overtime').map(r => new Date(r.checkIn).toDateString()));
+    const presentDates = new Set(presentRecords.filter(r => r.status !== 'overtime').map(r => new Date(r.checkIn).toISOString().split('T')[0]));
+    const lateDates = new Set(presentRecords.filter(r => r.status === 'late').map(r => new Date(r.checkIn).toISOString().split('T')[0]));
+    const overtimeDates = new Set(presentRecords.filter(r => r.status === 'overtime').map(r => new Date(r.checkIn).toISOString().split('T')[0]));
 
     let totalLates = lateDates.size; // Only count one late per unique date
     let totalOvertime = overtimeDates.size; // Only count one overtime per unique date
@@ -856,7 +856,7 @@ function renderMyReports(data, monthStr) {
     // Add Present Records
     presentRecords.forEach(record => {
         const recordDateObj = new Date(record.checkIn);
-        const dateKey = !Number.isNaN(recordDateObj.getTime()) ? recordDateObj.toDateString() : null;
+        const dateKey = !Number.isNaN(recordDateObj.getTime()) ? recordDateObj.toISOString().split('T')[0] : null;
 
         if (dateKey) {
             const transportValue = toTransportNumber(record.transportPrice);
