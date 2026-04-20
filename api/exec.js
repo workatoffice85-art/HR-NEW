@@ -80,14 +80,14 @@ function buildPhoneCandidates(value) {
     return Array.from(candidates).filter(Boolean);
 }
 
-// Helper: Get current time in Africa/Cairo timezone
+// Helper: Get current time in Africa/Cairo timezone for comparisons
 function getCairoTime(date = new Date()) {
     return new Date(date.toLocaleString('en-US', { timeZone: 'Africa/Cairo' }));
 }
 
 // Helper: Format date as ISO string in Cairo timezone
 function getCairoISOString(date = new Date()) {
-    // Get Cairo time using Intl API to handle DST correctly
+    // Get Cairo time components
     const formatter = new Intl.DateTimeFormat('en-US', {
         timeZone: 'Africa/Cairo',
         year: 'numeric',
@@ -98,7 +98,6 @@ function getCairoISOString(date = new Date()) {
         second: '2-digit',
         hour12: false
     });
-    
     const parts = formatter.formatToParts(date);
     const year = parts.find(p => p.type === 'year').value;
     const month = parts.find(p => p.type === 'month').value;
@@ -107,17 +106,8 @@ function getCairoISOString(date = new Date()) {
     const minute = parts.find(p => p.type === 'minute').value;
     const second = parts.find(p => p.type === 'second').value;
 
-    // Calculate actual timezone offset for Cairo
-    const cairoDate = new Date(date.toLocaleString('en-US', { timeZone: 'Africa/Cairo' }));
-    const utcDate = new Date(date.toLocaleString('en-US', { timeZone: 'UTC' }));
-    const offsetMs = cairoDate.getTime() - utcDate.getTime();
-    const offsetHours = Math.floor(offsetMs / 3600000);
-    const offsetMinutes = Math.abs((offsetMs % 3600000) / 60000);
-    const offsetSign = offsetHours >= 0 ? '+' : '-';
-    const offsetStr = `${offsetSign}${String(Math.abs(offsetHours)).padStart(2, '0')}:${String(offsetMinutes).padStart(2, '0')}`;
-
-    // Build ISO string with actual Cairo offset
-    return `${year}-${month}-${day}T${hour}:${minute}:${second}${offsetStr}`;
+    // Return with Cairo offset
+    return `${year}-${month}-${day}T${hour}:${minute}:${second}+02:00`;
 }
 
 // Helper: Get time string (HH:mm) in Cairo timezone for comparisons
