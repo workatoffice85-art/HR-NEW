@@ -1360,7 +1360,16 @@ async function addOfficialHoliday() {
             alert('✅ ' + result.message);
             dateInput.value = '';
             nameInput.value = '';
-            fetchOfficialHolidays(true);
+            await fetchOfficialHolidays(true);
+            // Refresh dashboard data to update allOfficialHolidays
+            await initDashboard(true);
+            // Regenerate reports if tabs are active
+            if (localStorage.getItem('hrActiveTab') === 'reports') {
+                generateReport();
+            }
+            if (localStorage.getItem('hrActiveTab') === 'employeeDetails') {
+                await generateEmployeeDetailedReport();
+            }
         } else {
             alert('❌ ' + result.message);
         }
@@ -1388,7 +1397,16 @@ async function deleteOfficialHoliday(id, name) {
 
         if (result.success) {
             alert('✅ ' + result.message);
-            fetchOfficialHolidays(true);
+            await fetchOfficialHolidays(true);
+            // Refresh dashboard data to update allOfficialHolidays
+            await initDashboard(true);
+            // Regenerate reports if tabs are active
+            if (localStorage.getItem('hrActiveTab') === 'reports') {
+                generateReport();
+            }
+            if (localStorage.getItem('hrActiveTab') === 'employeeDetails') {
+                await generateEmployeeDetailedReport();
+            }
         } else {
             alert('❌ ' + result.message);
         }

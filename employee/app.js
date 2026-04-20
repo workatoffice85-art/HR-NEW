@@ -7,11 +7,12 @@ let lastDetection = null;
 let sitesData = [];
 let faceMatcher = null;
 let currentFaceDescriptor = null;
-let timerInterval = null; 
+let timerInterval = null;
 let isFaceVerified = false;
 let lastDetectedSite = null;
 let tempEmail = ""; // used during registration
 let tempPhone = ""; // used during registration
+let allOfficialHolidays = [];
 const MODEL_URL = '../models';
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -199,25 +200,31 @@ function logout() {
 
 async function initSystem() {
     setStatus('🔄 جاري بدء النظام (النسخة المحدثة)...', 'text-muted');
-    
+
     // Step 1: Load Data & AI Models in Parallel
     try {
         const dataPromise = fetch(`${API_URL}?action=getPortalInitialData&employeeId=${encodeURIComponent(currentUser.id)}`).then(r => r.json());
+        const holidaysPromise = fetch(`${API_URL}?action=getOfficialHolidays`).then(r => r.json());
         const modelPromise = Promise.all([
             faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
             faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
             faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
         ]);
 
-        const [dataResult, _] = await Promise.all([dataPromise, modelPromise]);
+        const [dataResult, holidaysResult, _] = await Promise.all([dataPromise, holidaysPromise, modelPromise]);
 
         if (dataResult.success) {
             sitesData = dataResult.sites || [];
             allAttendanceData = dataResult.attendance || [];
-            
+
+            // Load official holidays
+            if (holidaysResult.success) {
+                allOfficialHolidays = holidaysResult.data || [];
+            }
+
             // Process initial status
             processAttendanceStatus(allAttendanceData);
-            
+
             setStatus(`📡 تم تحميل ${sitesData.length} موقع. النظام جاهز...`, 'text-muted');
         } else {
             console.error("Data load failed", dataResult);
@@ -746,11 +753,27 @@ function getWorkingDaysPassed(year, month) {
     let days = 0;
     const today = new Date();
     const endDay = (year === today.getFullYear() && month === today.getMonth()) ? today.getDate() : new Date(year, month + 1, 0).getDate();
-    
+
+    // Build a Set of official holiday dates for quick lookup
+    const holidayDates = new Set();
+    allOfficialHolidays.forEach(h => {
+        if (h.holidayDate) {
+            const d = new Date(h.holidayDate);
+            if (!isNaN(d)) {
+                const dateKey = d.toISOString().split('T')[0];
+                holidayDates.add(dateKey);
+            }
+        }
+    });
+
     for (let i = 1; i <= endDay; i++) {
         const d = new Date(year, month, i);
-        // Exclude Friday (5) and Saturday (6)
-        if (d.getDay() !== 5 && d.getDay() !== 6) {
+        const currentDateKey = d.toISOString().split('T')[0];
+        const isWeekend = d.getDay() === 5 || d.getDay() === 6; // Friday (5) and Saturday (6)
+        const isHoliday = holidayDates.has(currentDateKey);
+
+        // Exclude weekends and official holidays
+        if (!isWeekend && !isHoliday) {
             days++;
         }
     }
@@ -775,14 +798,30 @@ function renderMyReports(data, monthStr) {
 
     // 2. Identify working days that passed (Sun-Thu)
     const workingDaysPassed = [];
-    const endDay = (targetYear === now.getFullYear() && targetMonth === now.getMonth()) 
-                   ? now.getDate() 
+    const endDay = (targetYear === now.getFullYear() && targetMonth === now.getMonth())
+                   ? now.getDate()
                    : new Date(targetYear, targetMonth + 1, 0).getDate();
+
+    // Build a Set of official holiday dates for quick lookup
+    const holidayDates = new Set();
+    allOfficialHolidays.forEach(h => {
+        if (h.holidayDate) {
+            const d = new Date(h.holidayDate);
+            if (!isNaN(d)) {
+                const dateKey = d.toISOString().split('T')[0];
+                holidayDates.add(dateKey);
+            }
+        }
+    });
 
     for (let i = 1; i <= endDay; i++) {
         const d = new Date(targetYear, targetMonth, i);
-        // Weekend in Egypt: Friday (5) and Saturday (6)
-        if (d.getDay() !== 5 && d.getDay() !== 6) {
+        const currentDateKey = d.toISOString().split('T')[0];
+        const isWeekend = d.getDay() === 5 || d.getDay() === 6; // Friday (5) and Saturday (6)
+        const isHoliday = holidayDates.has(currentDateKey);
+
+        // Exclude weekends and official holidays
+        if (!isWeekend && !isHoliday) {
             workingDaysPassed.push(new Date(targetYear, targetMonth, i).toDateString());
         }
     }
