@@ -297,13 +297,13 @@ export default async function handler(req, res) {
             const empId = data.employeeId;
             const [siteRes, attRes] = await Promise.all([
                 supabase.from('sites').select('*'),
-                supabase.from('attendance').select('*').eq('employeeId', empId)
+                supabase.from('attendance').select('*').eq('employeeId', empId).order('checkIn', { ascending: true })
             ]);
             return res.status(200).json({ success: true, sites: siteRes.data || [], attendance: attRes.data || [] });
         }
 
         if (action === "getAttendance") {
-            let query = supabase.from('attendance').select('*');
+            let query = supabase.from('attendance').select('*').order('checkIn', { ascending: true });
             if (data.employeeId) query = query.eq('employeeId', data.employeeId);
             const { data: att, error } = await query;
             if (error) throw error;
