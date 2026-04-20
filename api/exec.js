@@ -87,14 +87,28 @@ function getCairoTime(date = new Date()) {
 
 // Helper: Format date as ISO string in Cairo timezone
 function getCairoISOString(date = new Date()) {
-    const year = date.toLocaleString('en-US', { timeZone: 'Africa/Cairo', year: 'numeric' });
-    const month = date.toLocaleString('en-US', { timeZone: 'Africa/Cairo', month: '2-digit' });
-    const day = date.toLocaleString('en-US', { timeZone: 'Africa/Cairo', day: '2-digit' });
-    const hour = date.toLocaleString('en-US', { timeZone: 'Africa/Cairo', hour: '2-digit', hour12: false });
-    const minute = date.toLocaleString('en-US', { timeZone: 'Africa/Cairo', minute: '2-digit' });
-    const second = date.toLocaleString('en-US', { timeZone: 'Africa/Cairo', second: '2-digit' });
+    // Get Cairo time using Intl API to handle DST correctly
+    const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Africa/Cairo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+    });
     
-    return `${year}-${month}-${day}T${hour}:${minute}:${second}.000Z`;
+    const parts = formatter.formatToParts(date);
+    const year = parts.find(p => p.type === 'year').value;
+    const month = parts.find(p => p.type === 'month').value;
+    const day = parts.find(p => p.type === 'day').value;
+    const hour = parts.find(p => p.type === 'hour').value;
+    const minute = parts.find(p => p.type === 'minute').value;
+    const second = parts.find(p => p.type === 'second').value;
+    
+    // Build ISO string with Cairo offset (+02:00 or +03:00 for DST)
+    return `${year}-${month}-${day}T${hour}:${minute}:${second}+02:00`;
 }
 
 // Helper: Get time string (HH:mm) in Cairo timezone for comparisons

@@ -908,8 +908,8 @@ function renderMyReports(data, monthStr) {
             tbody.innerHTML += `
                 <tr>
                     <td data-label="التاريخ">${item.date.toLocaleDateString('ar-EG')}</td>
-                    <td data-label="الحضور" dir="ltr">${new Date(item.checkIn).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'})}</td>
-                    <td data-label="الانصراف" dir="ltr">${item.checkOut ? new Date(item.checkOut).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'}) : '-'}</td>
+                    <td data-label="الحضور" dir="ltr">${new Date(item.checkIn).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit', timeZone:'UTC'})}</td>
+                    <td data-label="الانصراف" dir="ltr">${item.checkOut ? new Date(item.checkOut).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit', timeZone:'UTC'}) : '-'}</td>
                     <td data-label="البدل">${item.transport} ج.م</td>
                     <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
                 </tr>

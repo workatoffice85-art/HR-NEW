@@ -213,12 +213,13 @@ function renderAttendanceTable(data) {
     // Reverse to show newest first
     [...filtered].reverse().forEach(record => {
         const cInObj = new Date(record.checkIn);
-        const checkInTime = !isNaN(cInObj) ? cInObj.toLocaleString('ar-EG') : (record.checkIn || '-');
+        // Display time in UTC (since server sends Cairo time with +02:00 offset)
+        const checkInTime = !isNaN(cInObj) ? cInObj.toLocaleString('ar-EG', { timeZone: 'UTC' }) : (record.checkIn || '-');
         
         let checkOutTime = 'لم ينصرف بعد';
         if (record.checkOut) {
             const cOutObj = new Date(record.checkOut);
-            checkOutTime = !isNaN(cOutObj) ? cOutObj.toLocaleString('ar-EG') : (record.checkOut || '-');
+            checkOutTime = !isNaN(cOutObj) ? cOutObj.toLocaleString('ar-EG', { timeZone: 'UTC' }) : (record.checkOut || '-');
         }
         
         let statusText = 'حاضر';
