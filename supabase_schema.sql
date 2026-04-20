@@ -104,3 +104,11 @@ CREATE TABLE IF NOT EXISTS "approvalLogs" (
     "details" TEXT,
     "timestamp" TEXT
 );
+
+-- Table: official_holidays
+CREATE TABLE IF NOT EXISTS official_holidays (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    "holidayDate" DATE NOT NULL UNIQUE,
+    "holidayName" TEXT NOT NULL,
+    "createdAt" TEXT DEFAULT NOW()
+);

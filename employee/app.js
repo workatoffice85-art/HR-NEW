@@ -796,8 +796,10 @@ function renderMyReports(data, monthStr) {
     // Create a set of dates where user was present for quick lookup
     const presentDates = new Set(presentRecords.map(r => new Date(r.checkIn).toDateString()));
     const lateDates = new Set(presentRecords.filter(r => r.status === 'late').map(r => new Date(r.checkIn).toDateString()));
+    const overtimeDates = new Set(presentRecords.filter(r => r.status === 'overtime').map(r => new Date(r.checkIn).toDateString()));
 
     let totalLates = lateDates.size; // Only count one late per unique date
+    let totalOvertime = overtimeDates.size; // Only count one overtime per unique date
     const fullReport = [];
 
     // Add Present Records
@@ -875,9 +877,16 @@ function renderMyReports(data, monthStr) {
 
     const totalAbsent = workingDaysPassed.length - presentDates.size;
 
+    // Calculate overtime pay based on employee salary
+    const salary = currentUser.salary ? parseFloat(currentUser.salary) : 0;
+    const dailyRate = salary / 30;
+    const overtimePay = dailyRate * totalOvertime;
+
     document.getElementById('empTotalPresent').innerText = presentDates.size; // Use size of unique dates set
     document.getElementById('empTotalAbsent').innerText = totalAbsent > 0 ? totalAbsent : 0;
     document.getElementById('empTotalLates').innerText = totalLates;
+    document.getElementById('empTotalOvertime').innerText = totalOvertime;
+    document.getElementById('empTotalOvertimePay').innerText = overtimePay.toFixed(2) + " ج.م";
     document.getElementById('empTotalTransport').innerText = totalTransport.toFixed(2) + " ج.م";
 }
 

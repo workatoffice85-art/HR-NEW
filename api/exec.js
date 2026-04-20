@@ -159,7 +159,8 @@ export default async function handler(req, res) {
             "saveSite", "updateSite", "deleteSite",
             "addSiteRequest", "approveSiteRequest", "rejectSiteRequest",
             "updateSettings",
-            "addAllowanceRequest", "handleAllowanceRequest"
+            "addAllowanceRequest", "handleAllowanceRequest",
+            "addOfficialHoliday", "deleteOfficialHoliday"
         ];
         if (writeActions.includes(action)) {
             syncToGoogleSheet(data);
@@ -224,7 +225,8 @@ export default async function handler(req, res) {
                     role: user.role,
                     assignedSites: user.assignedSites ? String(user.assignedSites).split(',').map((s) => s.trim()).filter(Boolean) : [],
                     faceDescriptor: user.faceDescriptor,
-                    transportPrice: user.transportPrice
+                    transportPrice: user.transportPrice,
+                    salary: user.salary || 0
                 }
             });
         }
@@ -429,7 +431,12 @@ export default async function handler(req, res) {
             // Use server Cairo time for authoritative status calculation
             const checkInTimeStr = getCairoTimeString(serverNow);
 
-            if (weekendDays.includes(dayOfWeek)) status = "overtime";
+            // Check if today is an official holiday
+            const todayDateStr = getCairoDateString(serverNow);
+            const { data: holidayData } = await supabase.from('official_holidays').select('*').eq('holidayDate', todayDateStr).maybeSingle();
+            const isOfficialHoliday = holidayData !== null;
+
+            if (isOfficialHoliday || weekendDays.includes(dayOfWeek)) status = "overtime";
             else if (checkInTimeStr > workStart) status = "late";
 
             // Resolve proper transport price
@@ -837,6 +844,43 @@ export default async function handler(req, res) {
                 success: true, 
                 message: status === 'approved' ? "تمت الموافقة وتحديث البدلات بنجاح" : "تم رفض الطلب" 
             });
+        }
+
+        // --- OFFICIAL HOLIDAYS ---
+        if (action === "getOfficialHolidays") {
+            const { data: holidays, error } = await supabase.from('official_holidays').select('*').order('holidayDate', { ascending: true });
+            if (error) throw error;
+            return res.status(200).json({ success: true, data: holidays || [] });
+        }
+
+        if (action === "addOfficialHoliday") {
+            const { holidayDate, holidayName } = data;
+            if (!holidayDate || !holidayName) {
+                return res.status(200).json({ success: false, message: "تاريخ واسم الإجازة مطلوبان" });
+            }
+            const payload = {
+                holidayDate: holidayDate,
+                holidayName: holidayName,
+                createdAt: new Date().toISOString()
+            };
+            const { error } = await supabase.from('official_holidays').insert([payload]);
+            if (error) {
+                if (error.code === '23505') {
+                    return res.status(200).json({ success: false, message: "هذا التاريخ مسجل كإجازة رسمية مسبقاً" });
+                }
+                throw error;
+            }
+            return res.status(200).json({ success: true, message: "تم إضافة الإجازة الرسمية بنجاح" });
+        }
+
+        if (action === "deleteOfficialHoliday") {
+            const { id } = data;
+            if (!id) {
+                return res.status(200).json({ success: false, message: "معرف الإجازة مطلوب" });
+            }
+            const { error } = await supabase.from('official_holidays').delete().eq('id', id);
+            if (error) throw error;
+            return res.status(200).json({ success: true, message: "تم حذف الإجازة الرسمية بنجاح" });
         }
 
         // --- SETTINGS ---

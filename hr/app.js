@@ -7,6 +7,7 @@ let allSites = [];
 let allSiteRequests = [];
 let allAllowanceRequests = [];
 let appSettings = {};
+let allOfficialHolidays = [];
 let latesChartInstance = null;
 let parseMapLinkTimer = null;
 let parseMapLinkRequestId = 0;
@@ -117,6 +118,7 @@ function showTab(tabName) {
     if (tabName === 'reports') generateReport();
     if (tabName === 'employeeDetails') initEmployeeDetailedTab();
     if (tabName === 'settings') fetchSettings();
+    if (tabName === 'officialHolidays') fetchOfficialHolidays();
 
     // Close sidebar on mobile after clicking a link
     const sidebar = document.querySelector('.sidebar');
@@ -127,12 +129,18 @@ function showTab(tabName) {
 
 async function initDashboard(forceRefresh = false) {
     if (isInitialDataLoaded && !forceRefresh) return;
-    
+
     document.getElementById('loader').classList.remove('hidden');
     try {
-        const res = await fetch(`${API_URL}?action=getDashboardData`);
-        const result = await res.json();
-        
+        // Fetch dashboard data and official holidays in parallel
+        const [dashboardRes, holidaysRes] = await Promise.all([
+            fetch(`${API_URL}?action=getDashboardData`),
+            fetch(`${API_URL}?action=getOfficialHolidays`)
+        ]);
+
+        const result = await dashboardRes.json();
+        const holidaysResult = await holidaysRes.json();
+
         if (result.success) {
             allAttendanceData = result.attendance || [];
             allEmployees = result.employees || [];
@@ -140,9 +148,14 @@ async function initDashboard(forceRefresh = false) {
             allSiteRequests = result.siteRequests || [];
             allAllowanceRequests = result.allowanceRequests || [];
             appSettings = result.settings || {};
-            
+
+            // Load official holidays
+            if (holidaysResult.success) {
+                allOfficialHolidays = holidaysResult.data || [];
+            }
+
             isInitialDataLoaded = true;
-            
+
             // Render the current active tab
             const activeTab = localStorage.getItem('hrActiveTab') || 'attendance';
             renderActiveTab(activeTab);
@@ -251,8 +264,25 @@ function getWorkingDaysCount(startDate, endDate) {
 
     const weekendDays = getWeekendDaysFromSettings();
 
+    // Build a Set of official holiday dates for quick lookup
+    const holidayDates = new Set();
+    allOfficialHolidays.forEach(h => {
+        if (h.holidayDate) {
+            // Normalize date string to YYYY-MM-DD format
+            const d = new Date(h.holidayDate);
+            if (!isNaN(d)) {
+                const dateKey = d.toISOString().split('T')[0];
+                holidayDates.add(dateKey);
+            }
+        }
+    });
+
     while (tempDate <= finalDate) {
-        if (!weekendDays.includes(tempDate.getDay())) {
+        const currentDateKey = tempDate.toISOString().split('T')[0];
+        const isWeekend = weekendDays.includes(tempDate.getDay());
+        const isHoliday = holidayDates.has(currentDateKey);
+
+        if (!isWeekend && !isHoliday) {
             workingDaysCount += 1;
         }
         tempDate.setDate(tempDate.getDate() + 1);
@@ -1241,6 +1271,131 @@ async function setupTriggers() {
         const result = await res.json();
         alert(result.success ? "✅ تم تفعيل المواعيد بنجاح" : "❌ فشل التفعيل");
     } catch(e) { alert("خطأ في الاتصال"); }
+    document.getElementById('loader').classList.add('hidden');
+}
+
+// ------ OFFICIAL HOLIDAYS LOGIC ------ //
+async function fetchOfficialHolidays(force = false) {
+    if (!force && allOfficialHolidays.length) {
+        renderOfficialHolidaysTable(allOfficialHolidays);
+        return;
+    }
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(`${API_URL}?action=getOfficialHolidays`);
+        const result = await res.json();
+        if (result.success) {
+            allOfficialHolidays = result.data || [];
+            renderOfficialHolidaysTable(allOfficialHolidays);
+        }
+    } catch (e) {
+        console.error("Fetch Official Holidays Error:", e);
+    }
+    document.getElementById('loader').classList.add('hidden');
+}
+
+function renderOfficialHolidaysTable(data) {
+    const tbody = document.getElementById('officialHolidaysTableBody');
+    tbody.innerHTML = '';
+
+    if (data.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="4" style="text-align:center; color:var(--text-muted);">لا توجد إجازات رسمية مسجلة</td>
+            </tr>
+        `;
+        return;
+    }
+
+    // Sort by date (newest first)
+    const sorted = [...data].sort((a, b) => new Date(b.holidayDate) - new Date(a.holidayDate));
+
+    const dayNames = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+
+    sorted.forEach(holiday => {
+        const dateObj = new Date(holiday.holidayDate);
+        const dateStr = !isNaN(dateObj) ? dateObj.toLocaleDateString('ar-EG') : holiday.holidayDate;
+        const dayName = !isNaN(dateObj) ? dayNames[dateObj.getDay()] : '-';
+
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td data-label="التاريخ" dir="ltr">${dateStr}</td>
+            <td data-label="اليوم">${dayName}</td>
+            <td data-label="اسم الإجازة">${holiday.holidayName}</td>
+            <td data-label="الإجراءات">
+                <button class="btn-danger" style="padding:5px 12px; font-size:0.85rem; width:auto; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" 
+                    onclick="deleteOfficialHoliday('${holiday.id}', '${holiday.holidayName}')">حذف 🗑️</button>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+async function addOfficialHoliday() {
+    const dateInput = document.getElementById('holidayDate');
+    const nameInput = document.getElementById('holidayName');
+
+    const holidayDate = dateInput.value;
+    const holidayName = nameInput.value.trim();
+
+    if (!holidayDate || !holidayName) {
+        alert('يرجى إدخال تاريخ واسم الإجازة');
+        return;
+    }
+
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({
+                action: 'addOfficialHoliday',
+                holidayDate: holidayDate,
+                holidayName: holidayName
+            }),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+
+        if (result.success) {
+            alert('✅ ' + result.message);
+            dateInput.value = '';
+            nameInput.value = '';
+            fetchOfficialHolidays(true);
+        } else {
+            alert('❌ ' + result.message);
+        }
+    } catch (e) {
+        console.error(e);
+        alert('حدث خطأ في الاتصال');
+    }
+    document.getElementById('loader').classList.add('hidden');
+}
+
+async function deleteOfficialHoliday(id, name) {
+    if (!confirm(`هل أنت متأكد من حذف إجازة "${name}"؟`)) return;
+
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({
+                action: 'deleteOfficialHoliday',
+                id: id
+            }),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+
+        if (result.success) {
+            alert('✅ ' + result.message);
+            fetchOfficialHolidays(true);
+        } else {
+            alert('❌ ' + result.message);
+        }
+    } catch (e) {
+        console.error(e);
+        alert('حدث خطأ في الاتصال');
+    }
     document.getElementById('loader').classList.add('hidden');
 }
 
