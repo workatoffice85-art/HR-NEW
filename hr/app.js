@@ -80,12 +80,19 @@ function logout() {
 }
 
 function showTab(tabName) {
+    // Hide all tabs and reset active states
     document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
     document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active'));
-    
+
+    // Show target tab
     const targetTab = document.getElementById('tab-' + tabName);
-    if (targetTab) targetTab.classList.remove('hidden');
-    
+    if (targetTab) {
+        targetTab.classList.remove('hidden');
+        // Scroll to top of main content
+        const mainContent = document.querySelector('.main-content');
+        if (mainContent) mainContent.scrollTop = 0;
+    }
+
     // Highlight the active nav link
     document.querySelectorAll('.nav-link').forEach(link => {
         const onclickAttr = link.getAttribute('onclick');
@@ -94,8 +101,14 @@ function showTab(tabName) {
         }
     });
 
+    // Save active tab
     localStorage.setItem('hrActiveTab', tabName);
-    
+
+    // Reset loader state before fetching new data
+    const loader = document.getElementById('loader');
+    if (loader) loader.classList.add('hidden');
+
+    // Fetch data for the active tab
     if (tabName === 'attendance') fetchAttendance();
     if (tabName === 'employees') fetchEmployees();
     if (tabName === 'sites') fetchSites();

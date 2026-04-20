@@ -79,6 +79,38 @@ function buildPhoneCandidates(value) {
 
     return Array.from(candidates).filter(Boolean);
 }
+
+// Helper: Get current time in Africa/Cairo timezone
+function getCairoTime(date = new Date()) {
+    return new Date(date.toLocaleString('en-US', { timeZone: 'Africa/Cairo' }));
+}
+
+// Helper: Format date as ISO string in Cairo timezone
+function getCairoISOString(date = new Date()) {
+    const cairoTime = getCairoTime(date);
+    return cairoTime.toISOString();
+}
+
+// Helper: Get time string (HH:mm) in Cairo timezone for comparisons
+function getCairoTimeString(date = new Date()) {
+    return date.toLocaleTimeString('en-US', {
+        timeZone: 'Africa/Cairo',
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+// Helper: Get date string (YYYY-MM-DD) in Cairo timezone
+function getCairoDateString(date = new Date()) {
+    return date.toLocaleDateString('en-US', {
+        timeZone: 'Africa/Cairo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+    }).split('/').reverse().join('-');
+}
+
 // Background sync to Google Sheets (Backup)
 async function syncToGoogleSheet(body) {
     try {
@@ -121,11 +153,12 @@ export default async function handler(req, res) {
 
         // DUAL WRITING / BACKUP SYNC:
         // For writing actions, we asynchronously broadcast the exact request to your existing Google Apps Script
+        // Note: addAttendance and checkoutAttendance sync explicitly after successful DB insert with server timestamps
         const writeActions = [
-            "saveEmployee", "updateEmployee", "deleteEmployee", 
-            "saveSite", "updateSite", "deleteSite", 
-            "addSiteRequest", "approveSiteRequest", "rejectSiteRequest", 
-            "addAttendance", "checkoutAttendance", "updateSettings",
+            "saveEmployee", "updateEmployee", "deleteEmployee",
+            "saveSite", "updateSite", "deleteSite",
+            "addSiteRequest", "approveSiteRequest", "rejectSiteRequest",
+            "updateSettings",
             "addAllowanceRequest", "handleAllowanceRequest"
         ];
         if (writeActions.includes(action)) {
@@ -350,20 +383,20 @@ export default async function handler(req, res) {
                         if (r.status === 'approved_today' || isAutoApprovable) {
                             let d = getDistance(data.latitude, data.longitude, r.latitude, r.longitude);
                             let radius = isAutoApprovable ? 700 : (r.tempRadius || 100);
-                            if (d <= radius) { 
-                                matchedSite = { id: r.id, name: r.suggestedName, transportPrice: r.transportPrice }; 
+                            if (d <= radius) {
+                                matchedSite = { id: r.id, name: r.suggestedName, transportPrice: r.transportPrice };
                                 isRequest = true;
-                                
+
                                 // Silent Auto-Approval update if pending
                                 if (isAutoApprovable) {
-                                    await supabase.from('siteRequests').update({ 
-                                        status: 'approved_today', 
-                                        tempRadius: 700, 
-                                        approvedAt: now.toISOString(),
+                                    await supabase.from('siteRequests').update({
+                                        status: 'approved_today',
+                                        tempRadius: 700,
+                                        approvedAt: getCairoISOString(now),
                                         note: (r.note ? r.note + " | " : "") + "[AUTO APPROVED after 2 minutes]"
                                     }).eq('id', r.id);
                                 }
-                                break; 
+                                break;
                             }
                         }
                     }
@@ -372,21 +405,17 @@ export default async function handler(req, res) {
 
             if (!matchedSite) throw new Error("أنت خارج نطاق جميع مواقع العمل المسجلة");
 
-            // Calculate status
-            let checkInDate = new Date(data.checkIn);
-            let dayOfWeek = checkInDate.getDay();
+            // Calculate status using SERVER-SIDE Cairo time (authoritative source)
+            const serverNow = new Date();
+            const cairoNow = getCairoTime(serverNow);
+            const dayOfWeek = cairoNow.getDay();
             let status = "present";
-            
+
             const { data: setRows } = await supabase.from('settings').select('*').eq('key', 'workStartTime');
             let workStart = (setRows && setRows.length > 0) ? setRows[0].value : "09:00";
-            
-            // Critical Fix: Use Africa/Cairo time to compare with local workStart
-            let checkInTimeStr = checkInDate.toLocaleTimeString('en-US', {
-                timeZone: 'Africa/Cairo',
-                hour12: false, 
-                hour: '2-digit', 
-                minute: '2-digit'
-            });
+
+            // Use server Cairo time for authoritative status calculation
+            const checkInTimeStr = getCairoTimeString(serverNow);
 
             if (dayOfWeek === 5 || dayOfWeek === 6) status = "overtime";
             else if (checkInTimeStr > workStart) status = "late";
@@ -394,12 +423,15 @@ export default async function handler(req, res) {
             // Resolve proper transport price
             const finalTransport = await fetchResolvedTransportPrice(data.employeeId, matchedSite.id, matchedSite.transportPrice, isRequest);
 
+            // Use server Cairo time as the authoritative timestamp (ignores client clock manipulation)
+            const serverTimestamp = getCairoISOString(serverNow);
+
             const payload = {
                 employeeId: data.employeeId,
                 employeeName: data.employeeName,
                 siteId: matchedSite.id,
                 siteName: matchedSite.name,
-                checkIn: data.checkIn,
+                checkIn: serverTimestamp,
                 latitude: data.latitude,
                 longitude: data.longitude,
                 status: status,
@@ -408,6 +440,10 @@ export default async function handler(req, res) {
 
             const { error } = await supabase.from('attendance').insert([payload]);
             if (error) throw error;
+
+            // Sync to Google Sheets with actual server-generated data
+            syncToGoogleSheet({ action: 'addAttendance', ...payload });
+
             return res.status(200).json({ success: true, message: "تم تسجيل الحضور بنجاح" });
         }
 
@@ -437,22 +473,34 @@ export default async function handler(req, res) {
             if (errExist || !existing || existing.length === 0) throw new Error("لا يوجد عملية حضور مفتوحة لنسجل الانصراف");
 
             const checkIn = new Date(existing[0].checkIn);
-            const checkOut = new Date(data.checkOut);
+            // Use SERVER-SIDE Cairo time as authoritative checkout timestamp
+            const serverCheckoutTime = getCairoISOString(new Date());
+            const checkOut = new Date(serverCheckoutTime);
             let totalHours = 0;
             if (!isNaN(checkIn) && !isNaN(checkOut)) {
                 totalHours = parseFloat(((checkOut - checkIn) / 36e5).toFixed(2));
             }
 
             const { error } = await supabase.from('attendance')
-                .update({ 
-                    checkOut: data.checkOut,
+                .update({
+                    checkOut: serverCheckoutTime,
                     totalHours: totalHours
                 })
                 .eq('id', existing[0].id);
             if (error) throw error;
+
+            // Sync to Google Sheets with actual server-generated data
+            syncToGoogleSheet({
+                action: 'checkoutAttendance',
+                attendanceId: existing[0].id,
+                employeeId: existing[0].employeeId,
+                checkOut: serverCheckoutTime,
+                totalHours: totalHours
+            });
+
             return res.status(200).json({ success: true, message: "تم تسجيل الانصراف بنجاح" });
         }
-        
+
         // --- EMPLOYEE MGMT ---
         if (action === "getEmployees") {
             const { data: emps, error } = await supabase.from('employees').select('*');

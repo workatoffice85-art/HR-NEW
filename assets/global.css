@@ -425,6 +425,32 @@ body {
     opacity: 1;
 }
 
+/* Tab Content Styles */
+.tab-content {
+    padding: 0;
+    animation: fadeIn 0.3s ease-in;
+}
+
+.tab-content::after {
+    content: '';
+    display: table;
+    clear: both;
+}
+
+/* Dashboard Layout Fixes */
+.dashboard-layout {
+    display: flex;
+    min-height: 100vh;
+    position: relative;
+}
+
+.main-content {
+    flex: 1;
+    padding: 30px;
+    overflow-y: auto;
+    position: relative;
+}
+
 /* Settings Styles */
 .settings-grid {
     display: grid;
