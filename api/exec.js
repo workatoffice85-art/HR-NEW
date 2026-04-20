@@ -106,9 +106,18 @@ function getCairoISOString(date = new Date()) {
     const hour = parts.find(p => p.type === 'hour').value;
     const minute = parts.find(p => p.type === 'minute').value;
     const second = parts.find(p => p.type === 'second').value;
-    
-    // Build ISO string with Cairo offset (+02:00 or +03:00 for DST)
-    return `${year}-${month}-${day}T${hour}:${minute}:${second}+02:00`;
+
+    // Calculate actual timezone offset for Cairo
+    const cairoDate = new Date(date.toLocaleString('en-US', { timeZone: 'Africa/Cairo' }));
+    const utcDate = new Date(date.toLocaleString('en-US', { timeZone: 'UTC' }));
+    const offsetMs = cairoDate.getTime() - utcDate.getTime();
+    const offsetHours = Math.floor(offsetMs / 3600000);
+    const offsetMinutes = Math.abs((offsetMs % 3600000) / 60000);
+    const offsetSign = offsetHours >= 0 ? '+' : '-';
+    const offsetStr = `${offsetSign}${String(Math.abs(offsetHours)).padStart(2, '0')}:${String(offsetMinutes).padStart(2, '0')}`;
+
+    // Build ISO string with actual Cairo offset
+    return `${year}-${month}-${day}T${hour}:${minute}:${second}${offsetStr}`;
 }
 
 // Helper: Get time string (HH:mm) in Cairo timezone for comparisons
