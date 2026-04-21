@@ -179,8 +179,7 @@ export default async function handler(req, res) {
             "addSiteRequest", "approveSiteRequest", "rejectSiteRequest",
             "updateSettings",
             "addAllowanceRequest", "handleAllowanceRequest",
-            "addOfficialHoliday", "deleteOfficialHoliday",
-            "clearProcessedRequests"
+            "addOfficialHoliday", "deleteOfficialHoliday"
         ];
         if (writeActions.includes(action)) {
             syncToGoogleSheet(data);
@@ -764,16 +763,6 @@ export default async function handler(req, res) {
             const { error } = await supabase.from('siteRequests').update({ status: 'rejected' }).eq('id', data.id);
             if (error) throw error;
             return res.status(200).json({ success: true, message: "تم رفض الطلب بنجاح" });
-        }
-
-        if (action === "clearProcessedRequests") {
-            // Delete requests that are approved, rejected, or expired (approved_today)
-            const { error } = await supabase
-                .from('siteRequests')
-                .delete()
-                .in('status', ['approved', 'rejected', 'approved_today']);
-            if (error) throw error;
-            return res.status(200).json({ success: true, message: "تم مسح الطلبات المنتهية بنجاح" });
         }
 
         // --- ALLOWANCE UPGRADE SYSTEM ---

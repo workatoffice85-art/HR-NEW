@@ -80,7 +80,7 @@ function logout() {
     location.reload();
 }
 
-async function showTab(tabName) {
+function showTab(tabName) {
     // Hide all tabs and reset active states
     document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
     document.querySelectorAll('.nav-link').forEach(el => el.classList.remove('active'));
@@ -115,7 +115,7 @@ async function showTab(tabName) {
     if (tabName === 'sites') fetchSites();
     if (tabName === 'siteRequests') fetchSiteRequests();
     if (tabName === 'allowanceRequests') fetchAllowanceRequests();
-    if (tabName === 'reports') { await fetchAttendance(true); generateReport(); }
+    if (tabName === 'reports') generateReport();
     if (tabName === 'employeeDetails') initEmployeeDetailedTab();
     if (tabName === 'settings') fetchSettings();
     if (tabName === 'officialHolidays') fetchOfficialHolidays();
@@ -362,8 +362,8 @@ function populateEmployeeDetailEmployees() {
 }
 
 async function initEmployeeDetailedTab() {
-    await fetchEmployees(true);
-    await fetchAttendance(true);
+    if (!allEmployees.length) await fetchEmployees();
+    if (!allAttendanceData.length) await fetchAttendance();
     populateEmployeeDetailEmployees();
 
     const selectedEmployee = document.getElementById('employeeDetailEmployee').value;
@@ -872,12 +872,8 @@ async function openEmployeeModal(mode = 'add', emp = null) {
     }
 
     container.innerHTML = '';
-    // Normalize assignedSites to array for proper comparison
-    const assignedSitesArray = emp && emp.assignedSites
-        ? (Array.isArray(emp.assignedSites) ? emp.assignedSites : String(emp.assignedSites).split(',').map(s => s.trim()).filter(Boolean))
-        : [];
     allSites.filter(s => !s.isTemporary).forEach(site => {
-        const isAssigned = assignedSitesArray.includes(String(site.id));
+        const isAssigned = emp && emp.assignedSites && emp.assignedSites.includes(String(site.id));
         const allowance = emp && emp.siteAllowances ? emp.siteAllowances.find(a => String(a.siteId) === String(site.id)) : null;
         const price = allowance ? allowance.transportPrice : (site.transportPrice || 0);
 
