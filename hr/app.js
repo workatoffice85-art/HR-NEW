@@ -594,7 +594,13 @@ function generateReport() {
                 empStats.overtime += 1;
             }
         }
-        const transportValue = toTransportNumber(record.transportPrice);
+        // Get current transport price from siteAllowances (reflects latest changes)
+        const employee = allEmployees.find(e => String(e.id) === String(empId));
+        const allowance = employee && employee.siteAllowances ? 
+            employee.siteAllowances.find(a => String(a.siteId) === String(record.siteId)) : null;
+        const transportValue = allowance ? parseFloat(allowance.transportPrice || 0) : 
+            toTransportNumber(record.transportPrice);
+        
         if (!(recordDate in empStats.transportByDate)) {
             empStats.transportByDate[recordDate] = transportValue;
         } else if (transportValue > empStats.transportByDate[recordDate]) {
@@ -803,11 +809,17 @@ async function editEmployee(id) {
     document.getElementById('empSalary').value = emp.salary || 0;
     document.getElementById('empTransportPrice').value = emp.transportPrice || 0;
     
-    // Assigned sites (can keep for compatibility or just use for initialization)
-    const assigned = Array.isArray(emp.assignedSites) ? emp.assignedSites : (emp.assignedSites ? String(emp.assignedSites).split(',') : []);
+    // Assigned sites - normalize to array for openEmployeeModal
+    const assigned = Array.isArray(emp.assignedSites) ? emp.assignedSites : (emp.assignedSites ? String(emp.assignedSites).split(',').map(s => s.trim()).filter(Boolean) : []);
     document.getElementById('empSites').value = assigned.join(',');
     
-    await openEmployeeModal('edit', emp);
+    // Create a normalized emp object with array assignedSites for openEmployeeModal
+    const normalizedEmp = {
+        ...emp,
+        assignedSites: assigned
+    };
+    
+    await openEmployeeModal('edit', normalizedEmp);
 }
 
 function editSite(id) {

@@ -299,6 +299,7 @@ export default async function handler(req, res) {
             // Map allowances to employees
             const employees = (empRes.data || []).map(emp => ({
                 ...emp,
+                assignedSites: emp.assignedSites ? String(emp.assignedSites).split(',').map(s => s.trim()).filter(Boolean) : [],
                 siteAllowances: (allRes.data || []).filter(a => String(a.employeeId) === String(emp.id))
             }));
 
@@ -548,6 +549,7 @@ export default async function handler(req, res) {
             const { data: alls } = await supabase.from('siteAllowances').select('*');
             const employees = (emps || []).map(emp => ({
                 ...emp,
+                assignedSites: emp.assignedSites ? String(emp.assignedSites).split(',').map(s => s.trim()).filter(Boolean) : [],
                 siteAllowances: (alls || []).filter(a => String(a.employeeId) === String(emp.id))
             }));
 
