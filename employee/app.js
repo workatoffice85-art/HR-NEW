@@ -748,11 +748,15 @@ async function fetchMyReports() {
         const empResult = await empRes.json();
 
         if(attResult.success) {
-            // Update currentUser with fresh data including salary
+            // Update currentUser with fresh data including salary and siteAllowances
             if(empResult.success && empResult.data) {
                 const empData = empResult.data.find(e => String(e.id) === String(currentUser.id));
                 if(empData) {
-                    currentUser = { ...currentUser, salary: empData.salary };
+                    currentUser = { 
+                        ...currentUser, 
+                        salary: empData.salary,
+                        siteAllowances: empData.siteAllowances || []
+                    };
                 }
             }
             renderMyReports(attResult.data, monthVal);
@@ -795,6 +799,12 @@ function getWorkingDaysPassed(year, month) {
 function toTransportNumber(value) {
     const parsed = parseFloat(value || 0);
     return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function getCurrentTransportPrice(record) {
+    const allowance = currentUser && currentUser.siteAllowances ? 
+        currentUser.siteAllowances.find(a => String(a.siteId) === String(record.siteId)) : null;
+    return allowance ? parseFloat(allowance.transportPrice || 0) : toTransportNumber(record.transportPrice);
 }
 
 function renderMyReports(data, monthStr) {
@@ -859,7 +869,7 @@ function renderMyReports(data, monthStr) {
         const dateKey = !Number.isNaN(recordDateObj.getTime()) ? recordDateObj.toISOString().split('T')[0] : null;
 
         if (dateKey) {
-            const transportValue = toTransportNumber(record.transportPrice);
+            const transportValue = getCurrentTransportPrice(record);
             if (!(dateKey in dailyTransport)) {
                 dailyTransport[dateKey] = transportValue;
             } else if (transportValue > dailyTransport[dateKey]) {
@@ -871,7 +881,7 @@ function renderMyReports(data, monthStr) {
             checkIn: record.checkIn,
             checkOut: record.checkOut,
             status: record.status, // 'present' or 'late'
-            transport: record.transportPrice || 0,
+            transport: getCurrentTransportPrice(record),
             type: 'entry'
         });
     });
