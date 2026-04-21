@@ -356,6 +356,20 @@ export default async function handler(req, res) {
         const attendanceToInsert = [];
         const attendanceToUpdate = [];
 
+        // Build a map to track open sessions per employee per day for duplicate prevention
+        const openSessionsByEmployee = new Map();
+        for (const record of sbAttendance) {
+            const empId = normalizeString(record.employeeId);
+            const checkOut = normalizeString(record.checkOut);
+            if (!empId || checkOut) continue; // Skip closed sessions
+
+            const checkInDate = new Date(record.checkIn).toDateString();
+            const key = `${empId}_${checkInDate}`;
+            if (!openSessionsByEmployee.has(key)) {
+                openSessionsByEmployee.set(key, record);
+            }
+        }
+
         for (const attendance of gsAttendance) {
             const employeeId = normalizeString(attendance.employeeId);
             const sig = getAttendanceSig(attendance);
@@ -372,6 +386,15 @@ export default async function handler(req, res) {
                 continue;
             }
 
+            // Check if employee already has an open session on the same day
+            const checkInDateStr = new Date(attendance.checkIn).toDateString();
+            const sessionKey = `${employeeId}_${checkInDateStr}`;
+            if (openSessionsByEmployee.has(sessionKey)) {
+                stats.attendanceSkipped++;
+                pushIssue(issues, `Skipped duplicate check-in for employee "${employeeId}" on ${checkInDateStr} - already has open session`);
+                continue;
+            }
+
             const existingRow = sbAttendanceMap.get(sig);
             if (!existingRow) {
                 const payload = buildAttendancePayload(attendance);
@@ -381,6 +404,10 @@ export default async function handler(req, res) {
                     continue;
                 }
                 attendanceToInsert.push(payload);
+                // Track this new session as open if it has no checkout
+                if (!payload.checkOut) {
+                    openSessionsByEmployee.set(sessionKey, payload);
+                }
             } else {
                 const supabaseCheckOut = normalizeString(existingRow.checkOut);
                 const sheetCheckOut = normalizeString(attendance.checkOut);
