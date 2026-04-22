@@ -422,8 +422,8 @@ async function generateEmployeeDetailedReport() {
         const recordDate = new Date(record.checkIn);
         const dateKey = !isNaN(recordDate) ? recordDate.toISOString().split('T')[0] : null;
         if (dateKey) {
-            // Only count as regular attendance if not overtime and not no_checkout
-            if (record.status !== 'overtime' && record.status !== 'no_checkout') {
+            // Count as present if not overtime (including no_checkout - employee was present but forgot to check out)
+            if (record.status !== 'overtime') {
                 presentDates.add(dateKey);
             }
             if (record.status === 'late') lateDates.add(dateKey);

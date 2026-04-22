@@ -609,8 +609,21 @@ if (action === "login") {
             const { data: holidayData } = await supabase.from('official_holidays').select('*').eq('holidayDate', todayDateStr).maybeSingle();
             const isOfficialHoliday = holidayData !== null;
 
+            // Check if employee already has any attendance today (not just open sessions)
+            const todayStart = new Date(serverNow);
+            todayStart.setHours(0, 0, 0, 0);
+            const todayEnd = new Date(serverNow);
+            todayEnd.setHours(23, 59, 59, 999);
+            const { data: todayAtt } = await supabase.from('attendance')
+                .select('status')
+                .eq('employeeId', data.employeeId)
+                .gte('checkIn', todayStart.toISOString())
+                .lte('checkIn', todayEnd.toISOString())
+                .limit(1);
+            const hasAttendedToday = todayAtt && todayAtt.length > 0;
+
             if (isOfficialHoliday || weekendDays.includes(dayOfWeek)) status = "overtime";
-            else if (checkInTimeStr > workStart) status = "late";
+            else if (checkInTimeStr > workStart && !hasAttendedToday) status = "late";
 
             // Resolve proper transport price
             const finalTransport = await fetchResolvedTransportPrice(data.employeeId, matchedSite.id, matchedSite.transportPrice, isRequest);
