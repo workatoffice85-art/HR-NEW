@@ -462,6 +462,7 @@ if (action === "login") {
 
         // --- ADD ATTENDANCE (CHECK-IN) ---
         if (action === "addAttendance") {
+            console.log("addAttendance called with data:", JSON.stringify(data));
             // 0. Double Check-In Prevention
             const { data: openAtt } = await supabase.from('attendance')
                 .select('id, checkIn')

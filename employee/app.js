@@ -600,7 +600,12 @@ async function handleCheckIn() {
             playErrorSound(); // Play error sound
             vibrateError(); // Vibrate for error
         }
-    } catch(e) { console.error(e); alert('حدث خطأ في الاتصال'); playErrorSound(); vibrateError(); }
+    } catch(e) { 
+        console.error('Check-in Error:', e); 
+        alert('حدث خطأ في الاتصال: ' + (e.message || 'تفاصيل في الـ console')); 
+        playErrorSound(); 
+        vibrateError(); 
+    }
     document.getElementById('loader').classList.add('hidden');
 }
 
