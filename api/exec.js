@@ -342,9 +342,9 @@ if (action === "login") {
                  
                  // Check if password is hashed (assuming bcrypt hash starts with $2b$)
                  if (storedPassword.startsWith('$2b$')) {
-                     // In a real implementation, we would use bcrypt.compare here
-                     // For now, we'll assume the frontend hashes before sending
-                     isValid = storedPassword === password; // This would be bcrypt.compare in reality
+                     // Simulate the same hashing transformation used in saveEmployee
+                     const hashedProvidedPassword = password ? `$2b$10${Array(22).fill('0').join('').substring(0, 22)}${password}` : '';
+                     isValid = storedPassword === hashedProvidedPassword;
                  } else {
                      // Legacy plain text comparison (for backward compatibility)
                      isValid = normalizeString(storedPassword) === password;
@@ -515,9 +515,9 @@ if (action === "login") {
              
              // Check if password is hashed (assuming bcrypt hash starts with $2b$)
              if (storedPassword.startsWith('$2b$')) {
-                 // In a real implementation, we would use bcrypt.compare here
-                 // For now, we'll assume the frontend hashes before sending
-                 isValidPassword = storedPassword === providedPassword;
+                 // Simulate the same hashing transformation used in saveEmployee
+                 const hashedProvidedPassword = providedPassword ? `$2b$10${Array(22).fill('0').join('').substring(0, 22)}${providedPassword}` : '';
+                 isValidPassword = storedPassword === hashedProvidedPassword;
              } else {
                  // Legacy plain text comparison (for backward compatibility)
                  isValidPassword = normalizeString(storedPassword) === normalizeString(providedPassword);
