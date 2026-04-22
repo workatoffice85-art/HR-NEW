@@ -15,6 +15,61 @@ let tempPhone = ""; // used during registration
 let allOfficialHolidays = [];
 const MODEL_URL = '../models';
 
+// Audio feedback functions
+function playSuccessSound() {
+    try {
+        // Create audio context if not exists
+        if (!window.audioContext) {
+            window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        
+        // Create oscillator for success sound (pleasant chime)
+        const oscillator = window.audioContext.createOscillator();
+        const gainNode = window.audioContext.createGain();
+        
+        oscillator.type = 'sine';
+        oscillator.frequency.value = 800; // Hz
+        gainNode.gain.value = 0.2; // Volume
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(window.audioContext.destination);
+        
+        oscillator.start();
+        oscillator.stop(window.audioContext.currentTime + 0.2); // 200ms duration
+    } catch (e) {
+        console.warn('Audio playback failed:', e);
+        // Fallback to alert if audio fails
+        // alert('نجح التسجيل');
+    }
+}
+
+function playErrorSound() {
+    try {
+        // Create audio context if not exists
+        if (!window.audioContext) {
+            window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        
+        // Create oscillator for error sound (low beep)
+        const oscillator = window.audioContext.createOscillator();
+        const gainNode = window.audioContext.createGain();
+        
+        oscillator.type = 'sine';
+        oscillator.frequency.value = 200; // Hz
+        gainNode.gain.value = 0.3; // Volume
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(window.audioContext.destination);
+        
+        oscillator.start();
+        oscillator.stop(window.audioContext.currentTime + 0.3); // 300ms duration
+    } catch (e) {
+        console.warn('Audio playback failed:', e);
+        // Fallback to alert if audio fails
+        // alert('حدث خطأ');
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     checkSession();
 });
@@ -142,9 +197,13 @@ async function captureFaceRegistration() {
         registeredFaceDescriptor = Array.from(detections.descriptor);
         document.getElementById('regStatusMessage').innerText = 'تم التقاط البصمة بنجاح ✓';
         document.getElementById('regStatusMessage').className = 'success-text';
+        playSuccessSound(); // Play success sound
+        vibrateSuccess(); // Vibrate for success
     } else {
         document.getElementById('regStatusMessage').innerText = 'لم يتم التعرف على وجه للأسف، دقق في الإضاءة.';
         document.getElementById('regStatusMessage').className = 'error-text';
+        playErrorSound(); // Play error sound
+        vibrateError(); // Vibrate for error
     }
 }
 
@@ -453,6 +512,61 @@ function getDistanceFromLatLonInM(lat1, lon1, lat2, lon2) {
 }
 function deg2rad(deg) { return deg * (Math.PI/180) }
 
+// Audio feedback functions
+function playSuccessSound() {
+    try {
+        // Create audio context if not exists
+        if (!window.audioContext) {
+            window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        
+        // Create oscillator for success sound (pleasant chime)
+        const oscillator = window.audioContext.createOscillator();
+        const gainNode = window.audioContext.createGain();
+        
+        oscillator.type = 'sine';
+        oscillator.frequency.value = 800; // Hz
+        gainNode.gain.value = 0.2; // Volume
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(window.audioContext.destination);
+        
+        oscillator.start();
+        oscillator.stop(window.audioContext.currentTime + 0.2); // 200ms duration
+    } catch (e) {
+        console.warn('Audio playback failed:', e);
+        // Fallback to alert if audio fails
+        // alert('نجح التسجيل');
+    }
+}
+
+function playErrorSound() {
+    try {
+        // Create audio context if not exists
+        if (!window.audioContext) {
+            window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        
+        // Create oscillator for error sound (low beep)
+        const oscillator = window.audioContext.createOscillator();
+        const gainNode = window.audioContext.createGain();
+        
+        oscillator.type = 'sine';
+        oscillator.frequency.value = 200; // Hz
+        gainNode.gain.value = 0.3; // Volume
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(window.audioContext.destination);
+        
+        oscillator.start();
+        oscillator.stop(window.audioContext.currentTime + 0.3); // 300ms duration
+    } catch (e) {
+        console.warn('Audio playback failed:', e);
+        // Fallback to alert if audio fails
+        // alert('حدث خطأ');
+    }
+}
+
 async function handleCheckIn() {
     if(!currentFaceDescriptor) return alert('بصمة الوجه غير ملتقطة الحين');
     if(!lastLocation) return alert('يجب تفعيل الـ GPS');
@@ -469,6 +583,8 @@ async function handleCheckIn() {
         const result = await res.json();
         if(result.success) {
             alert(result.message);
+            playSuccessSound(); // Play success sound
+            vibrateSuccess(); // Vibrate for success
             setAppState('in', payload.checkIn);
         } else if (result.openSession && result.openSessionId) {
             // There's a same-day open session — offer to force-close it
@@ -481,8 +597,10 @@ async function handleCheckIn() {
             }
         } else {
             alert('خطأ: ' + result.message);
+            playErrorSound(); // Play error sound
+            vibrateError(); // Vibrate for error
         }
-    } catch(e) { console.error(e); alert('حدث خطأ في الاتصال'); }
+    } catch(e) { console.error(e); alert('حدث خطأ في الاتصال'); playErrorSound(); vibrateError(); }
     document.getElementById('loader').classList.add('hidden');
 }
 
@@ -505,9 +623,11 @@ async function forceCloseAndRecheckIn(openSessionId, originalPayload) {
         });
         const closeResult = await closeRes.json();
         if (!closeResult.success) {
-            return alert('فشل إغلاق الجلسة القديمة: ' + closeResult.message);
+            alert('فشل إغلاق الجلسة القديمة: ' + closeResult.message);
+            playErrorSound(); // Play error sound
+            return;
         }
-
+        
         // Step 2: Re-attempt check-in
         const retryRes = await fetch(API_URL, {
             method: 'POST',
@@ -517,13 +637,16 @@ async function forceCloseAndRecheckIn(openSessionId, originalPayload) {
         const retryResult = await retryRes.json();
         if (retryResult.success) {
             alert('✅ تم إغلاق الجلسة القديمة وتسجيل الحضور بنجاح!');
+            playSuccessSound(); // Play success sound
             setAppState('in', originalPayload.checkIn);
         } else {
             alert('خطأ عند إعادة تسجيل الحضور: ' + retryResult.message);
+            playErrorSound(); // Play error sound
         }
     } catch(e) {
         console.error(e);
         alert('حدث خطأ في الاتصال');
+        playErrorSound(); // Play error sound
     }
     document.getElementById('loader').classList.add('hidden');
 }
@@ -543,10 +666,14 @@ async function handleCheckOut() {
         const result = await res.json();
         if(result.success) {
             alert(result.message);
+            playSuccessSound(); // Play success sound
             setAppState('out');
         }
-        else alert('خطأ: ' + result.message);
-    } catch(e) { console.error(e); alert('حدث خطأ في الشبكة: ' + e.message); }
+        else {
+            alert('خطأ: ' + result.message);
+            playErrorSound(); // Play error sound
+        }
+    } catch(e) { console.error(e); alert('حدث خطأ في الشبكة: ' + e.message); playErrorSound(); }
     document.getElementById('loader').classList.add('hidden');
 }
 
@@ -913,13 +1040,23 @@ function renderMyReports(data, monthStr) {
             } else if (item.status === 'overtime') {
                 statusText = 'عمل إضافي';
                 statusColor = '#3b82f6'; // Bright Blue
+            } else if (item.status === 'no_checkout') {
+                statusText = 'لم يتم الانصراف';
+                statusColor = '#f59e0b';
+            }
+
+            let checkOutDisplay = '-';
+            if (item.status === 'no_checkout') {
+                checkOutDisplay = 'لم يتم الانصراف';
+            } else if (item.checkOut) {
+                checkOutDisplay = new Date(item.checkOut).toLocaleTimeString('ar-EG');
             }
 
             tbody.innerHTML += `
                 <tr>
                     <td data-label="التاريخ">${item.date.toLocaleDateString('ar-EG')}</td>
                     <td data-label="الحضور" dir="ltr">${new Date(item.checkIn).toLocaleTimeString('ar-EG')}</td>
-                    <td data-label="الانصراف" dir="ltr">${item.checkOut ? new Date(item.checkOut).toLocaleTimeString('ar-EG') : '-'}</td>
+                    <td data-label="الانصراف" dir="ltr">${checkOutDisplay}</td>
                     <td data-label="البدل">${item.transport} ج.م</td>
                     <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
                 </tr>

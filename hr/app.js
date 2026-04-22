@@ -217,7 +217,9 @@ function renderAttendanceTable(data) {
         const checkInTime = !isNaN(cInObj) ? cInObj.toLocaleString('ar-EG') : (record.checkIn || '-');
 
         let checkOutTime = 'لم ينصرف بعد';
-        if (record.checkOut) {
+        if (record.status === 'no_checkout') {
+            checkOutTime = 'لم يتم الانصراف';
+        } else if (record.checkOut) {
             const cOutObj = new Date(record.checkOut);
             checkOutTime = !isNaN(cOutObj) ? cOutObj.toLocaleString('ar-EG') : (record.checkOut || '-');
         }
@@ -325,6 +327,7 @@ function calculateUniqueDailyTransport(records) {
 function getStatusMeta(status) {
     if (status === 'late') return { text: 'متأخر', color: 'var(--danger)' };
     if (status === 'overtime') return { text: 'عمل إضافي', color: '#3b82f6' };
+    if (status === 'no_checkout') return { text: 'لم يتم الانصراف', color: '#f59e0b' };
     return { text: 'حاضر', color: 'var(--secondary)' };
 }
 
@@ -333,6 +336,7 @@ function resetEmployeeDetailedReportView(message) {
     document.getElementById('employeeDetailAbsent').innerText = '0';
     document.getElementById('employeeDetailLate').innerText = '0';
     document.getElementById('employeeDetailOvertime').innerText = '0';
+    document.getElementById('employeeDetailNoCheckout').innerText = '0';
     document.getElementById('employeeDetailOvertimePay').innerText = '0.00';
     document.getElementById('employeeDetailTransport').innerText = '0.00';
     document.getElementById('employeeDetailMeta').innerText = message || 'اختر موظفًا وحدد الفترة الزمنية ثم اضغط "عرض التقرير".';
@@ -411,18 +415,20 @@ async function generateEmployeeDetailedReport() {
     const presentDates = new Set();
     const lateDates = new Set();
     const overtimeDates = new Set();
+    const noCheckoutDates = new Set();
     let totalTransport = 0;
 
     sortedRecords.forEach(record => {
         const recordDate = new Date(record.checkIn);
         const dateKey = !isNaN(recordDate) ? recordDate.toISOString().split('T')[0] : null;
         if (dateKey) {
-            // Only count as regular attendance if not overtime
-            if (record.status !== 'overtime') {
+            // Only count as regular attendance if not overtime and not no_checkout
+            if (record.status !== 'overtime' && record.status !== 'no_checkout') {
                 presentDates.add(dateKey);
             }
             if (record.status === 'late') lateDates.add(dateKey);
             if (record.status === 'overtime') overtimeDates.add(dateKey);
+            if (record.status === 'no_checkout') noCheckoutDates.add(dateKey);
         }
     });
 
@@ -443,6 +449,7 @@ async function generateEmployeeDetailedReport() {
     document.getElementById('employeeDetailAbsent').innerText = String(daysAbsent);
     document.getElementById('employeeDetailLate').innerText = String(lateDates.size);
     document.getElementById('employeeDetailOvertime').innerText = String(overtimeDays);
+    document.getElementById('employeeDetailNoCheckout').innerText = String(noCheckoutDates.size);
     document.getElementById('employeeDetailOvertimePay').innerText = overtimePay.toFixed(2);
     document.getElementById('employeeDetailTransport').innerText = totalTransport.toFixed(2);
 
@@ -472,7 +479,9 @@ async function generateEmployeeDetailedReport() {
             : (record.checkIn || '-');
 
         let checkOutText = 'لم ينصرف بعد';
-        if (record.checkOut) {
+        if (record.status === 'no_checkout') {
+            checkOutText = 'لم يتم الانصراف';
+        } else if (record.checkOut) {
             const checkOutObj = new Date(record.checkOut);
             checkOutText = !isNaN(checkOutObj)
                 ? checkOutObj.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })
@@ -571,10 +580,12 @@ function generateReport() {
                  uniqueDates: new Set(),
                  lateDates: new Set(),
                  overtimeDates: new Set(),
+                 noCheckoutDates: new Set(),
                  transportByDate: {},
                  daysPresent: 0,
                  lates: 0,
                  overtime: 0,
+                 noCheckout: 0,
                  totalTransport: 0
              };
         }
@@ -599,6 +610,12 @@ function generateReport() {
             if (!empStats.overtimeDates.has(recordDate)) {
                 empStats.overtimeDates.add(recordDate);
                 empStats.overtime += 1;
+            }
+        }
+        if(record.status === 'no_checkout') {
+            if (!empStats.noCheckoutDates.has(recordDate)) {
+                empStats.noCheckoutDates.add(recordDate);
+                empStats.noCheckout += 1;
             }
         }
         // Get current transport price from siteAllowances (reflects latest changes)
@@ -655,6 +672,7 @@ function generateReport() {
                 <td data-label="أيام الغياب"><span style="color:${absentDays > 0 ? 'var(--danger)' : 'inherit'}">${absentDays > 0 ? absentDays : 0} أيام</span></td>
                 <td data-label="التأخير"><span style="color:${data.lates > 0 ? 'var(--danger)' : 'inherit'}">${data.lates} مرات</span></td>
                 <td data-label="العمل الإضافي"><span style="color:#3b82f6">${data.overtime || 0} أيام</span></td>
+                <td data-label="لم يتم الانصراف"><span style="color:${data.noCheckout > 0 ? '#f59e0b' : 'inherit'}">${data.noCheckout || 0} أيام</span></td>
                 <td data-label="مبلغ العمل الإضافي"><span style="color:#3b82f6">${data.overtimePay.toFixed(2)} ج.م</span></td>
                 <td data-label="بدل الانتقال">${data.totalTransport.toFixed(2)} ج.م</td>
             </tr>
@@ -1698,5 +1716,24 @@ async function handleAllowanceUpgrade(requestId, status) {
         console.error(e);
         alert("فشل الاتصال بالسيرفر");
     }
+    document.getElementById('loader').classList.add('hidden');
+}
+
+async function clearProcessedAllowances() {
+    if(!confirm("هل أنت متأكد من مسح جميع طلبات زيادة البدلات التي تمت الموافقة عليها أو رفضها؟ هذا الإجراء لا يمكن التراجع عنه.")) return;
+
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'clearProcessedAllowances' }),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+        if(result.success) {
+            alert(result.message);
+            await fetchAllowanceRequests(true); // Refresh data
+        } else alert("خطأ: " + result.message);
+    } catch(e) { console.error(e); alert("خطأ في الاتصال"); }
     document.getElementById('loader').classList.add('hidden');
 }
