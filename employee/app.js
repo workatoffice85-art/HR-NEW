@@ -512,58 +512,24 @@ function getDistanceFromLatLonInM(lat1, lon1, lat2, lon2) {
 }
 function deg2rad(deg) { return deg * (Math.PI/180) }
 
-// Audio feedback functions
-function playSuccessSound() {
+// Vibration feedback functions
+function vibrateSuccess() {
     try {
-        // Create audio context if not exists
-        if (!window.audioContext) {
-            window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        if (navigator.vibrate) {
+            navigator.vibrate([100, 50, 100]); // Short vibration pattern
         }
-        
-        // Create oscillator for success sound (pleasant chime)
-        const oscillator = window.audioContext.createOscillator();
-        const gainNode = window.audioContext.createGain();
-        
-        oscillator.type = 'sine';
-        oscillator.frequency.value = 800; // Hz
-        gainNode.gain.value = 0.2; // Volume
-        
-        oscillator.connect(gainNode);
-        gainNode.connect(window.audioContext.destination);
-        
-        oscillator.start();
-        oscillator.stop(window.audioContext.currentTime + 0.2); // 200ms duration
     } catch (e) {
-        console.warn('Audio playback failed:', e);
-        // Fallback to alert if audio fails
-        // alert('نجح التسجيل');
+        console.warn('Vibration failed:', e);
     }
 }
 
-function playErrorSound() {
+function vibrateError() {
     try {
-        // Create audio context if not exists
-        if (!window.audioContext) {
-            window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        if (navigator.vibrate) {
+            navigator.vibrate([200, 100, 200, 100, 200]); // Longer error pattern
         }
-        
-        // Create oscillator for error sound (low beep)
-        const oscillator = window.audioContext.createOscillator();
-        const gainNode = window.audioContext.createGain();
-        
-        oscillator.type = 'sine';
-        oscillator.frequency.value = 200; // Hz
-        gainNode.gain.value = 0.3; // Volume
-        
-        oscillator.connect(gainNode);
-        gainNode.connect(window.audioContext.destination);
-        
-        oscillator.start();
-        oscillator.stop(window.audioContext.currentTime + 0.3); // 300ms duration
     } catch (e) {
-        console.warn('Audio playback failed:', e);
-        // Fallback to alert if audio fails
-        // alert('حدث خطأ');
+        console.warn('Vibration failed:', e);
     }
 }
 
