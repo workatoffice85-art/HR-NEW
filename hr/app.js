@@ -225,17 +225,17 @@ function renderAttendanceTable(data) {
         }
         
         let statusText = 'حاضر';
-        let statusClass = 'present';
+        let statusColor = 'var(--secondary)';
         
         if (record.status === 'late') {
             statusText = 'متأخر';
-            statusClass = 'late';
+            statusColor = 'var(--danger)';
         } else if (record.status === 'overtime') {
             statusText = 'عمل إضافي';
-            statusClass = 'overtime';
+            statusColor = '#3b82f6';
         } else if (record.status === 'no_checkout') {
             statusText = 'لم يتم الانصراف';
-            statusClass = 'no-checkout';
+            statusColor = '#f59e0b';
         }
 
         tbody.innerHTML += `
@@ -245,7 +245,7 @@ function renderAttendanceTable(data) {
                 <td data-label="وقت الحضور" dir="ltr">${checkInTime}</td>
                 <td data-label="وقت الانصراف" dir="ltr">${checkOutTime}</td>
                 <td data-label="بدل الانتقال">${getCurrentTransportPrice(record) || 0} ج.م</td>
-                <td data-label="الحالة"><span class="status-badge ${statusClass}">${statusText}</span></td>
+                <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
             </tr>
         `;
     });
@@ -325,10 +325,10 @@ function calculateUniqueDailyTransport(records) {
 }
 
 function getStatusMeta(status) {
-    if (status === 'late') return { text: 'متأخر', class: 'late' };
-    if (status === 'overtime') return { text: 'عمل إضافي', class: 'overtime' };
-    if (status === 'no_checkout') return { text: 'لم يتم الانصراف', class: 'no-checkout' };
-    return { text: 'حاضر', class: 'present' };
+    if (status === 'late') return { text: 'متأخر', color: 'var(--danger)' };
+    if (status === 'overtime') return { text: 'عمل إضافي', color: '#3b82f6' };
+    if (status === 'no_checkout') return { text: 'لم يتم الانصراف', color: '#f59e0b' };
+    return { text: 'حاضر', color: 'var(--secondary)' };
 }
 
 function resetEmployeeDetailedReportView(message) {
@@ -498,7 +498,7 @@ async function generateEmployeeDetailedReport() {
                 <td data-label="الموقع">${record.siteName || '-'}</td>
                 <td data-label="وقت الحضور" dir="ltr">${checkInText}</td>
                 <td data-label="وقت الانصراف" dir="ltr">${checkOutText}</td>
-                <td data-label="الحالة"><span class="status-badge ${statusMeta.class}">${statusMeta.text}</span></td>
+                <td data-label="الحالة"><span style="color:${statusMeta.color}">${statusMeta.text}</span></td>
                 <td data-label="البدل">${transportText}</td>
             </tr>
         `;

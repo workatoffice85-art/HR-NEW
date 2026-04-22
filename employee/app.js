@@ -1003,17 +1003,17 @@ function renderMyReports(data, monthStr) {
     fullReport.forEach(item => {
         if (item.type === 'entry') {
             let statusText = 'حاضر';
-            let statusClass = 'present';
+            let statusColor = 'var(--secondary)';
             
             if (item.status === 'late') {
                 statusText = 'متأخر';
-                statusClass = 'late';
+                statusColor = 'var(--danger)';
             } else if (item.status === 'overtime') {
                 statusText = 'عمل إضافي';
-                statusClass = 'overtime';
+                statusColor = '#3b82f6'; // Bright Blue
             } else if (item.status === 'no_checkout') {
                 statusText = 'لم يتم الانصراف';
-                statusClass = 'no-checkout';
+                statusColor = '#f59e0b';
             }
 
             let checkOutDisplay = '-';
@@ -1029,16 +1029,16 @@ function renderMyReports(data, monthStr) {
                     <td data-label="الحضور" dir="ltr">${new Date(item.checkIn).toLocaleTimeString('ar-EG')}</td>
                     <td data-label="الانصراف" dir="ltr">${checkOutDisplay}</td>
                     <td data-label="البدل">${item.transport} ج.م</td>
-                    <td data-label="الحالة"><span class="status-badge ${statusClass}">${statusText}</span></td>
+                    <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
                 </tr>
             `;
         } else {
             // Absent Row
             tbody.innerHTML += `
-                <tr>
+                <tr style="background: rgba(239, 68, 68, 0.05);">
                     <td data-label="التاريخ">${item.date.toLocaleDateString('ar-EG')}</td>
                     <td data-label="التفاصيل" colspan="3" style="text-align:center !important; color:var(--danger); font-size:0.8rem;">غائب (لم يتم تسجيل حضور)</td>
-                    <td data-label="الحالة"><span class="status-badge absent">غائب</span></td>
+                    <td data-label="الحالة"><span style="color:var(--danger)">غائب</span></td>
                 </tr>
             `;
         }
