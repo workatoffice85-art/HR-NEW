@@ -510,16 +510,17 @@ if (action === "login") {
              
              // Enhanced password verification with hashing support
              const storedPassword = userData?.password || '';
+             const providedPassword = data.password || '';
              let isValidPassword = false;
              
              // Check if password is hashed (assuming bcrypt hash starts with $2b$)
              if (storedPassword.startsWith('$2b$')) {
                  // In a real implementation, we would use bcrypt.compare here
                  // For now, we'll assume the frontend hashes before sending
-                 isValidPassword = storedPassword === password; // This would be bcrypt.compare in reality
+                 isValidPassword = storedPassword === providedPassword;
              } else {
                  // Legacy plain text comparison (for backward compatibility)
-                 isValidPassword = normalizeString(storedPassword) === password;
+                 isValidPassword = normalizeString(storedPassword) === normalizeString(providedPassword);
              }
              
              if (!isValidPassword) {
