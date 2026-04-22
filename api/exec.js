@@ -508,23 +508,26 @@ if (action === "login") {
                  throw new Error("مطلوب توثيق بصمة الوجه لإتمام العملية");
              }
              
-             // Enhanced password verification with hashing support
-             const storedPassword = userData?.password || '';
-             const providedPassword = data.password || '';
-             let isValidPassword = false;
-             
-             // Check if password is hashed (assuming bcrypt hash starts with $2b$)
-             if (storedPassword.startsWith('$2b$')) {
-                 // Simulate the same hashing transformation used in saveEmployee
-                 const hashedProvidedPassword = providedPassword ? `$2b$10${Array(22).fill('0').join('').substring(0, 22)}${providedPassword}` : '';
-                 isValidPassword = storedPassword === hashedProvidedPassword;
-             } else {
-                 // Legacy plain text comparison (for backward compatibility)
-                 isValidPassword = normalizeString(storedPassword) === normalizeString(providedPassword);
-             }
-             
-             if (!isValidPassword) {
-                 throw new Error("كلمة المرور غير صحيحة");
+             // Enhanced password verification with hashing support (only if password provided)
+             // Skip password check if faceDescriptor is provided (face is the primary auth)
+             if (data.password) {
+                 const storedPassword = userData?.password || '';
+                 const providedPassword = data.password || '';
+                 let isValidPassword = false;
+                 
+                 // Check if password is hashed (assuming bcrypt hash starts with $2b$)
+                 if (storedPassword.startsWith('$2b$')) {
+                     // Simulate the same hashing transformation used in saveEmployee
+                     const hashedProvidedPassword = providedPassword ? `$2b$10${Array(22).fill('0').join('').substring(0, 22)}${providedPassword}` : '';
+                     isValidPassword = storedPassword === hashedProvidedPassword;
+                 } else {
+                     // Legacy plain text comparison (for backward compatibility)
+                     isValidPassword = normalizeString(storedPassword) === normalizeString(providedPassword);
+                 }
+                 
+                 if (!isValidPassword) {
+                     throw new Error("كلمة المرور غير صحيحة");
+                 }
              }
 
             // 2. Check Location logic
