@@ -495,6 +495,26 @@ if (action === "login") {
                 }
             }
 
+            // 0.5 Duplicate Timestamp Prevention (Race Condition Protection)
+            // Check if there's any record with the same checkIn time within last 30 seconds
+            const clientCheckIn = new Date(data.checkIn);
+            const thirtySecondsAgo = new Date(clientCheckIn.getTime() - 30000);
+            const { data: recentDups } = await supabase.from('attendance')
+                .select('id, checkIn')
+                .eq('employeeId', data.employeeId)
+                .gte('checkIn', thirtySecondsAgo.toISOString())
+                .lte('checkIn', clientCheckIn.toISOString())
+                .order('checkIn', { ascending: false })
+                .limit(1);
+
+            if (recentDups && recentDups.length > 0) {
+                return res.status(200).json({
+                    success: false,
+                    duplicateEntry: true,
+                    message: "تم تسجيل الحضور بالفعل في نفس اللحظة. لا يمكن تكرار العملية."
+                });
+            }
+
             // 1. Face Identity Check (Security Verification)
 // Password hashing verification (for backward compatibility, we'll check both hashed and plain text)
 // In a real implementation, we would use bcrypt or similar, but for now we'll check if it's hashed

@@ -552,6 +552,9 @@ async function handleCheckIn() {
             playSuccessSound(); // Play success sound
             vibrateSuccess(); // Vibrate for success
             setAppState('in', payload.checkIn);
+        } else if (result.duplicateEntry) {
+            // Duplicate entry detected (same timestamp) - show warning but no error sound needed
+            alert('⚠️ ' + result.message);
         } else if (result.openSession && result.openSessionId) {
             // There's a same-day open session — offer to force-close it
             const confirmed = confirm(
