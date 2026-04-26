@@ -546,26 +546,84 @@ function startVideo() {
     });
 }
 
-function getLocation() {
-    if (!navigator.geolocation) return;
+async function getLocation() {
+    if (!navigator.geolocation) {
+        setStatus('المتصفح لا يدعم تحديد الموقع', 'error-text');
+        return;
+    }
+
+    // Check permission state first (if Permissions API is supported)
+    if (navigator.permissions && navigator.permissions.query) {
+        try {
+            const result = await navigator.permissions.query({ name: 'geolocation' });
+            if (result.state === 'denied') {
+                setStatus('تم رفض إذن الموقع - افتح إعدادات المتصفح واسمح بالموقع', 'error-text');
+                return;
+            }
+        } catch (e) {
+            // Permissions API might not support geolocation on some browsers
+        }
+    }
 
     // Clear existing watch to prevent multiple watchers
     if (geolocationWatchId !== null) {
         navigator.geolocation.clearWatch(geolocationWatchId);
     }
 
+    // First, try to get a quick current position to trigger permission prompt if needed
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            // Immediate success - use this position
+            lastLocation = { lat: position.coords.latitude, lng: position.coords.longitude };
+            verifyLocation();
+            setStatus('تم تحديد الموقع ✓', 'success-text');
+
+            // Then start watching for updates
+            startWatchingPosition();
+        },
+        (error) => {
+            handleGeoError(error);
+        },
+        {
+            enableHighAccuracy: false,
+            timeout: 8000,
+            maximumAge: 60000
+        }
+    );
+}
+
+function startWatchingPosition() {
     geolocationWatchId = navigator.geolocation.watchPosition(
         (position) => {
             lastLocation = { lat: position.coords.latitude, lng: position.coords.longitude };
             verifyLocation();
         },
-        (error) => { setStatus('يرجى تفعيل الـ GPS', 'error-text'); },
+        (error) => {
+            // Silent fail on watch errors - we already have initial position
+            console.warn('Watch position error:', error);
+        },
         {
-            enableHighAccuracy: false,  // false = less battery drain on old devices
-            timeout: 10000,             // 10s timeout
-            maximumAge: 30000          // Accept positions up to 30s old
+            enableHighAccuracy: false,
+            timeout: 15000,
+            maximumAge: 60000
         }
     );
+}
+
+function handleGeoError(error) {
+    let msg = 'خطأ في تحديد الموقع';
+    switch(error.code) {
+        case error.PERMISSION_DENIED:
+            msg = 'تم رفض إذن الموقع - افتح إعدادات المتصفح واسمح بالموقع';
+            break;
+        case error.POSITION_UNAVAILABLE:
+            msg = 'إشارة GPS ضعيفة - حاول في مكان مفتوح';
+            break;
+        case error.TIMEOUT:
+            msg = 'استغرق تحديد الموقع وقتًا طويلاً - تأكد من تشغيل GPS';
+            break;
+    }
+    setStatus(msg, 'error-text');
 }
 
 function verifyLocation() {
