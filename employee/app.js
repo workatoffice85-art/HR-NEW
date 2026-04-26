@@ -570,26 +570,32 @@ async function getLocation() {
         navigator.geolocation.clearWatch(geolocationWatchId);
     }
 
-    // First, try to get a quick current position to trigger permission prompt if needed
-    navigator.geolocation.getCurrentPosition(
-        (position) => {
-            // Immediate success - use this position
-            lastLocation = { lat: position.coords.latitude, lng: position.coords.longitude };
-            verifyLocation();
-            setStatus('تم تحديد الموقع ✓', 'success-text');
+    setStatus('جاري تحديد الموقع...', 'text-muted');
 
-            // Then start watching for updates
-            startWatchingPosition();
-        },
-        (error) => {
-            handleGeoError(error);
-        },
-        {
-            enableHighAccuracy: false,
-            timeout: 8000,
-            maximumAge: 60000
+    // Try getting cached position immediately (fastest)
+    tryGetPosition(
+        { enableHighAccuracy: false, timeout: 2000, maximumAge: 300000 }, // Accept 5 min old
+        (position) => onPositionSuccess(position),
+        () => {
+            // Fallback: try fresh low-accuracy position
+            tryGetPosition(
+                { enableHighAccuracy: false, timeout: 5000, maximumAge: 0 },
+                (position) => onPositionSuccess(position),
+                (error) => handleGeoError(error)
+            );
         }
     );
+}
+
+function tryGetPosition(options, onSuccess, onError) {
+    navigator.geolocation.getCurrentPosition(onSuccess, onError, options);
+}
+
+function onPositionSuccess(position) {
+    lastLocation = { lat: position.coords.latitude, lng: position.coords.longitude };
+    verifyLocation();
+    setStatus('تم تحديد الموقع ✓', 'success-text');
+    startWatchingPosition();
 }
 
 function startWatchingPosition() {
