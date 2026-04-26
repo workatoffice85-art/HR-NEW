@@ -315,9 +315,17 @@ async function initSystem() {
             }
 
             // Load settings (weekend days, etc.)
-            const settingsResult = await settingsPromise;
-            if (settingsResult.success) {
-                appSettings = settingsResult.data || {};
+            try {
+                const settingsResult = await settingsPromise;
+                console.log('Settings loaded:', settingsResult);
+                if (settingsResult.success) {
+                    appSettings = settingsResult.data || {};
+                    console.log('appSettings set to:', appSettings);
+                } else {
+                    console.error('Settings load failed:', settingsResult);
+                }
+            } catch (e) {
+                console.error('Settings fetch error:', e);
             }
 
             // Process initial status
@@ -916,7 +924,8 @@ function getWorkingDaysPassed(year, month) {
         if (h.holidayDate) {
             const d = new Date(h.holidayDate);
             if (!isNaN(d)) {
-                const dateKey = d.toISOString().split('T')[0];
+                // Format using local date components (not toISOString which converts to UTC)
+                const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
                 holidayDates.add(dateKey);
             }
         }
@@ -924,7 +933,8 @@ function getWorkingDaysPassed(year, month) {
 
     for (let i = 1; i <= endDay; i++) {
         const d = new Date(year, month, i);
-        const currentDateKey = d.toISOString().split('T')[0];
+        // Format date as YYYY-MM-DD using local date components (not toISOString which converts to UTC)
+        const currentDateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         const isWeekend = weekendDays.includes(d.getDay()); // Use configured weekend days
         const isHoliday = holidayDates.has(currentDateKey);
 
@@ -950,7 +960,9 @@ function getCurrentTransportPrice(record) {
 function getWeekendDaysFromSettings() {
     // Default: Friday (5) and Saturday (6)
     const weekendDaysStr = appSettings.weekendDays || "5,6";
-    return weekendDaysStr.split(',').map(d => parseInt(d.trim())).filter(d => !isNaN(d));
+    const days = weekendDaysStr.split(',').map(d => parseInt(d.trim())).filter(d => !isNaN(d));
+    console.log('appSettings:', appSettings, 'weekendDays:', days);
+    return days;
 }
 
 function renderMyReports(data, monthStr) {
@@ -977,7 +989,8 @@ function renderMyReports(data, monthStr) {
         if (h.holidayDate) {
             const d = new Date(h.holidayDate);
             if (!isNaN(d)) {
-                const dateKey = d.toISOString().split('T')[0];
+                // Format using local date components (not toISOString which converts to UTC)
+                const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
                 holidayDates.add(dateKey);
             }
         }
@@ -985,9 +998,16 @@ function renderMyReports(data, monthStr) {
 
     for (let i = 1; i <= endDay; i++) {
         const d = new Date(targetYear, targetMonth, i);
-        const currentDateKey = d.toISOString().split('T')[0];
-        const isWeekend = weekendDays.includes(d.getDay()); // Use configured weekend days
+        // Format date as YYYY-MM-DD using local date components (not toISOString which converts to UTC)
+        const currentDateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const dayOfWeek = d.getDay();
+        const isWeekend = weekendDays.includes(dayOfWeek); // Use configured weekend days
         const isHoliday = holidayDates.has(currentDateKey);
+
+        // Debug: log day 25
+        if (i === 25) {
+            console.log('renderMyReports Day 25:', currentDateKey, 'dayOfWeek:', dayOfWeek, 'isWeekend:', isWeekend, 'weekendDays:', weekendDays);
+        }
 
         // Exclude weekends and official holidays
         if (!isWeekend && !isHoliday) {
