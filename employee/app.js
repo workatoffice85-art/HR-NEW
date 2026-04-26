@@ -761,7 +761,7 @@ async function fetchEligibleSites() {
         select.innerHTML = '';
         if (result.success && result.data.length > 0) {
             result.data.forEach(att => {
-                const time = new Date(att.checkIn).toLocaleTimeString('ar-EG', {hour:'2-digit', minute:'2-digit'});
+                const time = new Date(att.checkIn).toLocaleTimeString('ar-EG', {timeZone: 'Africa/Cairo', hour:'2-digit', minute:'2-digit'});
                 const option = document.createElement('option');
                 option.value = att.id;
                 option.dataset.siteId = att.siteId;
@@ -1023,13 +1023,13 @@ function renderMyReports(data, monthStr) {
             if (item.status === 'no_checkout') {
                 checkOutDisplay = 'لم يتم الانصراف';
             } else if (item.checkOut) {
-                checkOutDisplay = new Date(item.checkOut).toLocaleTimeString('ar-EG');
+                checkOutDisplay = new Date(item.checkOut).toLocaleTimeString('ar-EG', {timeZone: 'Africa/Cairo'});
             }
 
             tbody.innerHTML += `
                 <tr>
                     <td data-label="التاريخ">${item.date.toLocaleDateString('ar-EG')}</td>
-                    <td data-label="الحضور" dir="ltr">${new Date(item.checkIn).toLocaleTimeString('ar-EG')}</td>
+                    <td data-label="الحضور" dir="ltr">${new Date(item.checkIn).toLocaleTimeString('ar-EG', {timeZone: 'Africa/Cairo'})}</td>
                     <td data-label="الانصراف" dir="ltr">${checkOutDisplay}</td>
                     <td data-label="البدل">${item.transport} ج.م</td>
                     <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
