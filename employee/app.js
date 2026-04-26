@@ -10,6 +10,10 @@ let currentFaceDescriptor = null;
 let timerInterval = null;
 let isFaceVerified = false;
 let lastDetectedSite = null;
+let isDetecting = false;
+let faceDetectionInterval = null;
+let consecutiveSuccessFrames = 0;
+let geolocationWatchId = null;
 let tempEmail = ""; // used during registration
 let tempPhone = ""; // used during registration
 let allOfficialHolidays = [];
@@ -454,6 +458,12 @@ function stopWorkTimer() {
     if (timerInterval) clearInterval(timerInterval);
     timerInterval = null;
     document.getElementById('workTimer').innerText = "00:00:00";
+
+    // Also stop face detection to save battery
+    if (faceDetectionInterval) {
+        clearInterval(faceDetectionInterval);
+        faceDetectionInterval = null;
+    }
 }
 
 function setStatus(msg, className) {
@@ -471,50 +481,91 @@ function startVideo() {
         const canvas = document.getElementById('overlay');
         const displaySize = { width: video.clientWidth, height: video.clientHeight };
         faceapi.matchDimensions(canvas, displaySize);
-        
-        setInterval(async () => {
-            if(!faceMatcher) return;
-            const options = new faceapi.SsdMobilenetv1Options({ minConfidence: 0.3 });
-            const detections = await faceapi.detectSingleFace(video, options).withFaceLandmarks().withFaceDescriptor();
-            
-            const ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            if (detections) {
-                const resizeDetections = faceapi.resizeResults(detections, displaySize);
-                faceapi.draw.drawDetections(canvas, resizeDetections);
-                
-                const bestMatch = faceMatcher.findBestMatch(detections.descriptor);
-                if (bestMatch.label !== 'unknown') {
-                    setStatus('تم التحقق من الوجه بنجاح ✓', 'success-text');
-                    currentFaceDescriptor = Array.from(detections.descriptor);
-                    isFaceVerified = true;
+
+        // Clear any existing interval
+        if (faceDetectionInterval) clearInterval(faceDetectionInterval);
+
+        faceDetectionInterval = setInterval(async () => {
+            // Skip if still processing previous frame or no matcher ready
+            if (isDetecting || !faceMatcher) return;
+
+            // Pause detection for 5 seconds after 3 consecutive successful verifications
+            if (consecutiveSuccessFrames >= 3) {
+                setStatus('✓ تم التحقق - جاري الراحة للحفاظ على البطارية', 'success-text');
+                return;
+            }
+
+            isDetecting = true;
+
+            try {
+                // Use lighter options for mobile
+                const options = new faceapi.SsdMobilenetv1Options({
+                    minConfidence: 0.5,  // Higher threshold = faster processing
+                    maxResults: 1        // Only need one face
+                });
+
+                const detections = await faceapi.detectSingleFace(video, options).withFaceLandmarks().withFaceDescriptor();
+
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                if (detections) {
+                    const resizeDetections = faceapi.resizeResults(detections, displaySize);
+                    faceapi.draw.drawDetections(canvas, resizeDetections);
+
+                    const bestMatch = faceMatcher.findBestMatch(detections.descriptor);
+                    if (bestMatch.label !== 'unknown') {
+                        setStatus('تم التحقق من الوجه بنجاح ✓', 'success-text');
+                        currentFaceDescriptor = Array.from(detections.descriptor);
+                        isFaceVerified = true;
+                        consecutiveSuccessFrames++;
+
+                        // Reset counter after 5 seconds to resume checking
+                        if (consecutiveSuccessFrames === 3) {
+                            setTimeout(() => { consecutiveSuccessFrames = 0; }, 5000);
+                        }
+                    } else {
+                        setStatus('الوجه غير متطابق', 'error-text');
+                        currentFaceDescriptor = null;
+                        isFaceVerified = false;
+                        consecutiveSuccessFrames = 0;
+                    }
                 } else {
-                    setStatus('الوجه غير متطابق', 'error-text');
+                    setStatus('وجه الكاميرا إليك', 'text-muted');
                     currentFaceDescriptor = null;
                     isFaceVerified = false;
+                    consecutiveSuccessFrames = 0;
                 }
-            } else {
-                setStatus('وجه الكاميرا إليك', 'text-muted');
-                currentFaceDescriptor = null;
-                isFaceVerified = false;
+                updateActionButtonsState();
+            } catch (err) {
+                console.warn('Face detection error:', err);
+            } finally {
+                isDetecting = false;
             }
-            updateActionButtonsState();
-        }, 1000);
+        }, 1500); // Reduced from 1000ms to 1500ms for older devices
     });
 }
 
 function getLocation() {
-    if (navigator.geolocation) {
-        navigator.geolocation.watchPosition(
-            (position) => {
-                lastLocation = { lat: position.coords.latitude, lng: position.coords.longitude };
-                verifyLocation();
-            },
-            (error) => { setStatus('يرجى تفعيل الـ GPS', 'error-text'); },
-            { enableHighAccuracy: true }
-        );
+    if (!navigator.geolocation) return;
+
+    // Clear existing watch to prevent multiple watchers
+    if (geolocationWatchId !== null) {
+        navigator.geolocation.clearWatch(geolocationWatchId);
     }
+
+    geolocationWatchId = navigator.geolocation.watchPosition(
+        (position) => {
+            lastLocation = { lat: position.coords.latitude, lng: position.coords.longitude };
+            verifyLocation();
+        },
+        (error) => { setStatus('يرجى تفعيل الـ GPS', 'error-text'); },
+        {
+            enableHighAccuracy: false,  // false = less battery drain on old devices
+            timeout: 10000,             // 10s timeout
+            maximumAge: 30000          // Accept positions up to 30s old
+        }
+    );
 }
 
 function verifyLocation() {
@@ -1129,3 +1180,9 @@ function renderMyReports(data, monthStr) {
     document.getElementById('empTotalTransport').innerText = totalTransport.toFixed(2) + " ج.م";
 }
 
+// Cleanup resources when leaving the page to prevent memory leaks and battery drain
+window.addEventListener('beforeunload', () => {
+    if (faceDetectionInterval) clearInterval(faceDetectionInterval);
+    if (timerInterval) clearInterval(timerInterval);
+    if (geolocationWatchId !== null) navigator.geolocation.clearWatch(geolocationWatchId);
+});
