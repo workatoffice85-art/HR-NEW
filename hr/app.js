@@ -13,18 +13,31 @@ let parseMapLinkTimer = null;
 let parseMapLinkRequestId = 0;
 let isInitialDataLoaded = false;
 
+function updateClock() {
+    const now = new Date();
+    const timeString = now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+    const clockEl = document.getElementById('clockDisplay');
+    if (clockEl) {
+        clockEl.textContent = timeString;
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     // Set default dates
     const now = new Date();
     const todayStr = now.toISOString().split('T')[0];
     const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-    
+
     document.getElementById('attendanceDateFilter').value = todayStr;
     document.getElementById('reportStartDate').value = firstDayOfMonth;
     document.getElementById('reportEndDate').value = todayStr;
     document.getElementById('employeeReportStartDate').value = firstDayOfMonth;
     document.getElementById('employeeReportEndDate').value = todayStr;
-    
+
+    // Start clock
+    updateClock();
+    setInterval(updateClock, 1000);
+
     checkSession();
 });
 
