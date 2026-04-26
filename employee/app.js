@@ -956,9 +956,9 @@ function renderMyReports(data, monthStr) {
     tbody.innerHTML = '';
 
     // Create a set of dates where user was present for quick lookup (exclude overtime)
-    const presentDates = new Set(presentRecords.filter(r => r.status !== 'overtime').map(r => new Date(r.checkIn).toISOString().split('T')[0]));
-    const lateDates = new Set(presentRecords.filter(r => r.status === 'late').map(r => new Date(r.checkIn).toISOString().split('T')[0]));
-    const overtimeDates = new Set(presentRecords.filter(r => r.status === 'overtime').map(r => new Date(r.checkIn).toISOString().split('T')[0]));
+    const presentDates = new Set(presentRecords.filter(r => r.status !== 'overtime').map(r => r.checkIn ? r.checkIn.slice(0, 10) : ''));
+    const lateDates = new Set(presentRecords.filter(r => r.status === 'late').map(r => r.checkIn ? r.checkIn.slice(0, 10) : ''));
+    const overtimeDates = new Set(presentRecords.filter(r => r.status === 'overtime').map(r => r.checkIn ? r.checkIn.slice(0, 10) : ''));
 
     let totalLates = lateDates.size; // Only count one late per unique date
     let totalOvertime = overtimeDates.size; // Only count one overtime per unique date
@@ -966,8 +966,7 @@ function renderMyReports(data, monthStr) {
 
     // Add Present Records
     presentRecords.forEach(record => {
-        const recordDateObj = new Date(record.checkIn);
-        const dateKey = !Number.isNaN(recordDateObj.getTime()) ? recordDateObj.toISOString().split('T')[0] : null;
+        const dateKey = record.checkIn ? record.checkIn.slice(0, 10) : null;
 
         if (dateKey) {
             const transportValue = getCurrentTransportPrice(record);

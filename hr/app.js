@@ -205,8 +205,8 @@ function renderAttendanceTable(data) {
     let filtered = data;
     if (filterDate) {
         filtered = data.filter(record => {
-            const d = new Date(record.checkIn);
-            return d.toISOString().split('T')[0] === filterDate;
+            const recordDate = record.checkIn ? record.checkIn.slice(0, 10) : '';
+            return recordDate === filterDate;
         });
     }
 
@@ -308,10 +308,10 @@ function getCurrentTransportPrice(record) {
 function calculateUniqueDailyTransport(records) {
     const dailyTransport = {};
     records.forEach(record => {
-        const dateObj = new Date(record.checkIn);
-        if (Number.isNaN(dateObj.getTime())) return;
+        const dateStr = record.checkIn ? record.checkIn.slice(0, 10) : '';
+        if (!dateStr) return;
 
-        const dayKey = `${String(record.employeeId || '')}|${dateObj.toISOString().split('T')[0]}`;
+        const dayKey = `${String(record.employeeId || '')}|${dateStr}`;
         const transportValue = getCurrentTransportPrice(record);
 
         if (!(dayKey in dailyTransport)) {
@@ -406,9 +406,9 @@ async function generateEmployeeDetailedReport() {
     }
 
     const employeeRecords = allAttendanceData.filter(record => {
-        const checkInDate = new Date(record.checkIn);
-        if (isNaN(checkInDate)) return false;
-        return String(record.employeeId) === String(employeeId) && checkInDate >= startDate && checkInDate <= endDate;
+        const recordDateStr = record.checkIn ? record.checkIn.slice(0, 10) : '';
+        if (!recordDateStr) return false;
+        return String(record.employeeId) === String(employeeId) && recordDateStr >= startStr && recordDateStr <= endStr;
     });
 
     const sortedRecords = [...employeeRecords].sort((a, b) => new Date(b.checkIn) - new Date(a.checkIn));
@@ -419,8 +419,7 @@ async function generateEmployeeDetailedReport() {
     let totalTransport = 0;
 
     sortedRecords.forEach(record => {
-        const recordDate = new Date(record.checkIn);
-        const dateKey = !isNaN(recordDate) ? recordDate.toISOString().split('T')[0] : null;
+        const dateKey = record.checkIn ? record.checkIn.slice(0, 10) : null;
         if (dateKey) {
             // Count as present if not overtime (including no_checkout - employee was present but forgot to check out)
             if (record.status !== 'overtime') {
@@ -562,17 +561,17 @@ function generateReport() {
     const endDate = new Date(endStr);
     endDate.setHours(23,59,59,999);
 
-    // Filter records for the range
+    // Filter records for the range (using Cairo-normalized dates)
     const filtered = allAttendanceData.filter(record => {
-        const d = new Date(record.checkIn);
-        return d >= startDate && d <= endDate;
+        const recordDateStr = record.checkIn ? record.checkIn.slice(0, 10) : '';
+        return recordDateStr >= startStr && recordDateStr <= endStr;
     });
 
     const reportAcc = {};
 
     filtered.forEach(record => {
         const empId = record.employeeId;
-        const recordDate = new Date(record.checkIn).toISOString().split('T')[0];
+        const recordDate = record.checkIn ? record.checkIn.slice(0, 10) : '';
 
         if(!reportAcc[empId]) {
              reportAcc[empId] = {
