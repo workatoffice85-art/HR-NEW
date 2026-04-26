@@ -15,6 +15,37 @@ let tempPhone = ""; // used during registration
 let allOfficialHolidays = [];
 const MODEL_URL = '../models';
 
+// Helper: Extract Cairo time from ISO string (format: 2026-04-26T09:34:48+02:00)
+// Returns time in format "9:34:48 ص" without any timezone conversion
+function formatCairoTime(isoString) {
+    if (!isoString) return '-';
+    const match = isoString.match(/T(\d{2}):(\d{2}):(\d{2})/);
+    if (!match) return isoString;
+    
+    let hours = parseInt(match[1], 10);
+    const minutes = match[2];
+    const seconds = match[3];
+    
+    const period = hours >= 12 ? 'م' : 'ص';
+    if (hours > 12) hours -= 12;
+    if (hours === 0) hours = 12;
+    
+    return `${hours}:${minutes}:${seconds} ${period}`;
+}
+
+// Helper: Extract Cairo date from ISO string
+function formatCairoDate(isoString) {
+    if (!isoString) return '-';
+    const match = isoString.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!match) return isoString;
+    
+    const year = match[1];
+    const month = match[2];
+    const day = match[3];
+    
+    return `${day}/${parseInt(month, 10)}/${year}`;
+}
+
 // Audio feedback functions
 function playSuccessSound() {
     try {
@@ -761,7 +792,7 @@ async function fetchEligibleSites() {
         select.innerHTML = '';
         if (result.success && result.data.length > 0) {
             result.data.forEach(att => {
-                const time = new Date(att.checkIn).toLocaleTimeString('ar-EG', {timeZone: 'Africa/Cairo', hour:'2-digit', minute:'2-digit'});
+                const time = formatCairoTime(att.checkIn);
                 const option = document.createElement('option');
                 option.value = att.id;
                 option.dataset.siteId = att.siteId;
@@ -1022,13 +1053,13 @@ function renderMyReports(data, monthStr) {
             if (item.status === 'no_checkout') {
                 checkOutDisplay = 'لم يتم الانصراف';
             } else if (item.checkOut) {
-                checkOutDisplay = new Date(item.checkOut).toLocaleTimeString('ar-EG', {timeZone: 'Africa/Cairo'});
+                checkOutDisplay = formatCairoTime(item.checkOut);
             }
 
             tbody.innerHTML += `
                 <tr>
-                    <td data-label="التاريخ">${item.date.toLocaleDateString('ar-EG', {timeZone: 'Africa/Cairo'})}</td>
-                    <td data-label="الحضور" dir="ltr">${new Date(item.checkIn).toLocaleTimeString('ar-EG', {timeZone: 'Africa/Cairo'})}</td>
+                    <td data-label="التاريخ">${formatCairoDate(item.checkIn)}</td>
+                    <td data-label="الحضور" dir="ltr">${formatCairoTime(item.checkIn)}</td>
                     <td data-label="الانصراف" dir="ltr">${checkOutDisplay}</td>
                     <td data-label="البدل">${item.transport} ج.م</td>
                     <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
@@ -1038,7 +1069,7 @@ function renderMyReports(data, monthStr) {
             // Absent Row
             tbody.innerHTML += `
                 <tr style="background: rgba(239, 68, 68, 0.05);">
-                    <td data-label="التاريخ">${item.date.toLocaleDateString('ar-EG', {timeZone: 'Africa/Cairo'})}</td>
+                    <td data-label="التاريخ">${formatCairoDate(item.date)}</td>
                     <td data-label="التفاصيل" colspan="3" style="text-align:center !important; color:var(--danger); font-size:0.8rem;">غائب (لم يتم تسجيل حضور)</td>
                     <td data-label="الحالة"><span style="color:var(--danger)">غائب</span></td>
                 </tr>

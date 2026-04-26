@@ -196,6 +196,40 @@ async function refreshData() {
     await initDashboard(true);
 }
 
+// Helper: Extract Cairo time from ISO string (format: 2026-04-26T09:34:48+02:00)
+// Returns time in format "9:34:48 ص" without any timezone conversion
+function formatCairoTime(isoString) {
+    if (!isoString) return '-';
+    // Match the time part before the timezone offset: T09:34:48+02:00 -> 09:34:48
+    const match = isoString.match(/T(\d{2}):(\d{2}):(\d{2})/);
+    if (!match) return isoString;
+    
+    let hours = parseInt(match[1], 10);
+    const minutes = match[2];
+    const seconds = match[3];
+    
+    // Convert to 12-hour format with AM/PM
+    const period = hours >= 12 ? 'م' : 'ص';
+    if (hours > 12) hours -= 12;
+    if (hours === 0) hours = 12;
+    
+    return `${hours}:${minutes}:${seconds} ${period}`;
+}
+
+// Helper: Extract Cairo date from ISO string
+function formatCairoDate(isoString) {
+    if (!isoString) return '-';
+    const match = isoString.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!match) return isoString;
+    
+    const year = match[1];
+    const month = match[2];
+    const day = match[3];
+    
+    // Return in Egyptian format: 26/4/2026
+    return `${day}/${parseInt(month, 10)}/${year}`;
+}
+
 function renderAttendanceTable(data) {
     const filterDate = document.getElementById('attendanceDateFilter').value;
     const tbody = document.getElementById('attendanceTableBody');
@@ -212,16 +246,15 @@ function renderAttendanceTable(data) {
 
     // Reverse to show newest first
     [...filtered].reverse().forEach(record => {
-        const cInObj = new Date(record.checkIn);
         // Display time as-is (server sends Cairo time with offset)
-        const checkInTime = !isNaN(cInObj) ? cInObj.toLocaleString('ar-EG', { timeZone: 'Africa/Cairo' }) : (record.checkIn || '-');
+        const checkInTime = formatCairoTime(record.checkIn);
+        const checkInDate = formatCairoDate(record.checkIn);
 
         let checkOutTime = 'لم ينصرف بعد';
         if (record.status === 'no_checkout') {
             checkOutTime = 'لم يتم الانصراف';
         } else if (record.checkOut) {
-            const cOutObj = new Date(record.checkOut);
-            checkOutTime = !isNaN(cOutObj) ? cOutObj.toLocaleString('ar-EG', { timeZone: 'Africa/Cairo' }) : (record.checkOut || '-');
+            checkOutTime = formatCairoTime(record.checkOut);
         }
         
         let statusText = 'حاضر';
@@ -242,7 +275,7 @@ function renderAttendanceTable(data) {
             <tr>
                 <td data-label="الموظف">${record.employeeName}</td>
                 <td data-label="الموقع">${record.siteName}</td>
-                <td data-label="وقت الحضور" dir="ltr">${checkInTime}</td>
+                <td data-label="وقت الحضور" dir="ltr">${checkInDate} ${checkInTime}</td>
                 <td data-label="وقت الانصراف" dir="ltr">${checkOutTime}</td>
                 <td data-label="بدل الانتقال">${getCurrentTransportPrice(record) || 0} ج.م</td>
                 <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
@@ -456,8 +489,10 @@ async function generateEmployeeDetailedReport() {
         ? employeeSelect.options[employeeSelect.selectedIndex].textContent
         : employeeId;
     const employeeName = selectedLabel.replace(/\s*\(.+\)\s*$/, '').trim() || selectedLabel;
+    const startDateStr = formatCairoDate(startStr + 'T00:00:00+02:00');
+    const endDateStr = formatCairoDate(endStr + 'T00:00:00+02:00');
     document.getElementById('employeeDetailMeta').innerText =
-        `الموظف: ${employeeName} | الفترة: ${startDate.toLocaleDateString('ar-EG', { timeZone: 'Africa/Cairo' })} - ${endDate.toLocaleDateString('ar-EG', { timeZone: 'Africa/Cairo' })} | عدد العمليات: ${sortedRecords.length}`;
+        `الموظف: ${employeeName} | الفترة: ${startDateStr} - ${endDateStr} | عدد العمليات: ${sortedRecords.length}`;
 
     const tbody = document.getElementById('employeeDetailTableBody');
     if (sortedRecords.length === 0) {
@@ -471,20 +506,14 @@ async function generateEmployeeDetailedReport() {
 
     tbody.innerHTML = '';
     sortedRecords.forEach(record => {
-        const checkInObj = new Date(record.checkIn);
-        const dateText = !isNaN(checkInObj) ? checkInObj.toLocaleDateString('ar-EG', { timeZone: 'Africa/Cairo' }) : '-';
-        const checkInText = !isNaN(checkInObj)
-            ? checkInObj.toLocaleTimeString('ar-EG', { timeZone: 'Africa/Cairo', hour: '2-digit', minute: '2-digit' })
-            : (record.checkIn || '-');
+        const dateText = formatCairoDate(record.checkIn);
+        const checkInText = formatCairoTime(record.checkIn);
 
         let checkOutText = 'لم ينصرف بعد';
         if (record.status === 'no_checkout') {
             checkOutText = 'لم يتم الانصراف';
         } else if (record.checkOut) {
-            const checkOutObj = new Date(record.checkOut);
-            checkOutText = !isNaN(checkOutObj)
-                ? checkOutObj.toLocaleTimeString('ar-EG', { timeZone: 'Africa/Cairo', hour: '2-digit', minute: '2-digit' })
-                : (record.checkOut || '-');
+            checkOutText = formatCairoTime(record.checkOut);
         }
 
         const statusMeta = getStatusMeta(record.status);
@@ -1360,9 +1389,8 @@ function renderOfficialHolidaysTable(data) {
     const dayNames = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
 
     sorted.forEach(holiday => {
-        const dateObj = new Date(holiday.holidayDate);
-        const dateStr = !isNaN(dateObj) ? dateObj.toLocaleDateString('ar-EG', { timeZone: 'Africa/Cairo' }) : holiday.holidayDate;
-        const dayName = !isNaN(dateObj) ? dayNames[dateObj.getDay()] : '-';
+        const dateStr = formatCairoDate(holiday.holidayDate);
+        const dayName = dayNames[new Date(holiday.holidayDate).getDay()] || '-';
 
         const row = document.createElement('tr');
         row.innerHTML = `
@@ -1517,10 +1545,8 @@ function renderSiteRequestsTable(data) {
             ? `<a href="${req.receiptUrl}" target="_blank" style="color:var(--secondary); text-decoration:underline;">${req.receiptName || 'عرض المرفق'}</a>`
             : '-';
 
-        const dateObj = req.timestamp ? new Date(req.timestamp) : null;
-        const createdStr = (dateObj && !isNaN(dateObj)) ? dateObj.toLocaleString('ar-EG', { timeZone: 'Africa/Cairo' }) : (req.timestamp || '-');
-        const approvedObj = req.approvedAt ? new Date(req.approvedAt) : null;
-        const approvedStr = (approvedObj && !isNaN(approvedObj)) ? approvedObj.toLocaleString('ar-EG', { timeZone: 'Africa/Cairo' }) : '';
+        const createdStr = req.timestamp ? formatCairoDate(req.timestamp) + ' ' + formatCairoTime(req.timestamp) : (req.timestamp || '-');
+        const approvedStr = req.approvedAt ? formatCairoDate(req.approvedAt) + ' ' + formatCairoTime(req.approvedAt) : '';
         const dateStr = approvedStr ? `${createdStr}<br><small style="color:var(--text-muted);">اعتماد: ${approvedStr}</small>` : createdStr;
 
         tbody.innerHTML += `
@@ -1667,7 +1693,7 @@ function renderAllowanceRequestsTable(data) {
             actions = '<span style="color:var(--text-muted); font-size:0.8rem;">تمت المعالجة</span>';
         }
 
-        const createdAt = new Date(req.createdAt).toLocaleString('ar-EG', { timeZone: 'Africa/Cairo' });
+        const createdAt = formatCairoDate(req.createdAt) + ' ' + formatCairoTime(req.createdAt);
 
         tbody.innerHTML += `
             <tr>
