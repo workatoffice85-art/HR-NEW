@@ -13,6 +13,7 @@ let lastDetectedSite = null;
 let tempEmail = ""; // used during registration
 let tempPhone = ""; // used during registration
 let allOfficialHolidays = [];
+let appSettings = {}; // Store system settings including weekend days
 const MODEL_URL = '../models';
 
 // Helper: Extract Cairo time from ISO string (format: 2026-04-26T09:34:48+02:00)
@@ -295,6 +296,7 @@ async function initSystem() {
     try {
         const dataPromise = fetch(`${API_URL}?action=getPortalInitialData&employeeId=${encodeURIComponent(currentUser.id)}`).then(r => r.json());
         const holidaysPromise = fetch(`${API_URL}?action=getOfficialHolidays`).then(r => r.json());
+        const settingsPromise = fetch(`${API_URL}?action=getSettings`).then(r => r.json());
         const modelPromise = Promise.all([
             faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
             faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
@@ -310,6 +312,12 @@ async function initSystem() {
             // Load official holidays
             if (holidaysResult.success) {
                 allOfficialHolidays = holidaysResult.data || [];
+            }
+
+            // Load settings (weekend days, etc.)
+            const settingsResult = await settingsPromise;
+            if (settingsResult.success) {
+                appSettings = settingsResult.data || {};
             }
 
             // Process initial status
@@ -917,7 +925,7 @@ function getWorkingDaysPassed(year, month) {
     for (let i = 1; i <= endDay; i++) {
         const d = new Date(year, month, i);
         const currentDateKey = d.toISOString().split('T')[0];
-        const isWeekend = d.getDay() === 5 || d.getDay() === 6; // Friday (5) and Saturday (6)
+        const isWeekend = weekendDays.includes(d.getDay()); // Use configured weekend days
         const isHoliday = holidayDates.has(currentDateKey);
 
         // Exclude weekends and official holidays
@@ -939,10 +947,17 @@ function getCurrentTransportPrice(record) {
     return allowance ? parseFloat(allowance.transportPrice || 0) : toTransportNumber(record.transportPrice);
 }
 
+function getWeekendDaysFromSettings() {
+    // Default: Friday (5) and Saturday (6)
+    const weekendDaysStr = appSettings.weekendDays || "5,6";
+    return weekendDaysStr.split(',').map(d => parseInt(d.trim())).filter(d => !isNaN(d));
+}
+
 function renderMyReports(data, monthStr) {
     const targetYear = parseInt(monthStr.split('-')[0]);
     const targetMonth = parseInt(monthStr.split('-')[1]) - 1;
     const now = new Date();
+    const weekendDays = getWeekendDaysFromSettings();
 
     // 1. Get all present days in this month
     const presentRecords = data.filter(record => {
@@ -950,7 +965,7 @@ function renderMyReports(data, monthStr) {
         return recordDateStr === monthStr;
     });
 
-    // 2. Identify working days that passed (Sun-Thu)
+    // 2. Identify working days that passed (exclude configured weekend days)
     const workingDaysPassed = [];
     const endDay = (targetYear === now.getFullYear() && targetMonth === now.getMonth())
                    ? now.getDate()
@@ -971,7 +986,7 @@ function renderMyReports(data, monthStr) {
     for (let i = 1; i <= endDay; i++) {
         const d = new Date(targetYear, targetMonth, i);
         const currentDateKey = d.toISOString().split('T')[0];
-        const isWeekend = d.getDay() === 5 || d.getDay() === 6; // Friday (5) and Saturday (6)
+        const isWeekend = weekendDays.includes(d.getDay()); // Use configured weekend days
         const isHoliday = holidayDates.has(currentDateKey);
 
         // Exclude weekends and official holidays
@@ -1058,22 +1073,22 @@ function renderMyReports(data, monthStr) {
             }
 
             tbody.innerHTML += `
-                <tr>
-                    <td data-label="التاريخ">${formatCairoDate(item.checkIn)}</td>
-                    <td data-label="الحضور" dir="ltr">${formatCairoTime(item.checkIn)}</td>
-                    <td data-label="الانصراف" dir="ltr">${checkOutDisplay}</td>
-                    <td data-label="الموقع">${item.siteName || '-'}</td>
-                    <td data-label="البدل">${item.transport} ج.م</td>
-                    <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
+                <tr style="border-bottom: 1px solid var(--card-border);">
+                    <td data-label="التاريخ" style="padding: 8px 5px;">${formatCairoDate(item.checkIn)}</td>
+                    <td data-label="الحضور" style="padding: 8px 5px; font-family: monospace;">${formatCairoTime(item.checkIn)}</td>
+                    <td data-label="الانصراف" style="padding: 8px 5px; font-family: monospace;">${checkOutDisplay}</td>
+                    <td data-label="الموقع" style="padding: 8px 5px; font-size: 0.8rem;">${item.siteName || '-'}</td>
+                    <td data-label="البدل" style="padding: 8px 5px;">${item.transport} ج.م</td>
+                    <td data-label="الحالة" style="padding: 8px 5px;"><span style="color:${statusColor}; font-weight: bold;">${statusText}</span></td>
                 </tr>
             `;
         } else {
             // Absent Row
             tbody.innerHTML += `
-                <tr style="background: rgba(239, 68, 68, 0.05);">
-                    <td data-label="التاريخ">${formatCairoDate(item.date)}</td>
-                    <td data-label="التفاصيل" colspan="4" style="text-align:center !important; color:var(--danger); font-size:0.8rem;">غائب (لم يتم تسجيل حضور)</td>
-                    <td data-label="الحالة"><span style="color:var(--danger)">غائب</span></td>
+                <tr style="background: rgba(239, 68, 68, 0.05); border-bottom: 1px solid var(--card-border);">
+                    <td data-label="التاريخ" style="padding: 8px 5px;">${formatCairoDate(item.date)}</td>
+                    <td data-label="التفاصيل" colspan="4" style="text-align:center !important; color:var(--danger); font-size:0.8rem; padding: 8px 5px;">غائب (لم يتم تسجيل حضور)</td>
+                    <td data-label="الحالة" style="padding: 8px 5px;"><span style="color:var(--danger); font-weight: bold;">غائب</span></td>
                 </tr>
             `;
         }
