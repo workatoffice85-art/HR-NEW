@@ -85,16 +85,14 @@
             <a class="nav-link" onclick="logout()" style="color:var(--danger); margin-top:50px;">تسجيل خروج</a>
         </div>
         <div class="main-content">
+            
             <div id="loader" class="loader hidden"></div>
 
             <!-- Attendance Tab -->
             <div id="tab-attendance" class="tab-content">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-                    <div style="display:flex; gap:15px; align-items:center;">
-                        <h2>سجلات العمليات الشاملة</h2>
-                        <div id="clockDisplay" style="background:rgba(79, 70, 229, 0.2); border:1px solid rgba(79, 70, 229, 0.5); padding:10px 20px; border-radius:12px; font-size:1.5rem; font-weight:bold; color:var(--secondary); font-family:'Tajawal', sans-serif;"></div>
-                    </div>
-                    <div style="display:flex; gap:15px; align-items:center;">
+                    <h2>سجلات العمليات الشاملة</h2>
+                    <div style="display:flex; gap:10px; align-items:center;">
                         <label>تاريخ اليوم:</label>
                         <input type="date" id="attendanceDateFilter" onchange="renderAttendanceTable(allAttendanceData)">
                         <button class="btn-primary" style="width:auto;" onclick="refreshData()">تحديث مجمع 🔄</button>

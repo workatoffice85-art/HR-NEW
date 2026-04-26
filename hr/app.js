@@ -13,31 +13,18 @@ let parseMapLinkTimer = null;
 let parseMapLinkRequestId = 0;
 let isInitialDataLoaded = false;
 
-function updateClock() {
-    const now = new Date();
-    const timeString = now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
-    const clockEl = document.getElementById('clockDisplay');
-    if (clockEl) {
-        clockEl.textContent = timeString;
-    }
-}
-
 document.addEventListener('DOMContentLoaded', () => {
     // Set default dates
     const now = new Date();
     const todayStr = now.toISOString().split('T')[0];
     const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-
+    
     document.getElementById('attendanceDateFilter').value = todayStr;
     document.getElementById('reportStartDate').value = firstDayOfMonth;
     document.getElementById('reportEndDate').value = todayStr;
     document.getElementById('employeeReportStartDate').value = firstDayOfMonth;
     document.getElementById('employeeReportEndDate').value = todayStr;
-
-    // Start clock
-    updateClock();
-    setInterval(updateClock, 1000);
-
+    
     checkSession();
 });
 
@@ -226,15 +213,15 @@ function renderAttendanceTable(data) {
     // Reverse to show newest first
     [...filtered].reverse().forEach(record => {
         const cInObj = new Date(record.checkIn);
-        // Display time in Cairo timezone (matching server storage)
-        const checkInTime = !isNaN(cInObj) ? cInObj.toLocaleString('ar-EG', { timeZone: 'Africa/Cairo', hour12: false }) : (record.checkIn || '-');
+        // Display time as-is (server sends Cairo time with offset)
+        const checkInTime = !isNaN(cInObj) ? cInObj.toLocaleString('ar-EG') : (record.checkIn || '-');
 
         let checkOutTime = 'لم ينصرف بعد';
         if (record.status === 'no_checkout') {
             checkOutTime = 'لم يتم الانصراف';
         } else if (record.checkOut) {
             const cOutObj = new Date(record.checkOut);
-            checkOutTime = !isNaN(cOutObj) ? cOutObj.toLocaleString('ar-EG', { timeZone: 'Africa/Cairo', hour12: false }) : (record.checkOut || '-');
+            checkOutTime = !isNaN(cOutObj) ? cOutObj.toLocaleString('ar-EG') : (record.checkOut || '-');
         }
         
         let statusText = 'حاضر';
