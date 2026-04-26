@@ -1011,6 +1011,7 @@ function renderMyReports(data, monthStr) {
             date: record.checkIn, // Keep as ISO string
             checkIn: record.checkIn,
             checkOut: record.checkOut,
+            siteName: record.siteName || '-',
             status: record.status, // 'present' or 'late'
             transport: getCurrentTransportPrice(record),
             type: 'entry'
@@ -1061,6 +1062,7 @@ function renderMyReports(data, monthStr) {
                     <td data-label="التاريخ">${formatCairoDate(item.checkIn)}</td>
                     <td data-label="الحضور" dir="ltr">${formatCairoTime(item.checkIn)}</td>
                     <td data-label="الانصراف" dir="ltr">${checkOutDisplay}</td>
+                    <td data-label="الموقع">${item.siteName || '-'}</td>
                     <td data-label="البدل">${item.transport} ج.م</td>
                     <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
                 </tr>
@@ -1070,7 +1072,7 @@ function renderMyReports(data, monthStr) {
             tbody.innerHTML += `
                 <tr style="background: rgba(239, 68, 68, 0.05);">
                     <td data-label="التاريخ">${formatCairoDate(item.date)}</td>
-                    <td data-label="التفاصيل" colspan="3" style="text-align:center !important; color:var(--danger); font-size:0.8rem;">غائب (لم يتم تسجيل حضور)</td>
+                    <td data-label="التفاصيل" colspan="4" style="text-align:center !important; color:var(--danger); font-size:0.8rem;">غائب (لم يتم تسجيل حضور)</td>
                     <td data-label="الحالة"><span style="color:var(--danger)">غائب</span></td>
                 </tr>
             `;
