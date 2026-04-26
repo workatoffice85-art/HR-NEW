@@ -946,8 +946,8 @@ function renderMyReports(data, monthStr) {
 
     // 1. Get all present days in this month
     const presentRecords = data.filter(record => {
-        const d = new Date(record.checkIn);
-        return d.getFullYear() === targetYear && d.getMonth() === targetMonth;
+        const recordDateStr = record.checkIn ? record.checkIn.slice(0, 7) : ''; // YYYY-MM
+        return recordDateStr === monthStr;
     });
 
     // 2. Identify working days that passed (Sun-Thu)
@@ -1008,7 +1008,7 @@ function renderMyReports(data, monthStr) {
             }
         }
         fullReport.push({
-            date: new Date(record.checkIn),
+            date: record.checkIn, // Keep as ISO string
             checkIn: record.checkIn,
             checkOut: record.checkOut,
             status: record.status, // 'present' or 'late'
@@ -1023,14 +1023,14 @@ function renderMyReports(data, monthStr) {
     workingDaysPassed.forEach(dateStr => {
         if (!presentDates.has(dateStr)) {
             fullReport.push({
-                date: new Date(dateStr),
+                date: dateStr + 'T00:00:00+02:00', // Keep as ISO string format
                 type: 'absent'
             });
         }
     });
 
-    // Sort by date descending
-    fullReport.sort((a, b) => b.date - a.date);
+    // Sort by date descending (compare ISO strings)
+    fullReport.sort((a, b) => new Date(b.date) - new Date(a.date));
 
     // 4. Render to Table
     fullReport.forEach(item => {
