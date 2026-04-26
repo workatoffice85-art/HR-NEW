@@ -214,14 +214,14 @@ function renderAttendanceTable(data) {
     [...filtered].reverse().forEach(record => {
         const cInObj = new Date(record.checkIn);
         // Display time as-is (server sends Cairo time with offset)
-        const checkInTime = !isNaN(cInObj) ? cInObj.toLocaleString('ar-EG') : (record.checkIn || '-');
+        const checkInTime = !isNaN(cInObj) ? cInObj.toLocaleString('ar-EG', { timeZone: 'Africa/Cairo' }) : (record.checkIn || '-');
 
         let checkOutTime = 'لم ينصرف بعد';
         if (record.status === 'no_checkout') {
             checkOutTime = 'لم يتم الانصراف';
         } else if (record.checkOut) {
             const cOutObj = new Date(record.checkOut);
-            checkOutTime = !isNaN(cOutObj) ? cOutObj.toLocaleString('ar-EG') : (record.checkOut || '-');
+            checkOutTime = !isNaN(cOutObj) ? cOutObj.toLocaleString('ar-EG', { timeZone: 'Africa/Cairo' }) : (record.checkOut || '-');
         }
         
         let statusText = 'حاضر';
@@ -458,7 +458,7 @@ async function generateEmployeeDetailedReport() {
         : employeeId;
     const employeeName = selectedLabel.replace(/\s*\(.+\)\s*$/, '').trim() || selectedLabel;
     document.getElementById('employeeDetailMeta').innerText =
-        `الموظف: ${employeeName} | الفترة: ${startDate.toLocaleDateString('ar-EG')} - ${endDate.toLocaleDateString('ar-EG')} | عدد العمليات: ${sortedRecords.length}`;
+        `الموظف: ${employeeName} | الفترة: ${startDate.toLocaleDateString('ar-EG', { timeZone: 'Africa/Cairo' })} - ${endDate.toLocaleDateString('ar-EG', { timeZone: 'Africa/Cairo' })} | عدد العمليات: ${sortedRecords.length}`;
 
     const tbody = document.getElementById('employeeDetailTableBody');
     if (sortedRecords.length === 0) {
@@ -473,9 +473,9 @@ async function generateEmployeeDetailedReport() {
     tbody.innerHTML = '';
     sortedRecords.forEach(record => {
         const checkInObj = new Date(record.checkIn);
-        const dateText = !isNaN(checkInObj) ? checkInObj.toLocaleDateString('ar-EG') : '-';
+        const dateText = !isNaN(checkInObj) ? checkInObj.toLocaleDateString('ar-EG', { timeZone: 'Africa/Cairo' }) : '-';
         const checkInText = !isNaN(checkInObj)
-            ? checkInObj.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })
+            ? checkInObj.toLocaleTimeString('ar-EG', { timeZone: 'Africa/Cairo', hour: '2-digit', minute: '2-digit' })
             : (record.checkIn || '-');
 
         let checkOutText = 'لم ينصرف بعد';
@@ -484,7 +484,7 @@ async function generateEmployeeDetailedReport() {
         } else if (record.checkOut) {
             const checkOutObj = new Date(record.checkOut);
             checkOutText = !isNaN(checkOutObj)
-                ? checkOutObj.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })
+                ? checkOutObj.toLocaleTimeString('ar-EG', { timeZone: 'Africa/Cairo', hour: '2-digit', minute: '2-digit' })
                 : (record.checkOut || '-');
         }
 
@@ -1362,7 +1362,7 @@ function renderOfficialHolidaysTable(data) {
 
     sorted.forEach(holiday => {
         const dateObj = new Date(holiday.holidayDate);
-        const dateStr = !isNaN(dateObj) ? dateObj.toLocaleDateString('ar-EG') : holiday.holidayDate;
+        const dateStr = !isNaN(dateObj) ? dateObj.toLocaleDateString('ar-EG', { timeZone: 'Africa/Cairo' }) : holiday.holidayDate;
         const dayName = !isNaN(dateObj) ? dayNames[dateObj.getDay()] : '-';
 
         const row = document.createElement('tr');
@@ -1519,9 +1519,9 @@ function renderSiteRequestsTable(data) {
             : '-';
 
         const dateObj = req.timestamp ? new Date(req.timestamp) : null;
-        const createdStr = (dateObj && !isNaN(dateObj)) ? dateObj.toLocaleString('ar-EG') : (req.timestamp || '-');
+        const createdStr = (dateObj && !isNaN(dateObj)) ? dateObj.toLocaleString('ar-EG', { timeZone: 'Africa/Cairo' }) : (req.timestamp || '-');
         const approvedObj = req.approvedAt ? new Date(req.approvedAt) : null;
-        const approvedStr = (approvedObj && !isNaN(approvedObj)) ? approvedObj.toLocaleString('ar-EG') : '';
+        const approvedStr = (approvedObj && !isNaN(approvedObj)) ? approvedObj.toLocaleString('ar-EG', { timeZone: 'Africa/Cairo' }) : '';
         const dateStr = approvedStr ? `${createdStr}<br><small style="color:var(--text-muted);">اعتماد: ${approvedStr}</small>` : createdStr;
 
         tbody.innerHTML += `
@@ -1668,7 +1668,7 @@ function renderAllowanceRequestsTable(data) {
             actions = '<span style="color:var(--text-muted); font-size:0.8rem;">تمت المعالجة</span>';
         }
 
-        const createdAt = new Date(req.createdAt).toLocaleString('ar-EG');
+        const createdAt = new Date(req.createdAt).toLocaleString('ar-EG', { timeZone: 'Africa/Cairo' });
 
         tbody.innerHTML += `
             <tr>
