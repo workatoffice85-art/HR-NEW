@@ -478,11 +478,13 @@ if (action === "login") {
                 const todayDate = new Date(data.checkIn).toDateString();
 
                 if (openDate !== todayDate) {
-                    // Session from a previous day — mark as 'no_checkout' (no fake time)
+                    // Session from a previous day — mark as 'no_checkout' but preserve 'overtime' status for weekend/holiday work
                     const eod = new Date(openSession.checkIn);
                     eod.setHours(23, 59, 59, 999);
+                    // Preserve overtime status if it was a weekend/holiday work day, otherwise mark as no_checkout
+                    const preservedStatus = openSession.status === 'overtime' ? 'overtime' : 'no_checkout';
                     await supabase.from('attendance')
-                        .update({ checkOut: eod.toISOString(), totalHours: 0, status: 'no_checkout' })
+                        .update({ checkOut: eod.toISOString(), totalHours: 0, status: preservedStatus })
                         .eq('id', openSession.id);
                 } else {
                     // Same-day open session — block and return openSessionId for frontend
