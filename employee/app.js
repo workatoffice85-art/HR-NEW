@@ -1136,10 +1136,37 @@ function renderMyReports(data, monthStr) {
     const tbody = document.getElementById('myReportsTableBody');
     tbody.innerHTML = '';
 
-    // Create a set of dates where user was present for quick lookup (exclude overtime)
-    const presentDates = new Set(presentRecords.filter(r => r.status !== 'overtime').map(r => r.checkIn ? r.checkIn.slice(0, 10) : ''));
-    const lateDates = new Set(presentRecords.filter(r => r.status === 'late').map(r => r.checkIn ? r.checkIn.slice(0, 10) : ''));
-    const overtimeDates = new Set(presentRecords.filter(r => r.status === 'overtime').map(r => r.checkIn ? r.checkIn.slice(0, 10) : ''));
+    // Helper function to check if a date is an overtime day (weekend or holiday)
+    function isOvertimeDay(dateStr) {
+        const d = new Date(dateStr);
+        const dayOfWeek = d.getDay();
+        const isWeekend = weekendDays.includes(dayOfWeek);
+        const isHoliday = holidayDates.has(dateStr);
+        return isWeekend || isHoliday;
+    }
+
+    // Create sets for different day types
+    const presentDates = new Set();
+    const lateDates = new Set();
+    const overtimeDates = new Set();
+
+    presentRecords.forEach(r => {
+        const dateKey = r.checkIn ? r.checkIn.slice(0, 10) : '';
+        if (!dateKey) return;
+
+        // Check if this is an overtime day (weekend/holiday work)
+        const isOvertime = r.status === 'overtime' || (isOvertimeDay(dateKey) && r.status !== 'late' && r.status !== 'present');
+
+        if (r.status === 'late') {
+            lateDates.add(dateKey);
+        }
+
+        if (isOvertime) {
+            overtimeDates.add(dateKey);
+        } else {
+            presentDates.add(dateKey);
+        }
+    });
 
     let totalLates = lateDates.size; // Only count one late per unique date
     let totalOvertime = overtimeDates.size; // Only count one overtime per unique date
