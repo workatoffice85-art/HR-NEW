@@ -465,7 +465,7 @@ if (action === "login") {
             console.log("addAttendance called with data:", JSON.stringify(data));
             // 0. Double Check-In Prevention
             const { data: openAtt } = await supabase.from('attendance')
-                .select('id, checkIn')
+                .select('id, checkIn, status')
                 .eq('employeeId', data.employeeId)
                 .is('checkOut', null)
                 .neq('status', 'no_checkout')
@@ -722,6 +722,24 @@ if (action === "login") {
             // Use SERVER-SIDE Cairo time as authoritative checkout timestamp
             const serverCheckoutTime = getCairoISOString(new Date());
             const checkOut = new Date(serverCheckoutTime);
+
+            // Check if trying to check out on a different day than check-in
+            const checkInDate = checkIn.toDateString();
+            const checkOutDate = checkOut.toDateString();
+            
+            if (checkInDate !== checkOutDate) {
+                // Cannot check out on a different day - mark as no_checkout
+                const eod = new Date(existing[0].checkIn);
+                eod.setHours(23, 59, 59, 999);
+                const preservedStatus = existing[0].status === 'overtime' ? 'overtime' : 'no_checkout';
+                
+                await supabase.from('attendance')
+                    .update({ checkOut: eod.toISOString(), totalHours: 0, status: preservedStatus })
+                    .eq('id', existing[0].id);
+                
+                throw new Error("لا يمكن تسجيل الانصراف في يوم مختلف عن يوم الحضور. تم تحديث السجل كـ 'لم يتم الانصراف'. يرجى تسجيل الحضور مرة أخرى لبدء يوم جديد.");
+            }
+
             let totalHours = 0;
             if (!isNaN(checkIn) && !isNaN(checkOut)) {
                 totalHours = parseFloat(((checkOut - checkIn) / 36e5).toFixed(2));
