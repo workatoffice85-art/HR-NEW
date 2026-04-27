@@ -454,12 +454,24 @@ async function generateEmployeeDetailedReport() {
     sortedRecords.forEach(record => {
         const dateKey = record.checkIn ? record.checkIn.slice(0, 10) : null;
         if (dateKey) {
-            // Count as present if not overtime (including no_checkout - employee was present but forgot to check out)
-            if (record.status !== 'overtime') {
+            // Determine if this is an overtime day (weekend/holiday work)
+            const recordDateObj = new Date(dateKey);
+            const dayOfWeek = recordDateObj.getDay();
+            const weekendDays = getWeekendDaysFromSettings();
+            const isWeekend = weekendDays.includes(dayOfWeek);
+            const isOfficialHoliday = allOfficialHolidays.some(h => {
+                if (!h.holidayDate) return false;
+                const holidayDate = new Date(h.holidayDate);
+                return holidayDate.toISOString().split('T')[0] === dateKey;
+            });
+            const isOvertimeDay = record.status === 'overtime' || ((isWeekend || isOfficialHoliday) && record.status !== 'late' && record.status !== 'present');
+
+            // Count as present if not overtime
+            if (!isOvertimeDay) {
                 presentDates.add(dateKey);
             }
             if (record.status === 'late') lateDates.add(dateKey);
-            if (record.status === 'overtime') overtimeDates.add(dateKey);
+            if (isOvertimeDay) overtimeDates.add(dateKey);
             if (record.status === 'no_checkout') noCheckoutDates.add(dateKey);
         }
     });
@@ -620,8 +632,21 @@ function generateReport() {
         
         const empStats = reportAcc[empId];
 
+        // Determine if this is an overtime day (weekend/holiday work)
+        // A day is overtime if: status is 'overtime', OR it's a weekend/holiday with any attendance
+        const recordDateObj = new Date(recordDate);
+        const dayOfWeek = recordDateObj.getDay();
+        const weekendDays = getWeekendDaysFromSettings();
+        const isWeekend = weekendDays.includes(dayOfWeek);
+        const isOfficialHoliday = allOfficialHolidays.some(h => {
+            if (!h.holidayDate) return false;
+            const holidayDate = new Date(h.holidayDate);
+            return holidayDate.toISOString().split('T')[0] === recordDate;
+        });
+        const isOvertimeDay = record.status === 'overtime' || ((isWeekend || isOfficialHoliday) && record.status !== 'late' && record.status !== 'present');
+
         // Only count as regular attendance if not overtime
-        if (record.status !== 'overtime') {
+        if (!isOvertimeDay) {
             if (!empStats.uniqueDates.has(recordDate)) {
                 empStats.uniqueDates.add(recordDate);
                 empStats.daysPresent += 1;
@@ -634,7 +659,7 @@ function generateReport() {
                 empStats.lates += 1;
             }
         }
-        if(record.status === 'overtime') {
+        if(isOvertimeDay) {
             if (!empStats.overtimeDates.has(recordDate)) {
                 empStats.overtimeDates.add(recordDate);
                 empStats.overtime += 1;
