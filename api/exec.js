@@ -498,14 +498,15 @@ if (action === "login") {
             }
 
             // 0.5 Duplicate Timestamp Prevention (Race Condition Protection)
-            // Check if there's any record with the same checkIn time within last 30 seconds
+            // Check if there's any record within ±60 seconds window to catch concurrent requests
             const clientCheckIn = new Date(data.checkIn);
-            const thirtySecondsAgo = new Date(clientCheckIn.getTime() - 30000);
+            const sixtySecondsAgo = new Date(clientCheckIn.getTime() - 60000);
+            const sixtySecondsAhead = new Date(clientCheckIn.getTime() + 60000);
             const { data: recentDups } = await supabase.from('attendance')
                 .select('id, checkIn')
                 .eq('employeeId', data.employeeId)
-                .gte('checkIn', thirtySecondsAgo.toISOString())
-                .lte('checkIn', clientCheckIn.toISOString())
+                .gte('checkIn', sixtySecondsAgo.toISOString())
+                .lte('checkIn', sixtySecondsAhead.toISOString())
                 .order('checkIn', { ascending: false })
                 .limit(1);
 
@@ -514,6 +515,24 @@ if (action === "login") {
                     success: false,
                     duplicateEntry: true,
                     message: "تم تسجيل الحضور بالفعل في نفس اللحظة. لا يمكن تكرار العملية."
+                });
+            }
+
+            // 0.6 Additional protection: Check if there's ANY record in the last 2 minutes
+            // regardless of checkout status - prevents duplicate check-ins entirely
+            const twoMinutesAgo = new Date(clientCheckIn.getTime() - 120000);
+            const { data: anyRecentRecord } = await supabase.from('attendance')
+                .select('id, checkIn, checkOut')
+                .eq('employeeId', data.employeeId)
+                .gte('checkIn', twoMinutesAgo.toISOString())
+                .order('checkIn', { ascending: false })
+                .limit(1);
+
+            if (anyRecentRecord && anyRecentRecord.length > 0) {
+                return res.status(200).json({
+                    success: false,
+                    duplicateEntry: true,
+                    message: "تم تسجيل حضور في الدقيقتين الأخيرتين. يرجى الانتظار قبل إعادة المحاولة."
                 });
             }
 

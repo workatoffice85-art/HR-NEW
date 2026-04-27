@@ -11,6 +11,7 @@ let timerInterval = null;
 let isFaceVerified = false;
 let lastDetectedSite = null;
 let isDetecting = false;
+let isCheckInProgress = false; // Prevent duplicate check-in clicks
 let faceDetectionInterval = null;
 let consecutiveSuccessFrames = 0;
 let geolocationWatchId = null;
@@ -696,9 +697,11 @@ function vibrateError() {
 }
 
 async function handleCheckIn() {
+    if(isCheckInProgress) return; // Prevent duplicate clicks
     if(!currentFaceDescriptor) return alert('بصمة الوجه غير ملتقطة الحين');
     if(!lastLocation) return alert('يجب تفعيل الـ GPS');
 
+    isCheckInProgress = true;
     document.getElementById('loader').classList.remove('hidden');
     const payload = {
         action: 'addAttendance', employeeId: currentUser.id, employeeName: currentUser.name,
@@ -736,8 +739,10 @@ async function handleCheckIn() {
         alert('حدث خطأ في الاتصال: ' + (e.message || 'تفاصيل في الـ console')); 
         playErrorSound(); 
         vibrateError(); 
+    } finally {
+        isCheckInProgress = false;
+        document.getElementById('loader').classList.add('hidden');
     }
-    document.getElementById('loader').classList.add('hidden');
 }
 
 async function forceCloseAndRecheckIn(openSessionId, originalPayload) {
