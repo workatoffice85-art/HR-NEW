@@ -86,11 +86,8 @@ Set `ARCHIVE_CRON_SECRET` in environment variables for security.
    ```
    SUPABASE_URL=your-project-url
    SUPABASE_SERVICE_ROLE_KEY=your-service-key
-   SUPABASE_ANON_KEY=your-anon-key
    ARCHIVE_CRON_SECRET=random-secret-string
    ```
-
-   > **Note:** `SUPABASE_ANON_KEY` is required for Realtime features in the HR Dashboard. Get it from Project Settings → API in Supabase.
 
 3. **Verify Archive Function:**
    The `get_database_size()` function is included in the schema.
@@ -102,22 +99,6 @@ Set `ARCHIVE_CRON_SECRET` in environment variables for security.
 3. **Keep old Google Sheets** as they serve as permanent backup
 4. **Use caching** - don't set cache TTL too low
 5. **Avoid storing large files** in the database (use storage buckets instead)
-
-### ⚡ Realtime Features
-
-The HR Dashboard now includes **live updates** powered by Supabase Realtime:
-
-| Feature | Description |
-|---------|-------------|
-| 🟢 **Live Attendance** | See check-in/out in real-time with notifications |
-| 📍 **Site Requests** | Instant notifications when employees request new sites |
-| 💰 **Allowance Requests** | Real-time updates on allowance request submissions |
-| 👤 **Employee Changes** | Live sync when employees are added or updated |
-
-**Requirements:**
-- `SUPABASE_ANON_KEY` must be set in environment variables
-- Browser must support WebSocket connections
-- Works best on desktop browsers (Chrome, Firefox, Edge)
 
 ### 🔄 Data Retention Policy
 
