@@ -92,7 +92,12 @@
             <div id="tab-attendance" class="tab-content">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                     <h2>سجلات العمليات الشاملة</h2>
-                    <div style="display:flex; gap:10px; align-items:center;">
+                    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                        <div id="attendanceStats" style="display:flex; gap:15px; align-items:center; background:rgba(30,41,59,0.8); padding:8px 15px; border-radius:8px; border:1px solid var(--card-border);">
+                            <span style="color:var(--text-muted);">الحاضرين: <b id="statPresent" style="color:var(--secondary);">0</b></span>
+                            <span style="color:var(--card-border);">|</span>
+                            <span style="color:var(--text-muted);">الغائبين: <b id="statAbsent" style="color:var(--danger);">0</b></span>
+                        </div>
                         <label>تاريخ اليوم:</label>
                         <input type="date" id="attendanceDateFilter" onchange="renderAttendanceTable(allAttendanceData)">
                         <button class="btn-primary" style="width:auto;" onclick="refreshData()">تحديث مجمع 🔄</button>

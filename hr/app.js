@@ -244,6 +244,23 @@ function renderAttendanceTable(data) {
         });
     }
 
+    // Calculate attendance stats
+    const presentEmployeeIds = new Set();
+    filtered.forEach(record => {
+        if (record.employeeId) {
+            presentEmployeeIds.add(String(record.employeeId));
+        }
+    });
+    const presentCount = presentEmployeeIds.size;
+    const totalEmployees = allEmployees.length;
+    const absentCount = Math.max(0, totalEmployees - presentCount);
+
+    // Update stats display
+    const statPresent = document.getElementById('statPresent');
+    const statAbsent = document.getElementById('statAbsent');
+    if (statPresent) statPresent.innerText = presentCount;
+    if (statAbsent) statAbsent.innerText = absentCount;
+
     // Reverse to show newest first
     [...filtered].reverse().forEach(record => {
         // Display time as-is (server sends Cairo time with offset)
