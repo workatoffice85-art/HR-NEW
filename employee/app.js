@@ -573,16 +573,23 @@ async function getLocation() {
 
     setStatus('جاري تحديد الموقع...', 'text-muted');
 
-    // Try getting cached position immediately (fastest)
+    // Try high-accuracy fresh position first (most accurate)
     tryGetPosition(
-        { enableHighAccuracy: false, timeout: 2000, maximumAge: 300000 }, // Accept 5 min old
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }, // Fresh, high accuracy
         (position) => onPositionSuccess(position),
-        () => {
-            // Fallback: try fresh low-accuracy position
+        (error) => {
+            // Fallback: try low-accuracy fresh position
             tryGetPosition(
-                { enableHighAccuracy: false, timeout: 5000, maximumAge: 0 },
+                { enableHighAccuracy: false, timeout: 8000, maximumAge: 0 },
                 (position) => onPositionSuccess(position),
-                (error) => handleGeoError(error)
+                (error2) => {
+                    // Last resort: accept cached position up to 5 min old
+                    tryGetPosition(
+                        { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 },
+                        (position) => onPositionSuccess(position),
+                        (error3) => handleGeoError(error3)
+                    );
+                }
             );
         }
     );
