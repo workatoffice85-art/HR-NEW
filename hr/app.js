@@ -244,15 +244,18 @@ function renderAttendanceTable(data) {
         });
     }
 
-    // Calculate attendance stats
+    // Calculate attendance stats (excluding HR employees)
+    const employeeOnlyList = allEmployees.filter(e => e.role !== 'hr');
+    const employeeOnlyIds = new Set(employeeOnlyList.map(e => String(e.id)));
+    
     const presentEmployeeIds = new Set();
     filtered.forEach(record => {
-        if (record.employeeId) {
+        if (record.employeeId && employeeOnlyIds.has(String(record.employeeId))) {
             presentEmployeeIds.add(String(record.employeeId));
         }
     });
     const presentCount = presentEmployeeIds.size;
-    const totalEmployees = allEmployees.length;
+    const totalEmployees = employeeOnlyList.length;
     const absentCount = Math.max(0, totalEmployees - presentCount);
 
     // Update stats display
