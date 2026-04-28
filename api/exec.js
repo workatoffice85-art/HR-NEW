@@ -446,6 +446,16 @@ if (action === "login") {
             return currentPrice || 0;
         }
 
+        // --- SUPABASE CONFIG FOR REALTIME (GET) ---
+        if (action === "getSupabaseConfig") {
+            // Return anon key for client-side realtime (safe - no service role)
+            return res.status(200).json({
+                success: true,
+                url: SUPABASE_URL,
+                anonKey: process.env.SUPABASE_ANON_KEY || ''
+            });
+        }
+
         // --- DASHBOARD DATA (GET) ---
         if (action === "getDashboardData") {
             const [empRes, siteRes, attRes, reqRes, setRes, allRes] = await Promise.all([

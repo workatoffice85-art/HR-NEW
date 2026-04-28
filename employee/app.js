@@ -1,5 +1,117 @@
 const API_URL = '/api/exec';
 // const OLD_BACKUP_API = 'https://script.google.com/macros/s/AKfycbwNhaRKDP-7M4dXSQend8RbYPkXRgs5nzN0-BmNzxEO8IkBN9lt6KDtJCdOqpovhJEY1Q/exec';
+
+// ========== PERFORMANCE OPTIMIZATIONS ==========
+// Cache system for reducing API calls
+const DataCache = {
+    sites: { data: null, timestamp: 0, ttl: 5 * 60 * 1000 }, // 5 minutes
+    attendance: { data: null, timestamp: 0, ttl: 2 * 60 * 1000 }, // 2 minutes
+    settings: { data: null, timestamp: 0, ttl: 10 * 60 * 1000 }, // 10 minutes
+    holidays: { data: null, timestamp: 0, ttl: 30 * 60 * 1000 }, // 30 minutes
+
+    get(key) {
+        const item = this[key];
+        if (!item) return null;
+        if (Date.now() - item.timestamp > item.ttl) return null;
+        return item.data;
+    },
+
+    set(key, data) {
+        if (this[key]) {
+            this[key].data = data;
+            this[key].timestamp = Date.now();
+        }
+    },
+
+    clear() {
+        ['sites', 'attendance', 'settings', 'holidays'].forEach(key => {
+            this[key].data = null;
+            this[key].timestamp = 0;
+        });
+    },
+
+    clearKey(key) {
+        if (this[key]) {
+            this[key].data = null;
+            this[key].timestamp = 0;
+        }
+    }
+};
+
+// Debounce utility for expensive operations
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+// Throttle utility for high-frequency operations (like location updates)
+function throttle(func, limit) {
+    let inThrottle;
+    return function(...args) {
+        if (!inThrottle) {
+            func.apply(this, args);
+            inThrottle = true;
+            setTimeout(() => inThrottle = false, limit);
+        }
+    };
+}
+
+// Optimistic UI update helper
+function optimisticUpdate(elementId, newContent, duration = 3000) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    const original = el.innerHTML;
+    el.innerHTML = newContent;
+    return () => { el.innerHTML = original; };
+}
+
+// Fetch with timeout for faster failure on slow connections
+function fetchWithTimeout(url, options = {}, timeout = 10000) {
+    return Promise.race([
+        fetch(url, options),
+        new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Request timeout')), timeout)
+        )
+    ]);
+}
+
+// Lazy loading for AI models - load only what's needed
+let modelsLoaded = false;
+async function loadModelsLazy() {
+    if (modelsLoaded) return;
+    
+    // Load models sequentially to avoid overwhelming slow devices
+    try {
+        await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
+        await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+        await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+        modelsLoaded = true;
+    } catch (e) {
+        console.error('Model loading failed:', e);
+        throw e;
+    }
+}
+
+// Throttled location update to save battery and reduce CPU usage
+const throttledLocationUpdate = throttle((position) => {
+    lastLocation = {
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+        timestamp: position.timestamp
+    };
+    // Update UI less frequently
+    updateLocationUI();
+}, 5000); // Max once every 5 seconds
+
+// ========== APP STATE ==========
 let currentUser = JSON.parse(localStorage.getItem('empSession'));
 let currentSite = null;
 let lastLocation = null;
@@ -290,6 +402,7 @@ function showError(elId, msg) {
 
 // -------- DASHBOARD SYSTEM --------------
 function logout() {
+    DataCache.clear();
     localStorage.removeItem('empSession');
     location.reload();
 }
@@ -297,54 +410,83 @@ function logout() {
 async function initSystem() {
     setStatus('🔄 جاري بدء النظام (النسخة المحدثة)...', 'text-muted');
 
-    // Step 1: Load Data & AI Models in Parallel
+    // Step 1: Check cache first
+    const cachedSites = DataCache.get('sites');
+    const cachedHolidays = DataCache.get('holidays');
+    const cachedSettings = DataCache.get('settings');
+
+    let sitesLoaded = false;
+    let dataLoaded = false;
+
+    // Use cached data immediately if available
+    if (cachedSites && cachedHolidays) {
+        sitesData = cachedSites;
+        allOfficialHolidays = cachedHolidays;
+        if (cachedSettings) appSettings = cachedSettings;
+        sitesLoaded = true;
+        setStatus(`📡 استخدام بيانات مخزنة (${sitesData.length} موقع). جاري التحديث...`, 'text-muted');
+    }
+
+    // Step 2: Load Data & AI Models in Parallel (with timeout for faster response)
     try {
-        const dataPromise = fetch(`${API_URL}?action=getPortalInitialData&employeeId=${encodeURIComponent(currentUser.id)}`).then(r => r.json());
-        const holidaysPromise = fetch(`${API_URL}?action=getOfficialHolidays`).then(r => r.json());
-        const settingsPromise = fetch(`${API_URL}?action=getSettings`).then(r => r.json());
-        const modelPromise = Promise.all([
-            faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
-            faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-            faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
-        ]);
+        // Quick data fetch with shorter timeout for cached scenarios
+        const fetchTimeout = sitesLoaded ? 8000 : 15000;
+        
+        const dataPromise = fetchWithTimeout(
+            `${API_URL}?action=getPortalInitialData&employeeId=${encodeURIComponent(currentUser.id)}`,
+            {},
+            fetchTimeout
+        ).then(r => r.json()).catch(e => ({ success: false, error: e.message }));
 
-        const [dataResult, holidaysResult, _] = await Promise.all([dataPromise, holidaysPromise, modelPromise]);
+        const holidaysPromise = cachedHolidays 
+            ? Promise.resolve({ success: true, data: cachedHolidays })
+            : fetchWithTimeout(`${API_URL}?action=getOfficialHolidays`, {}, 5000).then(r => r.json()).catch(() => ({ success: false }));
 
+        const settingsPromise = cachedSettings
+            ? Promise.resolve({ success: true, data: cachedSettings })
+            : fetchWithTimeout(`${API_URL}?action=getSettings`, {}, 5000).then(r => r.json()).catch(() => ({ success: false }));
+
+        // Load models with lazy loading strategy
+        const modelPromise = loadModelsLazy();
+
+        const [dataResult, holidaysResult, settingsResult] = await Promise.all([dataPromise, holidaysPromise, settingsPromise]);
+
+        // Update cache with fresh data
         if (dataResult.success) {
             sitesData = dataResult.sites || [];
             allAttendanceData = dataResult.attendance || [];
+            DataCache.set('sites', sitesData);
+            DataCache.set('attendance', allAttendanceData);
+            dataLoaded = true;
+        }
 
-            // Load official holidays
-            if (holidaysResult.success) {
-                allOfficialHolidays = holidaysResult.data || [];
-            }
+        if (holidaysResult.success && holidaysResult.data) {
+            allOfficialHolidays = holidaysResult.data;
+            DataCache.set('holidays', allOfficialHolidays);
+        }
 
-            // Load settings (weekend days, etc.)
-            try {
-                const settingsResult = await settingsPromise;
-                console.log('Settings loaded:', settingsResult);
-                if (settingsResult.success) {
-                    appSettings = settingsResult.data || {};
-                    console.log('appSettings set to:', appSettings);
-                } else {
-                    console.error('Settings load failed:', settingsResult);
-                }
-            } catch (e) {
-                console.error('Settings fetch error:', e);
-            }
+        if (settingsResult.success && settingsResult.data) {
+            appSettings = settingsResult.data;
+            DataCache.set('settings', appSettings);
+        }
 
-            // Process initial status
+        // Process initial status if we have data
+        if (dataLoaded || sitesLoaded) {
             processAttendanceStatus(allAttendanceData);
-
             setStatus(`📡 تم تحميل ${sitesData.length} موقع. النظام جاهز...`, 'text-muted');
         } else {
             console.error("Data load failed", dataResult);
             setStatus('⚠️ فشل في تحميل البيانات من السيرفر', 'error-text');
         }
+
+        // Wait for models to load in background
+        await modelPromise;
     } catch(e) {
         console.error("Initial load error", e);
-        setStatus('❌ خطأ في الاتصال أو تحميل ملفات الذكاء الاصطناعي', 'error-text');
-        return;
+        if (!sitesLoaded) {
+            setStatus('❌ خطأ في الاتصال أو تحميل ملفات الذكاء الاصطناعي', 'error-text');
+            return;
+        }
     }
 
     // Step 3: Setup Face Matcher
@@ -600,22 +742,40 @@ function onPositionSuccess(position) {
 }
 
 function startWatchingPosition() {
+    // Use throttled updates to save battery and CPU on old devices
     geolocationWatchId = navigator.geolocation.watchPosition(
         (position) => {
-            lastLocation = { lat: position.coords.latitude, lng: position.coords.longitude };
-            verifyLocation();
+            // Update location data immediately but throttle UI/verification
+            lastLocation = { 
+                lat: position.coords.latitude, 
+                lng: position.coords.longitude,
+                accuracy: position.coords.accuracy,
+                timestamp: position.timestamp
+            };
+            // Throttle the expensive operations
+            throttledLocationUpdate(position);
         },
         (error) => {
             // Silent fail on watch errors - we already have initial position
             console.warn('Watch position error:', error);
         },
         {
-            enableHighAccuracy: false,
+            enableHighAccuracy: false, // Save battery
             timeout: 15000,
-            maximumAge: 60000
+            maximumAge: 30000 // Accept 30 sec old positions (reduces GPS wake-ups)
         }
     );
 }
+
+function updateLocationUI() {
+    // Only verify location every 5 seconds max
+    verifyLocation();
+}
+
+// Debounced verifyLocation for expensive calculations
+const debouncedVerifyLocation = debounce(() => {
+    verifyLocation();
+}, 2000);
 
 function handleGeoError(error) {
     let msg = 'خطأ في تحديد الموقع';
@@ -713,6 +873,8 @@ async function handleCheckIn() {
         const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'text/plain' } });
         const result = await res.json();
         if(result.success) {
+            // Clear cache to get fresh data on next load
+            DataCache.clearKey('attendance');
             alert(result.message);
             playSuccessSound(); // Play success sound
             vibrateSuccess(); // Vibrate for success
@@ -777,6 +939,8 @@ async function forceCloseAndRecheckIn(openSessionId, originalPayload) {
         });
         const retryResult = await retryRes.json();
         if (retryResult.success) {
+            // Clear cache to get fresh data on next load
+            DataCache.clearKey('attendance');
             alert('✅ تم إغلاق الجلسة القديمة وتسجيل الحضور بنجاح!');
             playSuccessSound(); // Play success sound
             setAppState('in', originalPayload.checkIn);
@@ -806,6 +970,8 @@ async function handleCheckOut() {
         const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'text/plain' } });
         const result = await res.json();
         if(result.success) {
+            // Clear cache to get fresh data on next load
+            DataCache.clearKey('attendance');
             alert(result.message);
             playSuccessSound(); // Play success sound
             setAppState('out');
