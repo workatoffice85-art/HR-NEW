@@ -1319,6 +1319,48 @@ if (action === "updateEmployee") {
             return res.status(200).json({ success: true, message: "تم تحديث الإعدادات بنجاح" });
         }
 
+        // --- DATABASE MONITORING ---
+        if (action === "getDatabaseStats") {
+            // Get table row counts
+            const [
+                { count: attendanceCount, error: attErr },
+                { count: employeesCount, error: empErr },
+                { count: sitesCount, error: siteErr },
+                { count: siteRequestsCount, error: reqErr },
+                { count: allowanceRequestsCount, error: allErr },
+                { count: holidaysCount, error: holErr }
+            ] = await Promise.all([
+                supabase.from('attendance').select('*', { count: 'exact', head: true }),
+                supabase.from('employees').select('*', { count: 'exact', head: true }),
+                supabase.from('sites').select('*', { count: 'exact', head: true }),
+                supabase.from('siteRequests').select('*', { count: 'exact', head: true }),
+                supabase.from('allowanceRequests').select('*', { count: 'exact', head: true }),
+                supabase.from('official_holidays').select('*', { count: 'exact', head: true })
+            ]);
+
+            // Get database size using pg_size_pretty
+            const { data: sizeData, error: sizeError } = await supabase
+                .rpc('get_database_size');
+
+            const stats = {
+                tables: {
+                    attendance: attendanceCount || 0,
+                    employees: employeesCount || 0,
+                    sites: sitesCount || 0,
+                    siteRequests: siteRequestsCount || 0,
+                    allowanceRequests: allowanceRequestsCount || 0,
+                    officialHolidays: holidaysCount || 0
+                },
+                databaseSize: sizeData ? Math.round(sizeData / 1024 / 1024 * 100) / 100 : null,
+                freeTierLimit: 500,
+                usagePercent: sizeData ? Math.round((sizeData / (500 * 1024 * 1024)) * 100) : null,
+                status: sizeData && sizeData < (450 * 1024 * 1024) ? 'healthy' : 
+                        sizeData && sizeData < (480 * 1024 * 1024) ? 'warning' : 'critical'
+            };
+
+            return res.status(200).json({ success: true, data: stats });
+        }
+
         // --- UTILS ---
         if (action === "resolveMapLink") {
             const link = data.link;

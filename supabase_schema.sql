@@ -113,3 +113,48 @@ CREATE TABLE IF NOT EXISTS official_holidays (
     "holidayName" TEXT NOT NULL,
     "createdAt" TEXT DEFAULT NOW()
 );
+
+-- ============================================
+-- PERFORMANCE INDEXES
+-- ============================================
+-- These indexes speed up common queries and reduce database load
+
+-- Attendance indexes (most queried table)
+CREATE INDEX IF NOT EXISTS idx_attendance_employeeId ON attendance("employeeId");
+CREATE INDEX IF NOT EXISTS idx_attendance_checkIn ON attendance("checkIn");
+CREATE INDEX IF NOT EXISTS idx_attendance_employee_checkIn ON attendance("employeeId", "checkIn");
+
+-- Employee indexes
+CREATE INDEX IF NOT EXISTS idx_employees_email ON employees(email);
+CREATE INDEX IF NOT EXISTS idx_employees_phone ON employees(phone);
+
+-- Site requests indexes
+CREATE INDEX IF NOT EXISTS idx_siteRequests_employeeId ON "siteRequests"("employeeId");
+CREATE INDEX IF NOT EXISTS idx_siteRequests_status ON "siteRequests"(status);
+CREATE INDEX IF NOT EXISTS idx_siteRequests_timestamp ON "siteRequests"(timestamp);
+
+-- Allowance requests indexes
+CREATE INDEX IF NOT EXISTS idx_allowanceRequests_employeeId ON "allowanceRequests"("employeeId");
+CREATE INDEX IF NOT EXISTS idx_allowanceRequests_status ON "allowanceRequests"(status);
+CREATE INDEX IF NOT EXISTS idx_allowanceRequests_createdAt ON "allowanceRequests"("createdAt");
+
+-- Site allowances indexes
+CREATE INDEX IF NOT EXISTS idx_siteAllowances_employeeId ON "siteAllowances"("employeeId");
+CREATE INDEX IF NOT EXISTS idx_siteAllowances_siteId ON "siteAllowances"("siteId");
+
+-- ============================================
+-- DATABASE SIZE MONITORING FUNCTION
+-- ============================================
+-- This function returns the total database size in bytes
+
+CREATE OR REPLACE FUNCTION get_database_size()
+RETURNS BIGINT AS $$
+BEGIN
+    RETURN (SELECT pg_database_size(current_database()));
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Grant execute permission to authenticated users
+GRANT EXECUTE ON FUNCTION get_database_size() TO authenticated;
+GRANT EXECUTE ON FUNCTION get_database_size() TO anon;
+GRANT EXECUTE ON FUNCTION get_database_size() TO service_role;

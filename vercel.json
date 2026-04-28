@@ -1,6 +1,7 @@
 {
   "version": 2,
   "rewrites": [
+    { "source": "/api/archive", "destination": "/api/archive.js" },
     { "source": "/api/sync", "destination": "/api/sync.js" },
     { "source": "/api/(.*)", "destination": "/api/exec.js" }
   ],
@@ -8,6 +9,10 @@
     {
       "path": "/api/sync",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/archive",
+      "schedule": "0 3 * * *"
     }
   ]
 }
