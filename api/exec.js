@@ -6,10 +6,23 @@ const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwNhaRKDP-7M4
 
 // Rate limiting storage (in production, use Redis or similar)
 const rateLimitStore = new Map();
-const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
-const RATE_LIMIT_MAX_REQUESTS = 30; // max requests per window
+// Raised to match Supabase free tier: ~100 req/sec per client
+const RATE_LIMIT_WINDOW = 1000; // 1 second window
+const RATE_LIMIT_MAX_REQUESTS = 100; // max 100 requests per second per IP
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+// Simple cache for frequently accessed data
+const cacheStore = new Map();
+const CACHE_TTL = {
+    settings: 60000,      // 1 minute for settings
+    employees: 30000,     // 30 seconds for employees
+    sites: 30000,         // 30 seconds for sites
+    holidays: 300000,     // 5 minutes for holidays (rarely change)
+    default: 10000        // 10 seconds default
+};
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { persistSession: false }
+});
 
 // Rate limiting middleware
 function rateLimiter(ip) {
@@ -39,6 +52,30 @@ function rateLimiter(ip) {
     record.count += 1;
     rateLimitStore.set(ip, record);
     return true;
+}
+
+// Cache helper functions
+function getCached(key) {
+    const cached = cacheStore.get(key);
+    if (!cached) return null;
+    if (Date.now() > cached.expiry) {
+        cacheStore.delete(key);
+        return null;
+    }
+    return cached.data;
+}
+
+function setCached(key, data, ttlMs) {
+    cacheStore.set(key, {
+        data: data,
+        expiry: Date.now() + (ttlMs || CACHE_TTL.default)
+    });
+}
+
+function invalidateCache(pattern) {
+    for (const key of cacheStore.keys()) {
+        if (key.includes(pattern)) cacheStore.delete(key);
+    }
 }
 
 // Input validation functions
@@ -768,6 +805,10 @@ if (action === "login") {
 
         // --- EMPLOYEE MGMT ---
         if (action === "getEmployees") {
+            const cacheKey = 'employees';
+            const cached = getCached(cacheKey);
+            if (cached) return res.status(200).json({ success: true, data: cached });
+
             const { data: emps, error } = await supabase.from('employees').select('*');
             if (error) throw error;
 
@@ -778,6 +819,7 @@ if (action === "login") {
                 siteAllowances: (alls || []).filter(a => String(a.employeeId) === String(emp.id))
             }));
 
+            setCached(cacheKey, employees, CACHE_TTL.employees);
             return res.status(200).json({ success: true, data: employees || [] });
         }
 
@@ -817,6 +859,7 @@ if (action === "saveEmployee") {
                  if (errAll) console.error("Allowances Save Failed:", errAll);
              }
              
+             invalidateCache('employees');
              return res.status(200).json({ success: true, message: "تمت إضافة الموظف بنجاح" });
          }
 
@@ -859,19 +902,26 @@ if (action === "updateEmployee") {
                  await supabase.from('siteAllowances').insert(allowanceRows);
              }
              
+             invalidateCache('employees');
              return res.status(200).json({ success: true, message: "تم تحديث بيانات الموظف بنجاح" });
          }
 
         if (action === "deleteEmployee") {
             const { error } = await supabase.from('employees').delete().eq('id', data.id);
             if (error) throw error;
+            invalidateCache('employees');
             return res.status(200).json({ success: true, message: "تم حذف الموظف بنجاح" });
         }
 
         // --- SITE MGMT ---
         if (action === "getSites") {
+            const cacheKey = 'sites';
+            const cached = getCached(cacheKey);
+            if (cached) return res.status(200).json({ success: true, data: cached });
+
             const { data: sites, error } = await supabase.from('sites').select('*').eq('isTemporary', false);
             if (error) throw error;
+            setCached(cacheKey, sites, CACHE_TTL.sites);
             return res.status(200).json({ success: true, data: sites || [] });
         }
 
@@ -887,6 +937,7 @@ if (action === "updateEmployee") {
             };
             const { error } = await supabase.from('sites').insert([payload]);
             if (error) throw error;
+            invalidateCache('sites');
             return res.status(200).json({ success: true, message: "تمت إضافة الموقع بنجاح" });
         }
 
@@ -900,12 +951,14 @@ if (action === "updateEmployee") {
             };
             const { error } = await supabase.from('sites').update(payload).eq('id', data.id);
             if (error) throw error;
+            invalidateCache('sites');
             return res.status(200).json({ success: true, message: "تم تحديث بيانات الموقع بنجاح" });
         }
 
         if (action === "deleteSite") {
             const { error } = await supabase.from('sites').delete().eq('id', data.id);
             if (error) throw error;
+            invalidateCache('sites');
             return res.status(200).json({ success: true, message: "تم حذف الموقع بنجاح" });
         }
 
@@ -1244,10 +1297,15 @@ if (action === "updateEmployee") {
 
         // --- SETTINGS ---
         if (action === "getSettings") {
+            const cacheKey = 'settings';
+            const cached = getCached(cacheKey);
+            if (cached) return res.status(200).json({ success: true, data: cached });
+
             const { data: sets, error } = await supabase.from('settings').select('*');
             if (error) throw error;
             let settings = {};
             if (sets) sets.forEach(s => settings[s.key] = s.value);
+            setCached(cacheKey, settings, CACHE_TTL.settings);
             return res.status(200).json({ success: true, data: settings });
         }
 
@@ -1257,6 +1315,7 @@ if (action === "updateEmployee") {
                 return supabase.from('settings').upsert({ key, value }, { onConflict: 'key' });
             });
             await Promise.all(promises);
+            invalidateCache('settings');
             return res.status(200).json({ success: true, message: "تم تحديث الإعدادات بنجاح" });
         }
 
