@@ -34,49 +34,57 @@ class BiometricManager {
         const hasHardwareBiometric = await this._checkWebAuthnAvailability();
         
         if (hasHardwareBiometric) {
-            // Device has hardware biometric sensor
-            // Priority depends on device type
+            // Detect what specific biometrics are available
+            const bioTypes = await this._detectAvailableBiometricTypes();
+            console.log('Detected biometric types:', bioTypes);
             
             if (isIOS) {
-                // iPhone/iPad: Face ID is more common and preferred
-                this.availableBiometrics.push({
-                    type: 'face_hardware',
-                    name: 'Face ID',
-                    icon: '📱',
-                    priority: 1, // First priority for iOS
-                    isHardware: true,
-                    deviceType: 'ios'
-                });
-                
-                this.availableBiometrics.push({
-                    type: 'fingerprint',
-                    name: 'Touch ID',
-                    icon: '👆',
-                    priority: 2, // Second for iOS (older devices)
-                    isHardware: true,
-                    deviceType: 'ios'
-                });
+                // iPhone/iPad: Show ONLY what's actually available
+                if (bioTypes.face) {
+                    this.availableBiometrics.push({
+                        type: 'face_hardware',
+                        name: 'Face ID',
+                        icon: '📱',
+                        priority: 1,
+                        isHardware: true,
+                        deviceType: 'ios'
+                    });
+                }
+                if (bioTypes.fingerprint) {
+                    this.availableBiometrics.push({
+                        type: 'fingerprint',
+                        name: 'Touch ID',
+                        icon: '👆',
+                        priority: 2,
+                        isHardware: true,
+                        deviceType: 'ios'
+                    });
+                }
             } else if (isAndroid) {
-                // Android: Fingerprint is more common
-                this.availableBiometrics.push({
-                    type: 'fingerprint',
-                    name: 'بصمة الإصبع',
-                    icon: '👆',
-                    priority: 1, // First priority for Android
-                    isHardware: true,
-                    deviceType: 'android'
-                });
-                
-                this.availableBiometrics.push({
-                    type: 'face_hardware',
-                    name: 'Face Unlock',
-                    icon: '📱',
-                    priority: 2, // Second for Android
-                    isHardware: true,
-                    deviceType: 'android'
-                });
+                // Android: Show ONLY what's likely available
+                // Most Androids have fingerprint, some have face unlock
+                if (bioTypes.fingerprint) {
+                    this.availableBiometrics.push({
+                        type: 'fingerprint',
+                        name: 'بصمة الإصبع',
+                        icon: '👆',
+                        priority: 1,
+                        isHardware: true,
+                        deviceType: 'android'
+                    });
+                }
+                if (bioTypes.face) {
+                    this.availableBiometrics.push({
+                        type: 'face_hardware',
+                        name: 'Face Unlock',
+                        icon: '📱',
+                        priority: 2,
+                        isHardware: true,
+                        deviceType: 'android'
+                    });
+                }
             } else {
-                // Desktop/Laptop: Fingerprint (Windows Hello, etc.)
+                // Desktop/Laptop: Fingerprint only
                 this.availableBiometrics.push({
                     type: 'fingerprint',
                     name: 'بصمة الإصبع',
@@ -160,6 +168,66 @@ class BiometricManager {
             console.log('WebAuthn error fallback:', { isIOS, isAndroid });
             return (isIOS || isAndroid) && window.PublicKeyCredential;
         }
+    }
+
+    // Detect what specific biometrics are actually available
+    async _detectAvailableBiometricTypes() {
+        const result = {
+            fingerprint: false,
+            face: false,
+            unknown: true // Default - we can't know for sure
+        };
+        
+        try {
+            // For Android: try to infer from user agent or do a test
+            const isAndroid = /Android/.test(navigator.userAgent);
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+            
+            if (isAndroid) {
+                // Android: Check if device has face auth by looking for specific patterns
+                // Unfortunately, there's no web API for this, so we use heuristics
+                const ua = navigator.userAgent.toLowerCase();
+                
+                // Devices known to have face unlock (simplified list)
+                const faceUnlockDevices = [
+                    'pixel 4', 'pixel 5', 'pixel 6', 'pixel 7', 'pixel 8',
+                    'samsung', 'galaxy s', 'galaxy note', 'galaxy a'
+                ];
+                
+                const hasFaceHardware = faceUnlockDevices.some(device => ua.includes(device));
+                
+                // Most modern Androids have fingerprint
+                result.fingerprint = true;
+                result.face = hasFaceHardware;
+                result.unknown = false;
+                
+                console.log('Android biometric detection:', { fingerprint: result.fingerprint, face: result.face, ua });
+            } else if (isIOS) {
+                // iOS: Face ID for iPhone X and later (no home button)
+                // Touch ID for older devices
+                const screenHeight = window.screen.height;
+                const screenWidth = window.screen.width;
+                
+                // iPhone X and later have taller screens (812+ points)
+                // iPhone with home button have 667 or 736 points height
+                const isModernIPhone = screenHeight >= 812 || screenWidth >= 812;
+                
+                result.face = isModernIPhone; // Face ID
+                result.fingerprint = !isModernIPhone; // Touch ID for older
+                result.unknown = false;
+                
+                console.log('iOS biometric detection:', { face: result.face, fingerprint: result.fingerprint, screenHeight });
+            } else {
+                // Desktop: usually fingerprint (Windows Hello)
+                result.fingerprint = true;
+                result.face = false;
+                result.unknown = false;
+            }
+        } catch (e) {
+            console.log('Biometric type detection error:', e);
+        }
+        
+        return result;
     }
 
     // ============================================================
