@@ -598,41 +598,29 @@ if (action === "login") {
                 });
             }
 
-            // 1. Face Identity Check (Security Verification)
-// Password hashing verification (for backward compatibility, we'll check both hashed and plain text)
-// In a real implementation, we would use bcrypt or similar, but for now we'll check if it's hashed
-             const { data: userData } = await supabase.from('employees').select('faceDescriptor, password').eq('id', String(data.employeeId)).maybeSingle();
-             if (userData && userData.faceDescriptor && data.faceDescriptor) {
-                 // If they have a face registered, we proxy to Google Script for validation (Distance check)
-                 // because calculating face Euclidean distance is easier there or we can just assume front-end did it
-                 // but for maximum security we should re-verify if possible. 
-                 // However, the main project uses the frontend for descriptor matching.
-                 // We will at least ensure a descriptor was provided.
-             } else if (userData && userData.faceDescriptor && !data.faceDescriptor) {
-                 throw new Error("مطلوب توثيق بصمة الوجه لإتمام العملية");
-             }
-             
-             // Enhanced password verification with hashing support (only if password provided)
-             // Skip password check if faceDescriptor is provided (face is the primary auth)
-             if (data.password) {
-                 const storedPassword = userData?.password || '';
-                 const providedPassword = data.password || '';
-                 let isValidPassword = false;
-                 
-                 // Check if password is hashed (assuming bcrypt hash starts with $2b$)
-                 if (storedPassword.startsWith('$2b$')) {
-                     // Simulate the same hashing transformation used in saveEmployee
-                     const hashedProvidedPassword = providedPassword ? `$2b$10${Array(22).fill('0').join('').substring(0, 22)}${providedPassword}` : '';
-                     isValidPassword = storedPassword === hashedProvidedPassword;
-                 } else {
-                     // Legacy plain text comparison (for backward compatibility)
-                     isValidPassword = normalizeString(storedPassword) === normalizeString(providedPassword);
-                 }
-                 
-                 if (!isValidPassword) {
-                     throw new Error("كلمة المرور غير صحيحة");
-                 }
-             }
+            // 1. Hardware Biometric MANDATORY - NO password/PIN fallback
+            // Only fingerprint or Face ID allowed - NO camera face, NO password
+            if (data.biometricType !== 'fingerprint' && data.biometricType !== 'face_hardware') {
+                throw new Error("⚠️ مطلوب بصمة الجهاز فقط (Fingerprint أو Face ID) - لا يُسمح بالكاميرا أو كلمة المرور");
+            }
+            
+            if (!data.biometricData || !data.deviceId) {
+                throw new Error("⚠️ بيانات البصمة أو الجهاز غير مكتملة - يرجى التأكد من تسجيل البصمة الصحيحة");
+            }
+            
+            // Verify employee has hardware biometric registered
+            const { data: empBioData } = await supabase.from('employees')
+                .select('"biometricType", "biometricData"')
+                .eq('id', String(data.employeeId))
+                .maybeSingle();
+            
+            if (!empBioData || !empBioData.biometricData) {
+                throw new Error("⚠️ لم يتم تسجيل بصمة جهاز لهذا الموظف - يرجى التواصل مع HR");
+            }
+            
+            if (empBioData.biometricType !== 'fingerprint' && empBioData.biometricType !== 'face_hardware') {
+                throw new Error("⚠️ يجب تسجيل بصمة الجهاز (Fingerprint أو Face ID) فقط - لا يُسمح ببصمة الكاميرا");
+            }
 
             // 1.5 Device Binding Check (Hardware Biometric Security)
             // For hardware biometrics (fingerprint/Face ID), verify device binding
@@ -774,7 +762,8 @@ if (action === "login") {
                 latitude: data.latitude,
                 longitude: data.longitude,
                 status: status,
-                transportPrice: finalTransport
+                transportPrice: finalTransport,
+                deviceId: data.deviceId || null // Track device for audit trail
             };
 
             const { error } = await supabase.from('attendance').insert([payload]);
@@ -788,7 +777,30 @@ if (action === "login") {
 
         // --- CHECK OUT ---
         if (action === "checkoutAttendance") {
-            // 0. Device Binding Check for Hardware Biometric (same as check-in)
+            // 0. Hardware Biometric MANDATORY for checkout - NO password/PIN fallback
+            if (data.biometricType !== 'fingerprint' && data.biometricType !== 'face_hardware') {
+                throw new Error("⚠️ مطلوب بصمة الجهاز فقط (Fingerprint أو Face ID) - لا يُسمح بالكاميرا أو كلمة المرور");
+            }
+            
+            if (!data.biometricData || !data.deviceId) {
+                throw new Error("⚠️ بيانات البصمة أو الجهاز غير مكتملة - يرجى التأكد من تسجيل البصمة الصحيحة");
+            }
+            
+            // Verify employee has hardware biometric registered
+            const { data: empBioData } = await supabase.from('employees')
+                .select('"biometricType", "biometricData"')
+                .eq('id', String(data.employeeId))
+                .maybeSingle();
+            
+            if (!empBioData || !empBioData.biometricData) {
+                throw new Error("⚠️ لم يتم تسجيل بصمة جهاز لهذا الموظف - يرجى التواصل مع HR");
+            }
+            
+            if (empBioData.biometricType !== 'fingerprint' && empBioData.biometricType !== 'face_hardware') {
+                throw new Error("⚠️ يجب تسجيل بصمة الجهاز (Fingerprint أو Face ID) فقط - لا يُسمح ببصمة الكاميرا");
+            }
+
+            // 0.5 Device Binding Check for Hardware Biometric (same as check-in)
             if (data.biometricType === 'fingerprint' || data.biometricType === 'face_hardware') {
                 const { data: empData } = await supabase.from('employees')
                     .select('"registeredDeviceId", "biometricType"')

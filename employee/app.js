@@ -1032,7 +1032,7 @@ async function handleCheckIn() {
     if(isCheckInProgress) return; // Prevent duplicate clicks
     if(!lastLocation) return alert('يجب تفعيل الـ GPS');
     
-    // Check biometric verification based on user type
+    // ENFORCE: Hardware biometric ONLY - NO camera face, NO password/PIN
     const userBioType = currentUser.biometricType || (currentUser.faceDescriptor ? 'face' : null);
     
     if (userBioType === 'fingerprint' || userBioType === 'face_hardware') {
@@ -1043,12 +1043,10 @@ async function handleCheckIn() {
             return alert(`فشل التحقق من ${typeName}: ` + result.message);
         }
     } else if (userBioType === 'face') {
-        // For camera face, check if already verified continuously
-        if (!isBiometricVerified && !currentFaceDescriptor) {
-            return alert('بصمة الوجه غير ملتقطة الحين');
-        }
+        // Camera face is NOT ALLOWED - must use hardware biometric
+        return alert('⚠️ بصمة الكاميرا غير مسموح بها. يرجى استخدام بصمة الجهاز (Fingerprint أو Face ID) أو التواصل مع HR لتسجيلها.');
     } else {
-        return alert('لم يتم تسجيل بصمة. يرجى التواصل مع HR');
+        return alert('⚠️ لم يتم تسجيل بصمة جهاز. يرجى التواصل مع HR لتسجيل بصمة الإصبع أو Face ID');
     }
 
     isCheckInProgress = true;
@@ -1106,9 +1104,24 @@ async function handleCheckIn() {
 async function forceCloseAndRecheckIn(openSessionId, originalPayload) {
     document.getElementById('loader').classList.remove('hidden');
     
-    // Prepare biometric data
+    // ENFORCE: Hardware biometric ONLY
     const userBioType = currentUser.biometricType || (currentUser.faceDescriptor ? 'face' : null);
+    
+    if (userBioType === 'face') {
+        alert('⚠️ بصمة الكاميرا غير مسموح بها. يرجى استخدام بصمة الجهاز (Fingerprint أو Face ID) أو التواصل مع HR لتسجيلها.');
+        document.getElementById('loader').classList.add('hidden');
+        return;
+    }
+    
+    if (userBioType !== 'fingerprint' && userBioType !== 'face_hardware') {
+        alert('⚠️ لم يتم تسجيل بصمة جهاز. يرجى التواصل مع HR لتسجيل بصمة الإصبع أو Face ID');
+        document.getElementById('loader').classList.add('hidden');
+        return;
+    }
+    
+    // Prepare biometric data and device fingerprint
     const biometricData = currentBiometricVerification?.data || currentFaceDescriptor;
+    const deviceId = getDeviceFingerprint();
     
     try {
         // Step 1: Close the old session
@@ -1123,7 +1136,8 @@ async function forceCloseAndRecheckIn(openSessionId, originalPayload) {
                 longitude: lastLocation ? lastLocation.lng : 0,
                 biometricType: userBioType,
                 biometricData: biometricData ? JSON.stringify(biometricData) : null,
-                faceDescriptor: biometricData ? JSON.stringify(biometricData) : null
+                faceDescriptor: biometricData ? JSON.stringify(biometricData) : null,
+                deviceId: deviceId
             }),
             headers: { 'Content-Type': 'text/plain' }
         });
@@ -1160,7 +1174,7 @@ async function forceCloseAndRecheckIn(openSessionId, originalPayload) {
 async function handleCheckOut() {
     if(!lastLocation) return alert('يجب تفعيل الـ GPS');
     
-    // Check biometric verification based on user type
+    // ENFORCE: Hardware biometric ONLY - NO camera face, NO password/PIN
     const userBioType = currentUser.biometricType || (currentUser.faceDescriptor ? 'face' : null);
     
     if (userBioType === 'fingerprint' || userBioType === 'face_hardware') {
@@ -1171,12 +1185,10 @@ async function handleCheckOut() {
             return alert(`فشل التحقق من ${typeName}: ` + result.message);
         }
     } else if (userBioType === 'face') {
-        // For camera face, check if already verified continuously
-        if (!isBiometricVerified && !currentFaceDescriptor) {
-            return alert('بصمة الوجه غير ملتقطة الحين');
-        }
+        // Camera face is NOT ALLOWED - must use hardware biometric
+        return alert('⚠️ بصمة الكاميرا غير مسموح بها. يرجى استخدام بصمة الجهاز (Fingerprint أو Face ID) أو التواصل مع HR لتسجيلها.');
     } else {
-        return alert('لم يتم تسجيل بصمة. يرجى التواصل مع HR');
+        return alert('⚠️ لم يتم تسجيل بصمة جهاز. يرجى التواصل مع HR لتسجيل بصمة الإصبع أو Face ID');
     }
 
     document.getElementById('loader').classList.remove('hidden');

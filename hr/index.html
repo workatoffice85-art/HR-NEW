@@ -102,6 +102,7 @@
                         <label>تاريخ اليوم:</label>
                         <input type="date" id="attendanceDateFilter" onchange="renderAttendanceTable(allAttendanceData)">
                         <button class="btn-primary" style="width:auto;" onclick="refreshData()">تحديث مجمع 🔄</button>
+                        <button class="btn-primary" style="width:auto; padding:8px 15px; background:#217346;" onclick="exportAttendanceToExcel()">📥 Excel</button>
                     </div>
                 </div>
                 <div class="table-container">
@@ -186,6 +187,7 @@
                     <input type="email" id="employeeReportEmail" placeholder="بريد مخصص (اختياري)" style="min-width:220px;">
                     <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="generateEmployeeDetailedReport()">عرض التقرير</button>
                     <button class="btn-primary" style="width:auto; padding:8px 15px; background:#10b981;" onclick="sendEmployeeDetailedReport()">إرسال للإيميل 📧</button>
+                    <button class="btn-primary" style="width:auto; padding:8px 15px; background:#217346;" onclick="exportEmployeeDetailedToExcel()">📥 Excel</button>
                 </div>
                 <div id="employeeDetailMeta" class="employee-report-meta">اختر موظفًا وحدد الفترة الزمنية ثم اضغط "عرض التقرير".</div>
 

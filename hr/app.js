@@ -783,21 +783,21 @@ async function sendCustomReport() {
     document.getElementById('loader').classList.add('hidden');
 }
 
-// Export Report to Excel - Professional HR Report
+// Export Report to Excel - Professional HR Report with Advanced Styling
 function exportReportToExcel() {
     const startStr = document.getElementById('reportStartDate').value;
     const endStr = document.getElementById('reportEndDate').value;
     const tbody = document.getElementById('reportsTableBody');
-    
+
     if (!tbody || tbody.children.length === 0) {
         alert('لا يوجد بيانات للتصدير. قم بتوليد التقرير أولاً.');
         return;
     }
-    
+
     // Extract data from the table
     const data = [];
     const rows = tbody.querySelectorAll('tr');
-    
+
     rows.forEach(row => {
         const cells = row.querySelectorAll('td');
         if (cells.length >= 9) {
@@ -814,109 +814,497 @@ function exportReportToExcel() {
             });
         }
     });
-    
+
     if (data.length === 0) {
         alert('لا يوجد بيانات للتصدير');
         return;
     }
-    
-    // Create worksheet
-    const ws = XLSX.utils.json_to_sheet(data);
-    
-    // Set column widths
-    const colWidths = [
-        { wch: 15 }, // ID
-        { wch: 25 }, // Name
-        { wch: 12 }, // Present
-        { wch: 12 }, // Absent
-        { wch: 10 }, // Late
-        { wch: 14 }, // Overtime
-        { wch: 15 }, // No Checkout
-        { wch: 18 }, // Overtime Pay
-        { wch: 15 }  // Transport
-    ];
-    ws['!cols'] = colWidths;
-    
-    // Add title row
-    const titleRow = ['تقرير الحضور والبدلات - نظام HR'];
-    const dateRangeRow = [`الفترة: ${startStr} إلى ${endStr}`];
-    const emptyRow = [''];
-    
-    // Insert title at the top
-    XLSX.utils.sheet_add_aoa(ws, [titleRow, dateRangeRow, emptyRow], { origin: 'A1' });
-    
-    // Move data to start from row 4 (after title)
-    const dataWithOffset = data.map((row, idx) => ({
-        ...row,
-        __rowNum: idx + 3 // Start from row 4 (0-indexed = 3)
-    }));
-    
-    // Recreate sheet with proper structure
+
+    // Calculate totals for summary row
+    const totals = {
+        daysPresent: 0,
+        daysAbsent: 0,
+        lates: 0,
+        overtime: 0,
+        noCheckout: 0,
+        overtimePay: 0,
+        transport: 0
+    };
+
+    data.forEach(row => {
+        totals.daysPresent += parseInt(row['أيام الحضور']) || 0;
+        totals.daysAbsent += parseInt(row['أيام الغياب']) || 0;
+        totals.lates += parseInt(row['التأخير']) || 0;
+        totals.overtime += parseInt(row['العمل الإضافي']) || 0;
+        totals.noCheckout += parseInt(row['لم يتم الانصراف']) || 0;
+        totals.overtimePay += parseFloat(row['مبلغ العمل الإضافي'].replace(/[^0-9.]/g, '')) || 0;
+        totals.transport += parseFloat(row['بدل الانتقال'].replace(/[^0-9.]/g, '')) || 0;
+    });
+
+    // Build sheet data
+    const headers = ['ID الموظف', 'اسم الموظف', 'أيام الحضور', 'أيام الغياب', 'التأخير', 'العمل الإضافي', 'لم يتم الانصراف', 'مبلغ العمل الإضافي', 'بدل الانتقال'];
+
     const finalData = [
         ['تقرير الحضور والبدلات - نظام HR'],
-        [`الفترة: ${startStr} إلى ${endStr}`],
+        [`الفترة: ${startStr} إلى ${endStr} | إجمالي الموظفين: ${data.length}`],
         [''],
-        ['ID الموظف', 'اسم الموظف', 'أيام الحضور', 'أيام الغياب', 'التأخير', 'العمل الإضافي', 'لم يتم الانصراف', 'مبلغ العمل الإضافي', 'بدل الانتقال'],
+        headers,
         ...data.map(row => [
             row['ID الموظف'],
             row['اسم الموظف'],
-            row['أيام الحضور'],
-            row['أيام الغياب'],
-            row['التأخير'],
-            row['العمل الإضافي'],
-            row['لم يتم الانصراف'],
-            row['مبلغ العمل الإضافي'],
-            row['بدل الانتقال']
-        ])
+            parseInt(row['أيام الحضور']) || 0,
+            parseInt(row['أيام الغياب']) || 0,
+            parseInt(row['التأخير']) || 0,
+            parseInt(row['العمل الإضافي']) || 0,
+            parseInt(row['لم يتم الانصراف']) || 0,
+            parseFloat(row['مبلغ العمل الإضافي'].replace(/[^0-9.]/g, '')) || 0,
+            parseFloat(row['بدل الانتقال'].replace(/[^0-9.]/g, '')) || 0
+        ]),
+        [''], // Empty row before totals
+        ['الإجمالي', '', totals.daysPresent, totals.daysAbsent, totals.lates, totals.overtime, totals.noCheckout, totals.overtimePay, totals.transport]
     ];
-    
-    const wsFinal = XLSX.utils.aoa_to_sheet(finalData);
-    wsFinal['!cols'] = colWidths;
-    
-    // Apply styles to header row (row 4 - index 3)
-    const headerRange = XLSX.utils.decode_range(wsFinal['!ref']);
-    for (let C = headerRange.s.c; C <= headerRange.e.c; ++C) {
-        const cellAddress = XLSX.utils.encode_cell({ r: 3, c: C });
-        if (!wsFinal[cellAddress]) continue;
-        
-        wsFinal[cellAddress].s = {
-            font: { bold: true, color: { rgb: "FFFFFF" }, size: 12 },
-            fill: { fgColor: { rgb: "217346" }, patternType: "solid" },
-            alignment: { horizontal: "center", vertical: "center" },
-            border: {
-                top: { style: "thin", color: { rgb: "000000" } },
-                bottom: { style: "thin", color: { rgb: "000000" } },
-                left: { style: "thin", color: { rgb: "000000" } },
-                right: { style: "thin", color: { rgb: "000000" } }
+
+    const ws = XLSX.utils.aoa_to_sheet(finalData);
+
+    // Column widths optimized for content
+    ws['!cols'] = [
+        { wch: 14 }, // ID
+        { wch: 28 }, // Name (wider for Arabic names)
+        { wch: 14 }, // Present
+        { wch: 14 }, // Absent
+        { wch: 12 }, // Late
+        { wch: 15 }, // Overtime
+        { wch: 16 }, // No Checkout
+        { wch: 20 }, // Overtime Pay
+        { wch: 16 }  // Transport
+    ];
+
+    // Freeze panes: freeze header row (row 4)
+    ws['!freeze'] = { xSplit: 0, ySplit: 4 };
+
+    // Style definitions
+    const borderStyle = {
+        top: { style: "thin", color: { rgb: "B4B4B4" } },
+        bottom: { style: "thin", color: { rgb: "B4B4B4" } },
+        left: { style: "thin", color: { rgb: "B4B4B4" } },
+        right: { style: "thin", color: { rgb: "B4B4B4" } }
+    };
+
+    const headerStyle = {
+        font: { bold: true, color: { rgb: "FFFFFF" }, size: 11, name: "Arial" },
+        fill: { fgColor: { rgb: "1F4E79" }, patternType: "solid" },
+        alignment: { horizontal: "center", vertical: "center", wrapText: true },
+        border: borderStyle
+    };
+
+    const dataCellStyle = {
+        alignment: { horizontal: "right", vertical: "center" },
+        border: borderStyle,
+        font: { name: "Arial", size: 10 }
+    };
+
+    const numberStyle = {
+        alignment: { horizontal: "center", vertical: "center" },
+        border: borderStyle,
+        font: { name: "Arial", size: 10 }
+    };
+
+    const currencyStyle = {
+        alignment: { horizontal: "right", vertical: "center" },
+        border: borderStyle,
+        font: { name: "Arial", size: 10 },
+        numFmt: '"ج.م "#,##0.00'
+    };
+
+    const zebraStyle = {
+        fill: { fgColor: { rgb: "F2F2F2" }, patternType: "solid" }
+    };
+
+    const totalRowStyle = {
+        font: { bold: true, color: { rgb: "FFFFFF" }, size: 11, name: "Arial" },
+        fill: { fgColor: { rgb: "217346" }, patternType: "solid" },
+        alignment: { horizontal: "right", vertical: "center" },
+        border: borderStyle
+    };
+
+    const totalNumberStyle = {
+        font: { bold: true, color: { rgb: "FFFFFF" }, size: 11, name: "Arial" },
+        fill: { fgColor: { rgb: "217346" }, patternType: "solid" },
+        alignment: { horizontal: "center", vertical: "center" },
+        border: borderStyle
+    };
+
+    const totalCurrencyStyle = {
+        font: { bold: true, color: { rgb: "FFFFFF" }, size: 11, name: "Arial" },
+        fill: { fgColor: { rgb: "217346" }, patternType: "solid" },
+        alignment: { horizontal: "right", vertical: "center" },
+        border: borderStyle,
+        numFmt: '"ج.م "#,##0.00'
+    };
+
+    const titleStyle = {
+        font: { bold: true, size: 18, color: { rgb: "1F4E79" }, name: "Arial" },
+        alignment: { horizontal: "center", vertical: "center" }
+    };
+
+    const subtitleStyle = {
+        font: { italic: true, size: 11, color: { rgb: "666666" }, name: "Arial" },
+        alignment: { horizontal: "center", vertical: "center" }
+    };
+
+    // Apply styles to all cells
+    const range = XLSX.utils.decode_range(ws['!ref']);
+
+    for (let R = range.s.r; R <= range.e.r; ++R) {
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+            const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+            if (!ws[cellAddress]) continue;
+
+            // Title row (row 1)
+            if (R === 0) {
+                ws[cellAddress].s = titleStyle;
             }
-        };
+            // Subtitle row (row 2)
+            else if (R === 1) {
+                ws[cellAddress].s = subtitleStyle;
+            }
+            // Header row (row 4 - index 3)
+            else if (R === 3) {
+                ws[cellAddress].s = headerStyle;
+            }
+            // Total row (last row)
+            else if (R === range.e.r) {
+                if (C === 0) {
+                    ws[cellAddress].s = totalRowStyle;
+                } else if (C === 1) {
+                    ws[cellAddress].s = totalRowStyle;
+                } else if (C >= 7) {
+                    ws[cellAddress].s = totalCurrencyStyle;
+                    ws[cellAddress].z = '"ج.م "#,##0.00';
+                } else {
+                    ws[cellAddress].s = totalNumberStyle;
+                }
+            }
+            // Data rows
+            else if (R > 3 && R < range.e.r - 1) {
+                const isEven = (R - 4) % 2 === 0;
+                const baseStyle = isEven ? { ...dataCellStyle, ...zebraStyle } : dataCellStyle;
+
+                if (C === 0) { // ID - center aligned
+                    ws[cellAddress].s = { ...baseStyle, alignment: { horizontal: "center", vertical: "center" } };
+                } else if (C === 1) { // Name - right aligned
+                    ws[cellAddress].s = baseStyle;
+                } else if (C >= 7) { // Currency columns
+                    ws[cellAddress].s = { ...baseStyle, ...currencyStyle };
+                    ws[cellAddress].z = '"ج.م "#,##0.00';
+                } else { // Number columns
+                    ws[cellAddress].s = { ...baseStyle, ...numberStyle };
+                }
+            }
+        }
     }
-    
-    // Style title row
-    wsFinal['A1'].s = {
-        font: { bold: true, size: 16, color: { rgb: "217346" } },
-        alignment: { horizontal: "center" }
-    };
-    wsFinal['A2'].s = {
-        font: { italic: true, size: 11, color: { rgb: "666666" } },
-        alignment: { horizontal: "center" }
-    };
-    
+
     // Merge title cells
-    wsFinal['!merges'] = [
+    ws['!merges'] = [
         { s: { r: 0, c: 0 }, e: { r: 0, c: 8 } },
         { s: { r: 1, c: 0 }, e: { r: 1, c: 8 } }
     ];
-    
+
+    // Set row heights
+    ws['!rows'] = [
+        { hpt: 30 }, // Title
+        { hpt: 20 }, // Subtitle
+        { hpt: 10 }, // Empty
+        { hpt: 35 }, // Header
+        ...data.map(() => ({ hpt: 22 })),
+        { hpt: 10 }, // Empty before totals
+        { hpt: 28 }  // Totals
+    ];
+
     // Create workbook
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, wsFinal, 'تقرير الحضور');
-    
+    XLSX.utils.book_append_sheet(wb, ws, 'تقرير الحضور');
+
     // Generate filename with date
     const today = new Date().toISOString().split('T')[0];
-    const filename = `HR_Report_${today}.xlsx`;
-    
+    const filename = `HR_Attendance_Report_${today}.xlsx`;
+
     // Download
+    XLSX.writeFile(wb, filename);
+}
+
+// Export Daily Attendance Records to Excel
+function exportAttendanceToExcel() {
+    const tbody = document.getElementById('attendanceTableBody');
+    const filterDate = document.getElementById('attendanceDateFilter').value;
+    const presentCount = document.getElementById('statPresent').textContent;
+    const absentCount = document.getElementById('statAbsent').textContent;
+
+    if (!tbody || tbody.children.length === 0) {
+        alert('لا يوجد بيانات للتصدير');
+        return;
+    }
+
+    // Extract data from table
+    const data = [];
+    const rows = tbody.querySelectorAll('tr');
+
+    rows.forEach(row => {
+        const cells = row.querySelectorAll('td');
+        if (cells.length >= 6) {
+            data.push({
+                'الموظف': cells[0].textContent.trim(),
+                'الموقع': cells[1].textContent.trim(),
+                'وقت الحضور': cells[2].textContent.trim(),
+                'وقت الانصراف': cells[3].textContent.trim(),
+                'بدل الانتقال': cells[4].textContent.trim(),
+                'الحالة': cells[5].textContent.trim()
+            });
+        }
+    });
+
+    if (data.length === 0) {
+        alert('لا يوجد بيانات للتصدير');
+        return;
+    }
+
+    const headers = ['الموظف', 'الموقع', 'وقت الحضور', 'وقت الانصراف', 'بدل الانتقال', 'الحالة'];
+
+    const finalData = [
+        ['سجلات العمليات الشاملة - نظام HR'],
+        [`التاريخ: ${filterDate || 'جميع التواريخ'} | الحاضرين: ${presentCount} | الغائبين: ${absentCount}`],
+        [''],
+        headers,
+        ...data.map(row => [
+            row['الموظف'],
+            row['الموقع'],
+            row['وقت الحضور'],
+            row['وقت الانصراف'],
+            row['بدل الانتقال'],
+            row['الحالة']
+        ])
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(finalData);
+
+    ws['!cols'] = [
+        { wch: 25 }, // Employee
+        { wch: 20 }, // Site
+        { wch: 18 }, // Check In
+        { wch: 18 }, // Check Out
+        { wch: 15 }, // Transport
+        { wch: 12 }  // Status
+    ];
+
+    ws['!freeze'] = { xSplit: 0, ySplit: 4 };
+
+    const borderStyle = {
+        top: { style: "thin", color: { rgb: "B4B4B4" } },
+        bottom: { style: "thin", color: { rgb: "B4B4B4" } },
+        left: { style: "thin", color: { rgb: "B4B4B4" } },
+        right: { style: "thin", color: { rgb: "B4B4B4" } }
+    };
+
+    const headerStyle = {
+        font: { bold: true, color: { rgb: "FFFFFF" }, size: 11, name: "Arial" },
+        fill: { fgColor: { rgb: "1F4E79" }, patternType: "solid" },
+        alignment: { horizontal: "center", vertical: "center" },
+        border: borderStyle
+    };
+
+    const cellStyle = {
+        alignment: { horizontal: "right", vertical: "center" },
+        border: borderStyle,
+        font: { name: "Arial", size: 10 }
+    };
+
+    const zebraStyle = {
+        fill: { fgColor: { rgb: "F2F2F2" }, patternType: "solid" }
+    };
+
+    const titleStyle = {
+        font: { bold: true, size: 16, color: { rgb: "1F4E79" }, name: "Arial" },
+        alignment: { horizontal: "center", vertical: "center" }
+    };
+
+    const subtitleStyle = {
+        font: { italic: true, size: 10, color: { rgb: "666666" }, name: "Arial" },
+        alignment: { horizontal: "center", vertical: "center" }
+    };
+
+    const range = XLSX.utils.decode_range(ws['!ref']);
+
+    for (let R = range.s.r; R <= range.e.r; ++R) {
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+            const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+            if (!ws[cellAddress]) continue;
+
+            if (R === 0) ws[cellAddress].s = titleStyle;
+            else if (R === 1) ws[cellAddress].s = subtitleStyle;
+            else if (R === 3) ws[cellAddress].s = headerStyle;
+            else if (R > 3) {
+                const isEven = (R - 4) % 2 === 0;
+                ws[cellAddress].s = isEven ? { ...cellStyle, ...zebraStyle } : cellStyle;
+            }
+        }
+    }
+
+    ws['!merges'] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } },
+        { s: { r: 1, c: 0 }, e: { r: 1, c: 5 } }
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'سجلات الحضور');
+
+    const today = new Date().toISOString().split('T')[0];
+    const filename = `Daily_Attendance_${filterDate || today}.xlsx`;
+
+    XLSX.writeFile(wb, filename);
+}
+
+// Export Employee Detailed Report to Excel
+function exportEmployeeDetailedToExcel() {
+    const employeeSelect = document.getElementById('employeeDetailEmployee');
+    const employeeName = employeeSelect.options[employeeSelect.selectedIndex]?.text || 'غير محدد';
+    const startStr = document.getElementById('employeeReportStartDate').value;
+    const endStr = document.getElementById('employeeReportEndDate').value;
+
+    const tbody = document.getElementById('employeeDetailTableBody');
+    if (!tbody || tbody.children.length === 0 || tbody.querySelector('.employee-report-empty')) {
+        alert('لا يوجد بيانات للتصدير. قم بعرض التقرير أولاً.');
+        return;
+    }
+
+    // Get KPI values
+    const present = document.getElementById('employeeDetailPresent').textContent;
+    const absent = document.getElementById('employeeDetailAbsent').textContent;
+    const late = document.getElementById('employeeDetailLate').textContent;
+    const overtime = document.getElementById('employeeDetailOvertime').textContent;
+    const overtimePay = document.getElementById('employeeDetailOvertimePay').textContent;
+    const transport = document.getElementById('employeeDetailTransport').textContent;
+
+    // Extract data from table
+    const data = [];
+    const rows = tbody.querySelectorAll('tr');
+
+    rows.forEach(row => {
+        const cells = row.querySelectorAll('td');
+        if (cells.length >= 6) {
+            data.push({
+                'التاريخ': cells[0].textContent.trim(),
+                'الموقع': cells[1].textContent.trim(),
+                'وقت الحضور': cells[2].textContent.trim(),
+                'وقت الانصراف': cells[3].textContent.trim(),
+                'الحالة': cells[4].textContent.trim(),
+                'البدل': cells[5].textContent.trim()
+            });
+        }
+    });
+
+    const headers = ['التاريخ', 'الموقع', 'وقت الحضور', 'وقت الانصراف', 'الحالة', 'البدل'];
+
+    const finalData = [
+        ['التقرير التفصيلي للموظف - نظام HR'],
+        [`الموظف: ${employeeName} | الفترة: ${startStr} إلى ${endStr}`],
+        ['ملخص:', `حضور: ${present}`, `غياب: ${absent}`, `تأخير: ${late}`, `إضافي: ${overtime}`, `بدل إضافي: ${overtimePay} ج.م`, `بدل انتقال: ${transport} ج.م`],
+        [''],
+        headers,
+        ...data.map(row => [
+            row['التاريخ'],
+            row['الموقع'],
+            row['وقت الحضور'],
+            row['وقت الانصراف'],
+            row['الحالة'],
+            row['البدل']
+        ])
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(finalData);
+
+    ws['!cols'] = [
+        { wch: 15 }, // Date
+        { wch: 22 }, // Site
+        { wch: 18 }, // Check In
+        { wch: 18 }, // Check Out
+        { wch: 12 }, // Status
+        { wch: 15 }  // Allowance
+    ];
+
+    ws['!freeze'] = { xSplit: 0, ySplit: 5 };
+
+    const borderStyle = {
+        top: { style: "thin", color: { rgb: "B4B4B4" } },
+        bottom: { style: "thin", color: { rgb: "B4B4B4" } },
+        left: { style: "thin", color: { rgb: "B4B4B4" } },
+        right: { style: "thin", color: { rgb: "B4B4B4" } }
+    };
+
+    const headerStyle = {
+        font: { bold: true, color: { rgb: "FFFFFF" }, size: 11, name: "Arial" },
+        fill: { fgColor: { rgb: "1F4E79" }, patternType: "solid" },
+        alignment: { horizontal: "center", vertical: "center" },
+        border: borderStyle
+    };
+
+    const summaryStyle = {
+        font: { bold: true, size: 10, color: { rgb: "217346" }, name: "Arial" },
+        fill: { fgColor: { rgb: "E8F5E9" }, patternType: "solid" },
+        alignment: { horizontal: "center", vertical: "center" },
+        border: borderStyle
+    };
+
+    const cellStyle = {
+        alignment: { horizontal: "right", vertical: "center" },
+        border: borderStyle,
+        font: { name: "Arial", size: 10 }
+    };
+
+    const zebraStyle = {
+        fill: { fgColor: { rgb: "F2F2F2" }, patternType: "solid" }
+    };
+
+    const titleStyle = {
+        font: { bold: true, size: 16, color: { rgb: "1F4E79" }, name: "Arial" },
+        alignment: { horizontal: "center", vertical: "center" }
+    };
+
+    const subtitleStyle = {
+        font: { italic: true, size: 11, color: { rgb: "666666" }, name: "Arial" },
+        alignment: { horizontal: "center", vertical: "center" }
+    };
+
+    const range = XLSX.utils.decode_range(ws['!ref']);
+
+    for (let R = range.s.r; R <= range.e.r; ++R) {
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+            const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+            if (!ws[cellAddress]) continue;
+
+            if (R === 0) ws[cellAddress].s = titleStyle;
+            else if (R === 1) ws[cellAddress].s = subtitleStyle;
+            else if (R === 2) ws[cellAddress].s = summaryStyle;
+            else if (R === 4) ws[cellAddress].s = headerStyle;
+            else if (R > 4) {
+                const isEven = (R - 5) % 2 === 0;
+                ws[cellAddress].s = isEven ? { ...cellStyle, ...zebraStyle } : cellStyle;
+            }
+        }
+    }
+
+    ws['!merges'] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } },
+        { s: { r: 1, c: 0 }, e: { r: 1, c: 5 } },
+        { s: { r: 2, c: 0 }, e: { r: 2, c: 5 } }
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'تقرير الموظف');
+
+    const today = new Date().toISOString().split('T')[0];
+    const safeName = employeeName.replace(/[^a-zA-Z0-9\u0600-\u06FF]/g, '_');
+    const filename = `Employee_Report_${safeName}_${today}.xlsx`;
+
     XLSX.writeFile(wb, filename);
 }
 
