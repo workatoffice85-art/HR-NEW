@@ -23,7 +23,7 @@ let userBiometricType = null; // selected biometric type during registration
 let registeredBiometricData = null; // captured biometric data during registration
 let allOfficialHolidays = [];
 let appSettings = {}; // Store system settings including weekend days
-const MODEL_URL = '../models';
+const MODEL_URL = './models';
 
 // Helper: Extract Cairo time from ISO string (format: 2026-04-26T09:34:48+02:00)
 // Returns time in format "9:34:48 ص" without any timezone conversion
@@ -545,6 +545,8 @@ async function initSystem() {
         if (cameraContainer) cameraContainer.classList.add('hidden');
     }
     getLocation();
+    // Check for persisted timer state after initialization
+    setTimeout(checkPersistedTimerState, 1000);
 }
 
 function processAttendanceStatus(data) {
@@ -743,6 +745,7 @@ async function checkCurrentStatus() {
         console.error("Status check failed", e);
         setAppState('out'); 
     }
+    return Promise.resolve();
 }
 
 function setAppState(state, startTime) {
@@ -754,11 +757,15 @@ function setAppState(state, startTime) {
         btnIn.classList.add('hidden');
         btnOut.classList.remove('hidden');
         timerContainer.classList.remove('hidden');
+        // Store check-in time in localStorage to persist across refreshes
+        localStorage.setItem('checkInTime', startTime);
         startWorkTimer(startTime);
     } else {
         btnIn.classList.remove('hidden');
         btnOut.classList.add('hidden');
         timerContainer.classList.add('hidden');
+        // Clear stored check-in time
+        localStorage.removeItem('checkInTime');
         stopWorkTimer();
     }
     updateActionButtonsState();
@@ -854,6 +861,24 @@ function stopWorkTimer() {
     if (faceDetectionInterval) {
         clearInterval(faceDetectionInterval);
         faceDetectionInterval = null;
+    }
+}
+
+// Check for persisted timer state on page load
+function checkPersistedTimerState() {
+    const storedCheckInTime = localStorage.getItem('checkInTime');
+    if (storedCheckInTime) {
+        // Verify if there's still an active session
+        checkCurrentStatus().then(() => {
+            // If still checked in, restore timer
+            const btnIn = document.getElementById('btnCheckIn');
+            if (btnIn && btnIn.classList.contains('hidden')) {
+                setAppState('in', storedCheckInTime);
+            } else {
+                // No longer checked in, clear stored time
+                localStorage.removeItem('checkInTime');
+            }
+        });
     }
 }
 
