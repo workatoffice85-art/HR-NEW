@@ -1646,22 +1646,24 @@ if (action === "updateEmployee") {
                 .eq('user_id', request.user_id)
                 .eq('is_active', true);
             
-            // 4. Add new device
-            const { error: insertError } = await supabase
+            // 4. Add or update new device (upsert to handle case where device already exists)
+            const { error: upsertError } = await supabase
                 .from('devices')
-                .insert([{
+                .upsert({
                     user_id: request.user_id,
                     device_id: request.new_device_id,
                     device_model: request.new_device_model || 'Unknown',
                     os_type: request.new_os_type || 'Unknown',
                     browser_info: request.new_browser_info || 'Unknown',
                     is_active: true,
-                    created_at: new Date().toISOString(),
                     updated_at: new Date().toISOString()
-                }]);
+                }, {
+                    onConflict: 'user_id,device_id'
+                });
             
-            if (insertError) {
-                return res.status(200).json({ success: false, message: "فشل إضافة الجهاز الجديد" });
+            if (upsertError) {
+                console.error('Device upsert error:', upsertError);
+                return res.status(200).json({ success: false, message: "فشل إضافة/تحديث الجهاز الجديد: " + upsertError.message });
             }
             
             // 5. Update request status
