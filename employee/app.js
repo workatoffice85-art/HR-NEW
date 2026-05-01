@@ -239,6 +239,7 @@ async function initBiometricRegistration() {
     
     // AUTO-SELECT: Always pick the fastest (priority 1) for best performance
     const bestBiometric = availableBiometrics[0]; // Already sorted by priority
+    const hasHardware = availableBiometrics.some(b => b.isHardware);
     
     if (availableBiometrics.length > 1) {
         // Show options but pre-select the best (highlighted)
@@ -253,10 +254,27 @@ async function initBiometricRegistration() {
         
         // Auto-select the best after short delay so user sees it
         setTimeout(() => selectBiometricType(bestBiometric.type), 500);
-    } else {
-        // Only one option - select immediately
+    } else if (hasHardware) {
+        // Only hardware option - select immediately
         selectionDiv.classList.add('hidden');
         selectBiometricType(availableBiometrics[0].type);
+    } else {
+        // Only camera available (no hardware) - select immediately and show message
+        selectionDiv.classList.add('hidden');
+        selectBiometricType(availableBiometrics[0].type);
+        
+        // Show info that only camera is available
+        const infoEl = document.createElement('div');
+        infoEl.className = 'text-muted';
+        infoEl.style.cssText = 'text-align:center; margin-bottom:15px; font-size:0.85rem;';
+        infoEl.innerHTML = '📷 جهازك يدعم بصمة الوجه بالكاميرا فقط';
+        
+        // Insert before face registration section
+        const faceSection = document.getElementById('faceRegistrationSection');
+        if (faceSection && !faceSection.previousElementSibling?.classList?.contains('bio-info')) {
+            infoEl.classList.add('bio-info');
+            faceSection.parentNode.insertBefore(infoEl, faceSection);
+        }
     }
 }
 
@@ -1553,9 +1571,230 @@ function renderMyReports(data, monthStr) {
     document.getElementById('empTotalTransport').innerText = totalTransport.toFixed(2) + " ج.م";
 }
 
+// ============================================================
+// BIOMETRIC UPDATE FUNCTIONS
+// Allow employees to change/update their biometric type
+// ============================================================
+
+let bioUpdateType = null;
+let bioUpdateData = null;
+let bioUpdateVideoStream = null;
+
+function openBiometricUpdateModal() {
+    const modal = document.getElementById('biometricUpdateModal');
+    const currentType = currentUser.biometricType || (currentUser.faceDescriptor ? 'face' : 'none');
+    
+    // Show current biometric type
+    const typeNames = {
+        'face': '📷 بصمة الوجه (بالكاميرا)',
+        'fingerprint': '👆 بصمة الإصبع',
+        'face_hardware': '📱 Face ID',
+        'none': '❌ لا يوجد'
+    };
+    
+    document.getElementById('currentBioType').innerText = typeNames[currentType] || currentType;
+    document.getElementById('currentBioDisplay').innerText = typeNames[currentType] || currentType;
+    
+    // Load available options
+    loadBiometricUpdateOptions();
+    
+    // Hide sections
+    document.getElementById('bioUpdateFaceSection').classList.add('hidden');
+    document.getElementById('bioUpdateHardwareSection').classList.add('hidden');
+    
+    bioUpdateType = null;
+    bioUpdateData = null;
+    
+    modal.classList.remove('hidden');
+}
+
+function closeBiometricUpdateModal() {
+    const modal = document.getElementById('biometricUpdateModal');
+    modal.classList.add('hidden');
+    
+    // Stop any active video stream
+    if (bioUpdateVideoStream) {
+        bioUpdateVideoStream.getTracks().forEach(track => track.stop());
+        bioUpdateVideoStream = null;
+    }
+}
+
+async function loadBiometricUpdateOptions() {
+    const optionsDiv = document.getElementById('bioUpdateOptions');
+    const available = await biometricManager.checkAvailableBiometrics();
+    
+    const currentType = currentUser.biometricType || (currentUser.faceDescriptor ? 'face' : 'none');
+    
+    let html = '<label style="display:block; margin-bottom:10px;">اختر البصمة الجديدة:</label>';
+    html += '<div style="display:flex; flex-direction:column; gap:10px;">';
+    
+    available.forEach(bio => {
+        const isCurrent = bio.type === currentType;
+        const badge = isCurrent ? '<span style="background:var(--primary); padding:2px 8px; border-radius:4px; font-size:0.7rem; margin-right:5px;">الحالية</span>' : '';
+        const speedBadge = bio.isHardware ? '<span style="background:var(--secondary); padding:2px 8px; border-radius:4px; font-size:0.7rem; margin-right:5px;">⚡ سريع</span>' : '';
+        const recommended = bio.priority === 1 ? '<span style="background:#f59e0b; padding:2px 8px; border-radius:4px; font-size:0.7rem; margin-right:5px;">موصى به</span>' : '';
+        
+        html += `
+            <button class="btn-primary" style="text-align:right; ${isCurrent ? 'opacity:0.6;' : ''} ${bio.priority === 1 ? 'background:var(--secondary);' : ''}"
+                onclick="selectBioUpdateType('${bio.type}')" ${isCurrent ? 'disabled' : ''}>
+                ${bio.icon} ${bio.name}
+                <div style="font-size:0.75rem; margin-top:5px;">${badge}${speedBadge}${recommended}</div>
+            </button>
+        `;
+    });
+    
+    html += '</div>';
+    optionsDiv.innerHTML = html;
+}
+
+async function selectBioUpdateType(type) {
+    bioUpdateType = type;
+    bioUpdateData = null;
+    
+    // Hide all sections first
+    document.getElementById('bioUpdateFaceSection').classList.add('hidden');
+    document.getElementById('bioUpdateHardwareSection').classList.add('hidden');
+    
+    if (type === 'face') {
+        // Camera-based face
+        document.getElementById('bioUpdateFaceSection').classList.remove('hidden');
+        
+        // Start video
+        const video = document.getElementById('bioUpdateVideo');
+        try {
+            bioUpdateVideoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+            video.srcObject = bioUpdateVideoStream;
+        } catch (e) {
+            alert('لا يمكن الوصول للكاميرا: ' + e.message);
+        }
+    } else if (type === 'fingerprint' || type === 'face_hardware') {
+        // Hardware biometric
+        document.getElementById('bioUpdateHardwareSection').classList.remove('hidden');
+        
+        const isFaceId = type === 'face_hardware';
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        
+        const label = isFaceId ? (isIOS ? 'Face ID' : 'Face Unlock') : 'بصمة الإصبع';
+        const icon = isFaceId ? '📱' : '👆';
+        const desc = isFaceId ? 'استخدم بصمة وجهك للتسجيل' : 'اضغط الزر أدناه لتسجيل بصمة إصبعك';
+        const btnText = isFaceId ? 'تسجيل Face ID' : 'تسجيل بصمة الإصبع';
+        
+        document.getElementById('bioUpdateHardwareIcon').innerText = icon;
+        document.getElementById('bioUpdateHardwareDesc').innerText = desc;
+        document.getElementById('bioUpdateHardwareBtn').innerText = btnText;
+    }
+}
+
+async function captureBioUpdateFace() {
+    const video = document.getElementById('bioUpdateVideo');
+    const statusEl = document.getElementById('bioUpdateFaceStatus');
+    
+    statusEl.classList.remove('hidden');
+    statusEl.innerText = 'جاري مسح الوجه...';
+    statusEl.className = '';
+    
+    try {
+        const result = await biometricManager.enroll('face', { videoElement: video, modelUrl: MODEL_URL });
+        bioUpdateData = result;
+        
+        statusEl.innerText = '✓ تم التقاط بصمة الوجه بنجاح!';
+        statusEl.className = 'success-text';
+        playSuccessSound();
+    } catch (e) {
+        statusEl.innerText = '✗ ' + (e.message || 'فشل في التقاط الوجه');
+        statusEl.className = 'error-text';
+        playErrorSound();
+    }
+}
+
+async function captureBioUpdateHardware() {
+    const statusEl = document.getElementById('bioUpdateHardwareStatus');
+    const isFaceId = bioUpdateType === 'face_hardware';
+    
+    statusEl.classList.remove('hidden');
+    statusEl.innerText = isFaceId ? 'استخدم Face ID للتسجيل...' : 'ضع إصبعك على الماسح...';
+    statusEl.className = '';
+    
+    try {
+        const result = await biometricManager.enroll(bioUpdateType, { 
+            userId: currentUser.id, 
+            userName: currentUser.name 
+        });
+        bioUpdateData = result;
+        
+        const successMsg = isFaceId ? '✓ تم تسجيل Face ID بنجاح!' : '✓ تم تسجيل بصمة الإصبع بنجاح!';
+        statusEl.innerText = successMsg;
+        statusEl.className = 'success-text';
+        playSuccessSound();
+    } catch (e) {
+        const errorMsg = isFaceId ? '✗ فشل في تسجيل Face ID' : '✗ فشل في تسجيل بصمة الإصبع';
+        statusEl.innerText = errorMsg + ': ' + (e.message || '');
+        statusEl.className = 'error-text';
+        playErrorSound();
+    }
+}
+
+async function saveBiometricUpdate() {
+    if (!bioUpdateType || !bioUpdateData) {
+        alert('اختر نوع البصمة وسجلها أولاً');
+        return;
+    }
+    
+    document.getElementById('loader').classList.remove('hidden');
+    
+    try {
+        const payload = {
+            action: 'updateEmployee',
+            id: currentUser.id,
+            name: currentUser.name,
+            email: currentUser.email,
+            phone: currentUser.phone,
+            role: currentUser.role,
+            assignedSites: currentUser.assignedSites ? currentUser.assignedSites.join(',') : '',
+            biometricType: bioUpdateData.type,
+            biometricData: JSON.stringify(bioUpdateData.data),
+            // Legacy field
+            faceDescriptor: bioUpdateData.type === 'face' ? JSON.stringify(bioUpdateData.data) : null
+        };
+        
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        
+        const result = await res.json();
+        
+        if (result.success) {
+            // Update local user data
+            currentUser.biometricType = bioUpdateData.type;
+            currentUser.biometricData = JSON.stringify(bioUpdateData.data);
+            if (bioUpdateData.type === 'face') {
+                currentUser.faceDescriptor = JSON.stringify(bioUpdateData.data);
+            }
+            localStorage.setItem('empSession', JSON.stringify(currentUser));
+            
+            alert('✅ تم تحديث البصمة بنجاح! سيتم إعادة تحميل الصفحة...');
+            location.reload();
+        } else {
+            alert('❌ خطأ: ' + result.message);
+        }
+    } catch (e) {
+        console.error(e);
+        alert('❌ حدث خطأ في الاتصال');
+    } finally {
+        document.getElementById('loader').classList.add('hidden');
+    }
+}
+
 // Cleanup resources when leaving the page to prevent memory leaks and battery drain
 window.addEventListener('beforeunload', () => {
     if (faceDetectionInterval) clearInterval(faceDetectionInterval);
     if (timerInterval) clearInterval(timerInterval);
     if (geolocationWatchId !== null) navigator.geolocation.clearWatch(geolocationWatchId);
+    
+    // Stop biometric update video if active
+    if (bioUpdateVideoStream) {
+        bioUpdateVideoStream.getTracks().forEach(track => track.stop());
+    }
 });
