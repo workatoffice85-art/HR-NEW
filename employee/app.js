@@ -237,18 +237,24 @@ async function initBiometricRegistration() {
     const selectionDiv = document.getElementById('biometricSelection');
     const optionsDiv = document.getElementById('biometricOptions');
     
-    // Show selection if multiple options
+    // AUTO-SELECT: Always pick the fastest (priority 1) for best performance
+    const bestBiometric = availableBiometrics[0]; // Already sorted by priority
+    
     if (availableBiometrics.length > 1) {
+        // Show options but pre-select the best (highlighted)
         selectionDiv.classList.remove('hidden');
         optionsDiv.innerHTML = availableBiometrics.map(bio => `
-            <button class="btn-primary" style="flex:1; min-width: 140px; ${bio.priority === 1 ? 'background:var(--secondary);' : 'background:var(--primary);'}"
+            <button class="btn-primary" style="flex:1; min-width: 140px; ${bio.priority === 1 ? 'background:var(--secondary); transform:scale(1.05);' : 'background:var(--primary); opacity:0.8;'}"
                 onclick="selectBiometricType('${bio.type}')">
                 ${bio.icon} ${bio.name}
-                ${bio.priority === 1 ? '<br><small>(موصى به)</small>' : ''}
+                ${bio.priority === 1 ? '<br><small>⚡ الأسرع</small>' : '<br><small>بديل</small>'}
             </button>
         `).join('');
+        
+        // Auto-select the best after short delay so user sees it
+        setTimeout(() => selectBiometricType(bestBiometric.type), 500);
     } else {
-        // Auto-select if only one available
+        // Only one option - select immediately
         selectionDiv.classList.add('hidden');
         selectBiometricType(availableBiometrics[0].type);
     }
