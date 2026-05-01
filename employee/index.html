@@ -110,6 +110,128 @@
             opacity: 0.5;
             cursor: not-allowed;
         }
+
+        /* Biometric Method Selector */
+        .biometric-selector {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .method-btn {
+            padding: 12px 15px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            color: #fff;
+            font-size: 0.95rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .method-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .method-btn.active {
+            background: var(--secondary);
+            border-color: var(--secondary);
+            color: #fff;
+        }
+
+        .method-icon {
+            font-size: 1.2rem;
+        }
+
+        /* Fingerprint Container */
+        .fingerprint-container {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 16px;
+            padding: 40px 20px;
+            text-align: center;
+            margin-bottom: 20px;
+            border: 2px dashed rgba(255, 255, 255, 0.2);
+        }
+
+        .fingerprint-icon {
+            font-size: 4rem;
+            margin-bottom: 15px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.7; }
+        }
+
+        .fingerprint-status {
+            font-size: 1.1rem;
+            font-weight: 500;
+            margin-bottom: 20px;
+        }
+
+        .fingerprint-waiting {
+            color: var(--text-muted);
+        }
+
+        .fingerprint-success {
+            color: var(--secondary);
+        }
+
+        .fingerprint-error {
+            color: var(--danger);
+        }
+
+        .btn-test-fingerprint {
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: var(--text-muted);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.3s ease;
+        }
+
+        .btn-test-fingerprint:hover {
+            background: rgba(255, 255, 255, 0.2);
+            color: #fff;
+        }
+
+        /* Refresh Button */
+        .btn-refresh {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 15px;
+            background: rgba(59, 130, 246, 0.2);
+            border: 1px solid rgba(59, 130, 246, 0.4);
+            color: #3b82f6;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .btn-refresh:hover {
+            background: rgba(59, 130, 246, 0.3);
+            transform: translateY(-1px);
+        }
+
+        .btn-refresh:active {
+            transform: translateY(0);
+        }
     </style>
 </head>
 
@@ -207,14 +329,45 @@
                 <p id="siteText" style="color:var(--text-muted); font-size:0.9rem;"></p>
             </div>
 
+            <!-- Biometric Method Selector -->
+            <div class="biometric-selector">
+                <button id="btnFaceMethod" class="method-btn active" onclick="switchBiometricMethod('face')">
+                    <span class="method-icon">📷</span>
+                    <span>بصمة الوجه</span>
+                </button>
+                <button id="btnFingerprintMethod" class="method-btn" onclick="switchBiometricMethod('fingerprint')">
+                    <span class="method-icon">👆</span>
+                    <span>بصمة الإصبع</span>
+                </button>
+            </div>
+
             <div id="loader" class="loader hidden"></div>
 
-            <div class="camera-container">
+            <!-- Camera Container (hidden when fingerprint mode) -->
+            <div class="camera-container" id="cameraContainer">
                 <video id="videoElement" autoplay muted playsinline></video>
                 <canvas id="overlay"></canvas>
             </div>
 
+            <!-- Fingerprint Status (shown when fingerprint mode) -->
+            <div id="fingerprintContainer" class="fingerprint-container hidden">
+                <div class="fingerprint-icon">👆</div>
+                <div id="fingerprintStatus" class="fingerprint-status">
+                    <span class="fingerprint-waiting">ضع إصبعك على جهاز البصمة...</span>
+                </div>
+                <!-- Test button for development (remove in production) -->
+                <button class="btn-test-fingerprint" onclick="simulateFingerprintScan()">
+                    محاكاة بصمة (للاختبار)
+                </button>
+            </div>
+
             <div id="statusMessage">جاري تهيئة النظام...</div>
+
+            <!-- Refresh Button -->
+            <button class="btn-refresh" onclick="refreshSystem()" title="تحديث النظام">
+                <span>🔄</span>
+                <span>تحديث</span>
+            </button>
 
             <!-- Timer Display -->
             <div id="timerContainer" class="hidden"

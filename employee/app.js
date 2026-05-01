@@ -19,6 +19,12 @@ let tempEmail = ""; // used during registration
 let tempPhone = ""; // used during registration
 let allOfficialHolidays = [];
 let appSettings = {}; // Store system settings including weekend days
+
+// Biometric method settings
+let currentBiometricMethod = 'face'; // 'face' or 'fingerprint'
+let isFingerprintVerified = false;
+let fingerprintTimeout = null;
+let videoStream = null;
 const MODEL_URL = '../models';
 
 // Helper: Extract Cairo time from ISO string (format: 2026-04-26T09:34:48+02:00)
@@ -44,12 +50,170 @@ function formatCairoDate(isoString) {
     if (!isoString) return '-';
     const match = isoString.match(/^(\d{4})-(\d{2})-(\d{2})/);
     if (!match) return isoString;
-    
+
     const year = match[1];
     const month = match[2];
     const day = match[3];
-    
+
     return `${day}/${parseInt(month, 10)}/${year}`;
+}
+
+// Biometric Method Functions
+function switchBiometricMethod(method) {
+    currentBiometricMethod = method;
+
+    // Update UI buttons
+    const faceBtn = document.getElementById('btnFaceMethod');
+    const fingerBtn = document.getElementById('btnFingerprintMethod');
+    const cameraContainer = document.getElementById('cameraContainer');
+    const fingerprintContainer = document.getElementById('fingerprintContainer');
+
+    if (faceBtn && fingerBtn) {
+        if (method === 'face') {
+            faceBtn.classList.add('active');
+            fingerBtn.classList.remove('active');
+        } else {
+            faceBtn.classList.remove('active');
+            fingerBtn.classList.add('active');
+        }
+    }
+
+    if (method === 'fingerprint') {
+        // Hide camera, show fingerprint
+        if (cameraContainer) cameraContainer.classList.add('hidden');
+        if (fingerprintContainer) fingerprintContainer.classList.remove('hidden');
+        // Stop camera and face detection
+        stopCamera();
+        setStatus('تم اختيار بصمة الإصبع - في انتظار البصمة من الجهاز...', 'text-muted');
+        startFingerprintSimulation();
+    } else {
+        // Show camera, hide fingerprint
+        if (cameraContainer) cameraContainer.classList.remove('hidden');
+        if (fingerprintContainer) fingerprintContainer.classList.add('hidden');
+        // Stop fingerprint
+        stopFingerprintSimulation();
+        isFingerprintVerified = false;
+        // Restart camera
+        startVideo();
+        setStatus('تم اختيار بصمة الوجه - وجه الكاميرا إليك', 'text-muted');
+    }
+
+    updateActionButtonsState();
+}
+
+function stopCamera() {
+    // Clear face detection interval
+    if (faceDetectionInterval) {
+        clearInterval(faceDetectionInterval);
+        faceDetectionInterval = null;
+    }
+
+    // Stop video stream
+    const video = document.getElementById('videoElement');
+    if (video && video.srcObject) {
+        video.srcObject.getTracks().forEach(track => track.stop());
+        video.srcObject = null;
+    }
+
+    // Clear canvas
+    const canvas = document.getElementById('overlay');
+    if (canvas) {
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    isFaceVerified = false;
+}
+
+function refreshSystem() {
+    setStatus('جاري تحديث النظام...', 'text-muted');
+
+    // Reset verification states
+    isFaceVerified = false;
+    isFingerprintVerified = false;
+    consecutiveSuccessFrames = 0;
+
+    if (currentBiometricMethod === 'face') {
+        stopCamera();
+        startVideo();
+    } else {
+        stopFingerprintSimulation();
+        startFingerprintSimulation();
+    }
+
+    // Refresh location
+    getLocation();
+
+    // Refresh attendance status
+    checkCurrentStatus();
+
+    setStatus('تم تحديث النظام ✓', 'success-text');
+}
+
+// Fingerprint simulation for external hardware device
+function startFingerprintSimulation() {
+    // Clear any existing timeout
+    if (fingerprintTimeout) {
+        clearTimeout(fingerprintTimeout);
+    }
+
+    // Reset state
+    isFingerprintVerified = false;
+    currentFaceDescriptor = null;
+
+    // Show waiting message
+    const fingerprintStatus = document.getElementById('fingerprintStatus');
+    if (fingerprintStatus) {
+        fingerprintStatus.innerHTML = '<span class="fingerprint-waiting">ضع إصبعك على جهاز البصمة...</span>';
+    }
+
+    // Simulate waiting for hardware fingerprint reader
+    // In real implementation, this would listen to the hardware device events
+    // For now, we simulate with a button press or keyboard shortcut
+}
+
+function stopFingerprintSimulation() {
+    if (fingerprintTimeout) {
+        clearTimeout(fingerprintTimeout);
+        fingerprintTimeout = null;
+    }
+    isFingerprintVerified = false;
+}
+
+// Function to be called when fingerprint hardware detects a fingerprint
+function onFingerprintDetected(fingerprintId) {
+    // Verify the fingerprint matches the current user
+    // In real implementation, this would verify against the hardware/database
+    if (fingerprintId === currentUser.id || fingerprintId === 'verified') {
+        isFingerprintVerified = true;
+        currentFaceDescriptor = 'fingerprint_' + new Date().getTime(); // Dummy descriptor for attendance
+
+        const fingerprintStatus = document.getElementById('fingerprintStatus');
+        if (fingerprintStatus) {
+            fingerprintStatus.innerHTML = '<span class="fingerprint-success">تم التحقق من البصمة بنجاح ✓</span>';
+        }
+
+        setStatus('تم التحقق من بصمة الإصبع ✓', 'success-text');
+        playSuccessSound();
+        vibrateSuccess();
+    } else {
+        isFingerprintVerified = false;
+        const fingerprintStatus = document.getElementById('fingerprintStatus');
+        if (fingerprintStatus) {
+            fingerprintStatus.innerHTML = '<span class="fingerprint-error">البصمة غير متطابقة ✗</span>';
+        }
+        setStatus('البصمة غير متطابقة', 'error-text');
+        playErrorSound();
+        vibrateError();
+    }
+
+    updateActionButtonsState();
+}
+
+// Manual fingerprint trigger for testing (simulating hardware detection)
+function simulateFingerprintScan() {
+    if (currentBiometricMethod !== 'fingerprint') return;
+    onFingerprintDetected(currentUser.id);
 }
 
 // Audio feedback functions
@@ -361,6 +525,18 @@ async function initSystem() {
         setStatus('⚠️ لم يتم تسجيل بصمة وجه. وجّه الكاميرا إليك...', 'text-muted');
     }
 
+    // Initialize biometric UI state
+    const cameraContainer = document.getElementById('cameraContainer');
+    const fingerprintContainer = document.getElementById('fingerprintContainer');
+    const faceBtn = document.getElementById('btnFaceMethod');
+    const fingerBtn = document.getElementById('btnFingerprintMethod');
+
+    // Set default state (face mode)
+    if (cameraContainer) cameraContainer.classList.remove('hidden');
+    if (fingerprintContainer) fingerprintContainer.classList.add('hidden');
+    if (faceBtn) faceBtn.classList.add('active');
+    if (fingerBtn) fingerBtn.classList.remove('active');
+
     startVideo();
     getLocation();
 }
@@ -423,9 +599,17 @@ function setAppState(state, startTime) {
 function updateActionButtonsState() {
     const btnIn = document.getElementById('btnCheckIn');
     const btnOut = document.getElementById('btnCheckOut');
-    
-    const shouldBeEnabled = isFaceVerified && lastDetectedSite;
-    
+
+    // Check verification based on current biometric method
+    let isVerified = false;
+    if (currentBiometricMethod === 'face') {
+        isVerified = isFaceVerified;
+    } else {
+        isVerified = isFingerprintVerified;
+    }
+
+    const shouldBeEnabled = isVerified && lastDetectedSite;
+
     if (btnIn && btnIn.disabled !== !shouldBeEnabled) {
         btnIn.disabled = !shouldBeEnabled;
     }
@@ -705,7 +889,14 @@ function vibrateError() {
 
 async function handleCheckIn() {
     if(isCheckInProgress) return; // Prevent duplicate clicks
-    if(!currentFaceDescriptor) return alert('بصمة الوجه غير ملتقطة الحين');
+
+    // Check biometric verification based on current method
+    if (currentBiometricMethod === 'face') {
+        if(!currentFaceDescriptor) return alert('بصمة الوجه غير ملتقطة الحين');
+    } else {
+        if(!isFingerprintVerified) return alert('بصمة الإصبع غير متطابقة - ضع إصبعك على الجهاز');
+    }
+
     if(!lastLocation) return alert('يجب تفعيل الـ GPS');
 
     isCheckInProgress = true;
@@ -800,7 +991,13 @@ async function forceCloseAndRecheckIn(openSessionId, originalPayload) {
 }
 
 async function handleCheckOut() {
-    if(!currentFaceDescriptor) return alert('بصمة الوجه غير ملتقطة الحين');
+    // Check biometric verification based on current method
+    if (currentBiometricMethod === 'face') {
+        if(!currentFaceDescriptor) return alert('بصمة الوجه غير ملتقطة الحين');
+    } else {
+        if(!isFingerprintVerified) return alert('بصمة الإصبع غير متطابقة - ضع إصبعك على الجهاز');
+    }
+
     if(!lastLocation) return alert('يجب تفعيل الـ GPS');
 
     document.getElementById('loader').classList.remove('hidden');
