@@ -528,6 +528,13 @@ async function initBiometricSystem() {
     // Determine user's biometric type
     const userBioType = currentUser.biometricType || (currentUser.faceDescriptor ? 'face' : null);
     
+    console.log('🔐 initBiometricSystem - userBioType:', userBioType);
+    console.log('🔐 currentUser data:', { 
+        biometricType: currentUser?.biometricType, 
+        faceDescriptor: currentUser?.faceDescriptor ? 'exists' : 'null',
+        biometricData: currentUser?.biometricData ? 'exists' : 'null'
+    });
+    
     if (!userBioType) {
         setStatus('⚠️ لم يتم تسجيل بصمة. يرجى التواصل مع HR', 'error-text');
         return;
@@ -535,7 +542,10 @@ async function initBiometricSystem() {
     
     // Check device capabilities
     const availableBiometrics = await biometricManager.checkAvailableBiometrics();
+    console.log('🔐 Available biometrics:', availableBiometrics.map(b => b.type));
+    
     const deviceSupportsUserBio = availableBiometrics.some(b => b.type === userBioType);
+    console.log('🔐 Device supports user bio:', deviceSupportsUserBio);
     
     if (!deviceSupportsUserBio) {
         // User registered with biometric but device doesn't support it
@@ -547,9 +557,11 @@ async function initBiometricSystem() {
     
     // Setup based on biometric type
     if (userBioType === 'face') {
+        console.log('🔐 Initializing face verification...');
         await initFaceVerification();
     } else if (userBioType === 'fingerprint' || userBioType === 'face_hardware') {
         // Both hardware types use same flow
+        console.log('🔐 Initializing hardware biometric:', userBioType);
         await initHardwareBiometricVerification(userBioType);
     }
 }
@@ -557,14 +569,23 @@ async function initBiometricSystem() {
 async function initFaceVerification() {
     try {
         const biometricData = currentUser.biometricData || currentUser.faceDescriptor;
+        console.log('🔐 initFaceVerification - biometricData exists:', !!biometricData);
+        
         if (!biometricData) {
             setStatus('⚠️ لم يتم تسجيل بصمة وجه', 'error-text');
             return;
         }
         
-        const descArray = new Float32Array(JSON.parse(biometricData));
+        const parsedData = JSON.parse(biometricData);
+        console.log('🔐 Parsed biometric data type:', typeof parsedData, 'isArray:', Array.isArray(parsedData));
+        
+        const descArray = new Float32Array(parsedData);
+        console.log('🔐 Descriptor array length:', descArray.length);
+        
         const labeledDescriptor = new faceapi.LabeledFaceDescriptors(currentUser.name, [descArray]);
         faceMatcher = new faceapi.FaceMatcher([labeledDescriptor], 0.6);
+        
+        console.log('🔐 Face matcher initialized successfully');
         setStatus('✅ النظام جاهز. وجّه الكاميرا إليك...', 'success-text');
     } catch(e) {
         setStatus('⚠️ خطأ في قراءة بصمة الوجه المسجلة', 'error-text');
@@ -666,6 +687,13 @@ function setAppState(state, startTime) {
 function updateActionButtonsState() {
     const btnIn = document.getElementById('btnCheckIn');
     const btnOut = document.getElementById('btnCheckOut');
+    
+    // Debug currentUser data
+    console.log('👤 currentUser Debug:', {
+        biometricType: currentUser?.biometricType,
+        faceDescriptor: currentUser?.faceDescriptor ? 'exists' : 'null',
+        biometricData: currentUser?.biometricData ? 'exists' : 'null'
+    });
     
     const userBioType = currentUser?.biometricType || (currentUser?.faceDescriptor ? 'face' : null);
     
@@ -801,6 +829,9 @@ function startVideo() {
                         } else {
                             setStatus('تم التحقق من الوجه بنجاح ✓', 'success-text');
                         }
+                        
+                        // Ensure buttons are updated immediately
+                        updateActionButtonsState();
 
                         // Reset counter after 5 seconds to resume checking
                         if (consecutiveSuccessFrames === 3) {
@@ -894,6 +925,8 @@ function onPositionSuccess(position) {
     } else {
         setStatus('تم تحديد الموقع ✓', 'success-text');
     }
+    // Ensure buttons are updated immediately after location detected
+    updateActionButtonsState();
     startWatchingPosition();
 }
 
