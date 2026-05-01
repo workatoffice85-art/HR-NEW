@@ -559,9 +559,17 @@ if (action === "login") {
 
             // 0.6 Additional protection: Check if there's ANY record in the last 30 seconds
             // regardless of checkout status - prevents duplicate check-ins entirely
-            // Use SERVER time (not client time) to prevent issues with incorrect device clock
-            const rateLimitNow = new Date();
+            // Use Cairo time (not UTC) to match the stored checkIn times
+            const rateLimitNow = getCairoTime(new Date());
             const thirtySecondsAgo = new Date(rateLimitNow.getTime() - 30000);
+            
+            console.log('🚨 Rate Limit Debug:', {
+                serverTime: new Date().toISOString(),
+                cairoTime: rateLimitNow.toISOString(),
+                thirtySecondsAgo: thirtySecondsAgo.toISOString(),
+                employeeId: data.employeeId
+            });
+            
             const { data: anyRecentRecord } = await supabase.from('attendance')
                 .select('id, checkIn, checkOut')
                 .eq('employeeId', data.employeeId)
@@ -569,15 +577,24 @@ if (action === "login") {
                 .order('checkIn', { ascending: false })
                 .limit(1);
 
+            console.log('🚨 Recent records found:', anyRecentRecord?.length || 0);
+            
             if (anyRecentRecord && anyRecentRecord.length > 0) {
                 const lastRecordTime = new Date(anyRecentRecord[0].checkIn);
                 const secondsElapsed = Math.floor((rateLimitNow - lastRecordTime) / 1000);
                 const secondsRemaining = 30 - secondsElapsed;
                 
+                console.log('🚨 Last record:', {
+                    checkIn: anyRecentRecord[0].checkIn,
+                    parsedTime: lastRecordTime.toISOString(),
+                    secondsElapsed,
+                    secondsRemaining
+                });
+                
                 return res.status(200).json({
                     success: false,
                     duplicateEntry: true,
-                    message: `تم تسجيل حضور منذ ${secondsElapsed} ثانية. يرجى الانتظار ${secondsRemaining} ثانية أخرى قبل إعادة المحاولة.`
+                    message: `تم تسجيل حضور منذ ${secondsElapsed} ثانية. يرجى الانتظار ${Math.max(0, secondsRemaining)} ثانية أخرى قبل إعادة المحاولة.`
                 });
             }
 
