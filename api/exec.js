@@ -559,7 +559,9 @@ if (action === "login") {
 
             // 0.6 Additional protection: Check if there's ANY record in the last 30 seconds
             // regardless of checkout status - prevents duplicate check-ins entirely
-            const thirtySecondsAgo = new Date(clientCheckIn.getTime() - 30000);
+            // Use SERVER time (not client time) to prevent issues with incorrect device clock
+            const rateLimitNow = new Date();
+            const thirtySecondsAgo = new Date(rateLimitNow.getTime() - 30000);
             const { data: anyRecentRecord } = await supabase.from('attendance')
                 .select('id, checkIn, checkOut')
                 .eq('employeeId', data.employeeId)
@@ -568,10 +570,14 @@ if (action === "login") {
                 .limit(1);
 
             if (anyRecentRecord && anyRecentRecord.length > 0) {
+                const lastRecordTime = new Date(anyRecentRecord[0].checkIn);
+                const secondsElapsed = Math.floor((rateLimitNow - lastRecordTime) / 1000);
+                const secondsRemaining = 30 - secondsElapsed;
+                
                 return res.status(200).json({
                     success: false,
                     duplicateEntry: true,
-                    message: "تم تسجيل حضور في الثواني الأخيرة. يرجى الانتظار 30 ثانية قبل إعادة المحاولة."
+                    message: `تم تسجيل حضور منذ ${secondsElapsed} ثانية. يرجى الانتظار ${secondsRemaining} ثانية أخرى قبل إعادة المحاولة.`
                 });
             }
 
