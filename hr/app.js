@@ -120,8 +120,10 @@ function showTab(tabName) {
     if (tabName === 'settings') fetchSettings();
     if (tabName === 'officialHolidays') fetchOfficialHolidays();
     if (tabName === 'deviceManagement') {
-        fetchDeviceChangeRequests();
-        fetchAllDevices();
+        // Non-blocking fetch to improve INP
+        setTimeout(() => {
+            Promise.all([fetchDeviceChangeRequests(), fetchAllDevices()]);
+        }, 0);
     }
 
     // Close sidebar on mobile after clicking a link
@@ -178,8 +180,9 @@ function renderActiveTab(tabName) {
     if (tabName === 'allowanceRequests') renderAllowanceRequestsTable(allAllowanceRequests);
     if (tabName === 'settings') renderSettings(appSettings);
     if (tabName === 'deviceManagement') {
-        fetchDeviceChangeRequests();
-        fetchAllDevices();
+        setTimeout(() => {
+            Promise.all([fetchDeviceChangeRequests(), fetchAllDevices()]);
+        }, 0);
     }
 }
 
@@ -2525,7 +2528,7 @@ function renderDevicesTable(devices) {
 
 async function deleteDevice(deviceId, userId, deviceIdString) {
     if (!confirm('⚠️ هل أنت متأكد من حذف هذا الجهاز؟\n\nسيتم أيضاً حذف جميع سجلات الحضور المرتبطة بهذا الجهاز.\n\nهذا الإجراء لا يمكن التراجع عنه!')) return;
-    
+
     document.getElementById('loader').classList.remove('hidden');
     try {
         const res = await fetch(API_URL, {
@@ -2533,7 +2536,8 @@ async function deleteDevice(deviceId, userId, deviceIdString) {
             body: JSON.stringify({
                 action: 'deleteDevice',
                 deviceId: deviceId,
-                userId: userId
+                userId: userId,
+                deviceIdString: deviceIdString
             }),
             headers: { 'Content-Type': 'text/plain' }
         });

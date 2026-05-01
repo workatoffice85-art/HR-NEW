@@ -1758,38 +1758,42 @@ if (action === "updateEmployee") {
 
         // --- DELETE DEVICE (Admin) ---
         if (action === "deleteDevice") {
-            const { deviceId, userId } = data;
-            
+            const { deviceId, userId, deviceIdString } = data;
+
             if (!deviceId || !userId) {
                 return res.status(200).json({ success: false, message: "بيانات غير مكتملة" });
             }
-            
+
+            // Use deviceIdString (the actual device fingerprint) for attendance deletion
+            const actualDeviceId = deviceIdString || deviceId;
+
             // 1. Delete all attendance records linked to this device
             const { data: deletedAttendance, error: attError } = await supabase
                 .from('attendance')
                 .delete()
-                .eq('device_id', deviceId)
+                .eq('device_id', actualDeviceId)
                 .eq('employeeId', userId)
                 .select();
             
             if (attError) {
                 console.error('Error deleting attendance:', attError);
             }
-            
-            // 2. Delete the device
+
+            // 2. Delete the device (using UUID)
             const { error: deviceError } = await supabase
                 .from('devices')
                 .delete()
                 .eq('id', deviceId)
                 .eq('user_id', userId);
-            
+
             if (deviceError) {
                 return res.status(200).json({ success: false, message: "فشل حذف الجهاز" });
             }
-            
-            return res.status(200).json({ 
-                success: true, 
-                message: `تم حذف الجهاز بنجاح${deletedAttendance ? ` و ${deletedAttendance.length} سجل حضور مرتبط` : ''}` 
+
+            const attendanceCount = deletedAttendance ? deletedAttendance.length : 0;
+            return res.status(200).json({
+                success: true,
+                message: `تم حذف الجهاز بنجاح${attendanceCount > 0 ? ` و ${attendanceCount} سجل حضور مرتبط` : ''}`
             });
         }
 
