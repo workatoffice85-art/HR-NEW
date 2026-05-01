@@ -81,6 +81,7 @@
             <a class="nav-link" onclick="showTab('sites')">إدارة المواقع</a>
             <a class="nav-link" onclick="showTab('siteRequests')">طلبات تسجيل المواقع 📍</a>
             <a class="nav-link" onclick="showTab('allowanceRequests')">زيادة البدلات 💰</a>
+            <a class="nav-link" onclick="showTab('deviceManagement')">إدارة الأجهزة 📱</a>
             <a class="nav-link" onclick="showTab('officialHolidays')">الإجازات الرسمية 📅</a>
             <a class="nav-link" onclick="showTab('settings')">الإعدادات ⚙️</a>
             <a class="nav-link" onclick="logout()" style="color:var(--danger); margin-top:50px;">تسجيل خروج</a>
@@ -390,6 +391,75 @@
                             </tr>
                         </tbody>
                     </table>
+                </div>
+            </div>
+
+            <!-- Device Management Tab -->
+            <div id="tab-deviceManagement" class="tab-content hidden">
+                <h2>إدارة الأجهزة 📱</h2>
+                
+                <!-- Device Change Requests Section -->
+                <div class="glass-card" style="padding:20px; margin-bottom:20px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                        <h3 style="color:var(--secondary); margin:0;">طلبات تغيير الجهاز</h3>
+                        <div style="display:flex; gap:10px;">
+                            <select id="deviceRequestFilter" onchange="fetchDeviceChangeRequests()" style="padding:8px; border-radius:6px; background:rgba(0,0,0,0.2); color:#fff; border:1px solid var(--card-border);">
+                                <option value="">الكل</option>
+                                <option value="pending">قيد الانتظار</option>
+                                <option value="approved">مقبول</option>
+                                <option value="rejected">مرفوض</option>
+                            </select>
+                            <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="fetchDeviceChangeRequests()">تحديث 🔄</button>
+                        </div>
+                    </div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>الموظف</th>
+                                    <th>الجهاز القديم</th>
+                                    <th>الجهاز الجديد</th>
+                                    <th>نظام التشغيل</th>
+                                    <th>التاريخ</th>
+                                    <th>الحالة</th>
+                                    <th>الإجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody id="deviceRequestsTableBody">
+                                <tr>
+                                    <td colspan="7" style="text-align:center; color:var(--text-muted);">جاري تحميل البيانات...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Registered Devices Section -->
+                <div class="glass-card" style="padding:20px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                        <h3 style="color:var(--secondary); margin:0;">الأجهزة المسجلة</h3>
+                        <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="fetchAllDevices()">تحديث 🔄</button>
+                    </div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>الموظف</th>
+                                    <th>معرف الجهاز</th>
+                                    <th>الطراز</th>
+                                    <th>نظام التشغيل</th>
+                                    <th>تاريخ التسجيل</th>
+                                    <th>الحالة</th>
+                                    <th>الإجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody id="devicesTableBody">
+                                <tr>
+                                    <td colspan="7" style="text-align:center; color:var(--text-muted);">جاري تحميل البيانات...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 

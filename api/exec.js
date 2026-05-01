@@ -141,6 +141,141 @@ function validateAmount(amount) {
     return !isNaN(num) && num > 0 && num <= 10000; // Reasonable allowance amount
 }
 
+// ============================================
+// DEVICE VERIFICATION FUNCTIONS
+// ============================================
+
+/**
+ * Verify device for user attendance
+ * Returns: { allowed: boolean, message?: string, deviceRegistered: boolean }
+ * 
+ * Logic:
+ * - If no device registered for user -> Register this device and allow
+ * - If device registered and matches -> Allow
+ * - If device registered but different -> Reject (needs admin approval)
+ */
+async function verifyDeviceForAttendance(supabase, userId, deviceId, deviceInfo) {
+    try {
+        // 1. Check if user has any registered devices
+        const { data: userDevices, error: devicesError } = await supabase
+            .from('devices')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('is_active', true);
+        
+        if (devicesError) {
+            console.error('Device verification error:', devicesError);
+            return { allowed: false, message: 'خطأ في التحقق من الجهاز', deviceRegistered: false };
+        }
+        
+        // 2. No device registered - this is the first time
+        if (!userDevices || userDevices.length === 0) {
+            // Auto-register this device
+            const { error: insertError } = await supabase
+                .from('devices')
+                .insert([{
+                    user_id: userId,
+                    device_id: deviceId,
+                    device_model: deviceInfo?.deviceModel || 'Unknown',
+                    os_type: deviceInfo?.osType || 'Unknown',
+                    browser_info: deviceInfo?.browserInfo || 'Unknown',
+                    is_active: true,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                }]);
+            
+            if (insertError) {
+                console.error('Device registration error:', insertError);
+                return { allowed: false, message: 'فشل تسجيل الجهاز', deviceRegistered: false };
+            }
+            
+            return { allowed: true, deviceRegistered: true, isNewDevice: true };
+        }
+        
+        // 3. Check if current device matches any registered device
+        const matchingDevice = userDevices.find(d => d.device_id === deviceId);
+        
+        if (matchingDevice) {
+            // Device matches - allow attendance
+            return { allowed: true, deviceRegistered: true, isNewDevice: false };
+        }
+        
+        // 4. Device doesn't match - check if there's a pending request
+        const { data: pendingRequest, error: requestError } = await supabase
+            .from('device_change_requests')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('new_device_id', deviceId)
+            .eq('status', 'pending')
+            .maybeSingle();
+        
+        if (pendingRequest) {
+            return { 
+                allowed: false, 
+                message: 'طلب تغيير الجهاز قيد المراجعة. يرجى الانتظار موافقة الإدارة.',
+                deviceRegistered: true,
+                hasPendingRequest: true
+            };
+        }
+        
+        // 5. Device doesn't match and no pending request - reject
+        return { 
+            allowed: false, 
+            message: 'الجهاز غير معتمد. يرجى طلب تغيير الجهاز من الإدارة.',
+            deviceRegistered: true,
+            registeredDeviceId: userDevices[0]?.device_id
+        };
+        
+    } catch (error) {
+        console.error('Device verification exception:', error);
+        return { allowed: false, message: 'خطأ في التحقق من الجهاز', deviceRegistered: false };
+    }
+}
+
+/**
+ * Create a device change request
+ */
+async function createDeviceChangeRequest(supabase, userId, userName, oldDeviceId, newDeviceInfo, reason) {
+    try {
+        // Check if there's already a pending request for this user
+        const { data: existingRequest } = await supabase
+            .from('device_change_requests')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('status', 'pending')
+            .maybeSingle();
+        
+        if (existingRequest) {
+            return { success: false, message: 'لديك طلب تغيير جهاز قيد المراجعة بالفعل' };
+        }
+        
+        const { error } = await supabase
+            .from('device_change_requests')
+            .insert([{
+                user_id: userId,
+                user_name: userName,
+                old_device_id: oldDeviceId,
+                new_device_id: newDeviceInfo.deviceId,
+                new_device_model: newDeviceInfo.deviceModel || 'Unknown',
+                new_os_type: newDeviceInfo.osType || 'Unknown',
+                new_browser_info: newDeviceInfo.browserInfo || 'Unknown',
+                reason: reason || '',
+                status: 'pending',
+                created_at: new Date().toISOString()
+            }]);
+        
+        if (error) {
+            console.error('Create device change request error:', error);
+            return { success: false, message: 'فشل إنشاء طلب تغيير الجهاز' };
+        }
+        
+        return { success: true, message: 'تم إرسال طلب تغيير الجهاز بنجاح' };
+    } catch (error) {
+        console.error('Create device change request exception:', error);
+        return { success: false, message: 'حدث خطأ أثناء إنشاء الطلب' };
+    }
+}
+
 // Helper: Distance calculation in meters
 function getDistance(lat1, lon1, lat2, lon2) {
   const R = 6371e3;
@@ -502,7 +637,39 @@ if (action === "login") {
         // --- ADD ATTENDANCE (CHECK-IN) ---
         if (action === "addAttendance") {
             console.log("addAttendance called with data:", JSON.stringify(data));
-            // 0. Double Check-In Prevention
+            
+            // 0. DEVICE VERIFICATION (Mandatory Layer)
+            // Verify device before allowing attendance
+            const deviceId = data.deviceId;
+            const deviceInfo = data.deviceInfo || {};
+            
+            if (!deviceId) {
+                return res.status(200).json({ 
+                    success: false, 
+                    message: "مطلوب معرف الجهاز (Device ID) للتسجيل" 
+                });
+            }
+            
+            const deviceCheck = await verifyDeviceForAttendance(
+                supabase, 
+                data.employeeId, 
+                deviceId, 
+                deviceInfo
+            );
+            
+            if (!deviceCheck.allowed) {
+                return res.status(200).json({ 
+                    success: false, 
+                    message: deviceCheck.message,
+                    deviceRejected: true,
+                    hasPendingRequest: deviceCheck.hasPendingRequest || false
+                });
+            }
+            
+            // Device is verified - include device_id in attendance record
+            const attendanceDeviceId = deviceId;
+            
+            // 0.1 Double Check-In Prevention
             const { data: openAtt } = await supabase.from('attendance')
                 .select('id, checkIn, status')
                 .eq('employeeId', data.employeeId)
@@ -599,7 +766,7 @@ if (action === "login") {
             }
 
             // 1. Biometric/PIN Check - BLOCK password-only authentication
-            // Must have biometric data (face only) - NO PIN/password fallback
+            // Must have biometric data (face, fingerprint, or Face ID) - NO PIN/password fallback
             const userBioType = data.biometricType || (data.faceDescriptor ? 'face' : null);
             
             // REJECT if no biometric data provided (password/PIN not allowed)
@@ -617,10 +784,10 @@ if (action === "login") {
                 throw new Error("⚠️ لم يتم تسجيل بصمة لهذا الموظف - يرجى التواصل مع HR");
             }
             
-            // Check if employee has face biometric registered
+            // Check if employee has ANY biometric registered (face, fingerprint, or Face ID)
             const hasBiometric = empBioData.biometricData || empBioData.faceDescriptor;
             if (!hasBiometric) {
-                throw new Error("⚠️ لم يتم تسجيل بصمة لهذا الموظف - يرجى التواصل مع HR لتسجيل الوجه");
+                throw new Error("⚠️ لم يتم تسجيل بصمة لهذا الموظف - يرجى التواصل مع HR لتسجيل الوجه أو البصمة");
             }
 
             // 2. Check Location logic
@@ -732,7 +899,8 @@ if (action === "login") {
                 latitude: data.latitude,
                 longitude: data.longitude,
                 status: status,
-                transportPrice: finalTransport
+                transportPrice: finalTransport,
+                device_id: attendanceDeviceId
             };
 
             const { error } = await supabase.from('attendance').insert([payload]);
@@ -747,7 +915,7 @@ if (action === "login") {
         // --- CHECK OUT ---
         if (action === "checkoutAttendance") {
             // 0. Biometric/PIN Check - BLOCK password-only authentication
-            // Must have biometric data (face only) - NO PIN/password fallback
+            // Must have biometric data (face, fingerprint, or Face ID) - NO PIN/password fallback
             if (!data.biometricData && !data.faceDescriptor) {
                 throw new Error("⚠️ مطلوب بصمة للتسجيل - لا يُسمح باستخدام PIN أو كلمة المرور للانصراف");
             }
@@ -762,10 +930,10 @@ if (action === "login") {
                 throw new Error("⚠️ لم يتم تسجيل بصمة لهذا الموظف - يرجى التواصل مع HR");
             }
             
-            // Check if employee has face biometric registered
+            // Check if employee has ANY biometric registered (face, fingerprint, or Face ID)
             const hasBiometric = empBioData.biometricData || empBioData.faceDescriptor;
             if (!hasBiometric) {
-                throw new Error("⚠️ لم يتم تسجيل بصمة لهذا الموظف - يرجى التواصل مع HR لتسجيل الوجه");
+                throw new Error("⚠️ لم يتم تسجيل بصمة لهذا الموظف - يرجى التواصل مع HR لتسجيل الوجه أو البصمة");
             }
 
             // Support checkout by specific ID (for force-close) or latest open session
@@ -1399,6 +1567,239 @@ if (action === "updateEmployee") {
             };
 
             return res.status(200).json({ success: true, data: stats });
+        }
+
+        // ============================================
+        // DEVICE MANAGEMENT SYSTEM
+        // ============================================
+
+        // --- SUBMIT DEVICE CHANGE REQUEST (Employee) ---
+        if (action === "submitDeviceChangeRequest") {
+            const { employeeId, employeeName, currentDeviceId, newDeviceInfo, reason } = data;
+            
+            if (!employeeId || !newDeviceInfo?.deviceId) {
+                return res.status(200).json({ success: false, message: "بيانات غير مكتملة" });
+            }
+            
+            const result = await createDeviceChangeRequest(
+                supabase, 
+                employeeId, 
+                employeeName, 
+                currentDeviceId, 
+                newDeviceInfo, 
+                reason
+            );
+            
+            return res.status(200).json(result);
+        }
+
+        // --- GET DEVICE CHANGE REQUESTS (Admin) ---
+        if (action === "getDeviceChangeRequests") {
+            const { status } = data;
+            let query = supabase
+                .from('device_change_requests')
+                .select('*')
+                .order('created_at', { ascending: false });
+            
+            if (status) {
+                query = query.eq('status', status);
+            }
+            
+            const { data: requests, error } = await query;
+            if (error) throw error;
+            
+            return res.status(200).json({ success: true, data: requests || [] });
+        }
+
+        // --- APPROVE DEVICE CHANGE REQUEST (Admin) ---
+        if (action === "approveDeviceChangeRequest") {
+            const { requestId, adminId, adminName } = data;
+            
+            // 1. Get the request
+            const { data: request, error: reqError } = await supabase
+                .from('device_change_requests')
+                .select('*')
+                .eq('id', requestId)
+                .single();
+            
+            if (reqError || !request) {
+                return res.status(200).json({ success: false, message: "الطلب غير موجود" });
+            }
+            
+            if (request.status !== 'pending') {
+                return res.status(200).json({ success: false, message: "تمت معالجة هذا الطلب مسبقاً" });
+            }
+            
+            // 2. Deactivate old device (if exists)
+            if (request.old_device_id) {
+                await supabase
+                    .from('devices')
+                    .update({ is_active: false, updated_at: new Date().toISOString() })
+                    .eq('user_id', request.user_id)
+                    .eq('device_id', request.old_device_id);
+            }
+            
+            // 3. Deactivate any other active devices for this user
+            await supabase
+                .from('devices')
+                .update({ is_active: false, updated_at: new Date().toISOString() })
+                .eq('user_id', request.user_id)
+                .eq('is_active', true);
+            
+            // 4. Add new device
+            const { error: insertError } = await supabase
+                .from('devices')
+                .insert([{
+                    user_id: request.user_id,
+                    device_id: request.new_device_id,
+                    device_model: request.new_device_model || 'Unknown',
+                    os_type: request.new_os_type || 'Unknown',
+                    browser_info: request.new_browser_info || 'Unknown',
+                    is_active: true,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                }]);
+            
+            if (insertError) {
+                return res.status(200).json({ success: false, message: "فشل إضافة الجهاز الجديد" });
+            }
+            
+            // 5. Update request status
+            const { error: updateError } = await supabase
+                .from('device_change_requests')
+                .update({
+                    status: 'approved',
+                    processed_at: new Date().toISOString(),
+                    processed_by: adminId || adminName || 'admin'
+                })
+                .eq('id', requestId);
+            
+            if (updateError) {
+                return res.status(200).json({ success: false, message: "فشل تحديث حالة الطلب" });
+            }
+            
+            return res.status(200).json({ 
+                success: true, 
+                message: `تم الموافقة على طلب تغيير الجهاز بنجاح. الجهاز الجديد مسجل للموظف.` 
+            });
+        }
+
+        // --- REJECT DEVICE CHANGE REQUEST (Admin) ---
+        if (action === "rejectDeviceChangeRequest") {
+            const { requestId, adminNote, adminId, adminName } = data;
+            
+            const { data: request, error: reqError } = await supabase
+                .from('device_change_requests')
+                .select('*')
+                .eq('id', requestId)
+                .single();
+            
+            if (reqError || !request) {
+                return res.status(200).json({ success: false, message: "الطلب غير موجود" });
+            }
+            
+            if (request.status !== 'pending') {
+                return res.status(200).json({ success: false, message: "تمت معالجة هذا الطلب مسبقاً" });
+            }
+            
+            const { error } = await supabase
+                .from('device_change_requests')
+                .update({
+                    status: 'rejected',
+                    admin_note: adminNote || '',
+                    processed_at: new Date().toISOString(),
+                    processed_by: adminId || adminName || 'admin'
+                })
+                .eq('id', requestId);
+            
+            if (error) {
+                return res.status(200).json({ success: false, message: "فشل رفض الطلب" });
+            }
+            
+            return res.status(200).json({ success: true, message: "تم رفض طلب تغيير الجهاز بنجاح" });
+        }
+
+        // --- GET ALL DEVICES (Admin) ---
+        if (action === "getAllDevices") {
+            const { data: devices, error } = await supabase
+                .from('devices')
+                .select(`
+                    *,
+                    employees:user_id (name, email, phone)
+                `)
+                .order('created_at', { ascending: false });
+            
+            if (error) throw error;
+            
+            // Format the data to include user info
+            const formattedDevices = (devices || []).map(d => ({
+                ...d,
+                userName: d.employees?.name || 'Unknown',
+                userEmail: d.employees?.email || '',
+                userPhone: d.employees?.phone || ''
+            }));
+            
+            return res.status(200).json({ success: true, data: formattedDevices });
+        }
+
+        // --- DELETE DEVICE (Admin) ---
+        if (action === "deleteDevice") {
+            const { deviceId, userId } = data;
+            
+            if (!deviceId || !userId) {
+                return res.status(200).json({ success: false, message: "بيانات غير مكتملة" });
+            }
+            
+            // 1. Delete all attendance records linked to this device
+            const { data: deletedAttendance, error: attError } = await supabase
+                .from('attendance')
+                .delete()
+                .eq('device_id', deviceId)
+                .eq('employeeId', userId)
+                .select();
+            
+            if (attError) {
+                console.error('Error deleting attendance:', attError);
+            }
+            
+            // 2. Delete the device
+            const { error: deviceError } = await supabase
+                .from('devices')
+                .delete()
+                .eq('id', deviceId)
+                .eq('user_id', userId);
+            
+            if (deviceError) {
+                return res.status(200).json({ success: false, message: "فشل حذف الجهاز" });
+            }
+            
+            return res.status(200).json({ 
+                success: true, 
+                message: `تم حذف الجهاز بنجاح${deletedAttendance ? ` و ${deletedAttendance.length} سجل حضور مرتبط` : ''}` 
+            });
+        }
+
+        // --- GET USER DEVICE INFO (Employee/Admin) ---
+        if (action === "getUserDevice") {
+            const { userId } = data;
+            
+            if (!userId) {
+                return res.status(200).json({ success: false, message: "معرف المستخدم مطلوب" });
+            }
+            
+            const { data: devices, error } = await supabase
+                .from('devices')
+                .select('*')
+                .eq('user_id', userId)
+                .eq('is_active', true);
+            
+            if (error) throw error;
+            
+            return res.status(200).json({ 
+                success: true, 
+                data: devices || [],
+                hasDevice: devices && devices.length > 0
+            });
         }
 
         // --- UTILS ---

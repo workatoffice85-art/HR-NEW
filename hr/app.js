@@ -119,6 +119,10 @@ function showTab(tabName) {
     if (tabName === 'employeeDetails') initEmployeeDetailedTab();
     if (tabName === 'settings') fetchSettings();
     if (tabName === 'officialHolidays') fetchOfficialHolidays();
+    if (tabName === 'deviceManagement') {
+        fetchDeviceChangeRequests();
+        fetchAllDevices();
+    }
 
     // Close sidebar on mobile after clicking a link
     const sidebar = document.querySelector('.sidebar');
@@ -173,6 +177,10 @@ function renderActiveTab(tabName) {
     if (tabName === 'siteRequests') renderRequestsTable(allSiteRequests);
     if (tabName === 'allowanceRequests') renderAllowanceRequestsTable(allAllowanceRequests);
     if (tabName === 'settings') renderSettings(appSettings);
+    if (tabName === 'deviceManagement') {
+        fetchDeviceChangeRequests();
+        fetchAllDevices();
+    }
 }
 
 async function fetchAttendance(force = false) {
@@ -2330,5 +2338,215 @@ async function clearProcessedAllowances() {
             await fetchAllowanceRequests(true); // Refresh data
         } else alert("خطأ: " + result.message);
     } catch(e) { console.error(e); alert("خطأ في الاتصال"); }
+    document.getElementById('loader').classList.add('hidden');
+}
+
+// ============================================
+// DEVICE MANAGEMENT FUNCTIONS
+// ============================================
+
+async function fetchDeviceChangeRequests() {
+    const filter = document.getElementById('deviceRequestFilter')?.value || '';
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'getDeviceChangeRequests', status: filter }),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+        if (result.success) {
+            renderDeviceChangeRequests(result.data || []);
+        }
+    } catch (e) {
+        console.error('Error fetching device change requests:', e);
+    }
+    document.getElementById('loader').classList.add('hidden');
+}
+
+function renderDeviceChangeRequests(requests) {
+    const tbody = document.getElementById('deviceRequestsTableBody');
+    tbody.innerHTML = '';
+    
+    if (requests.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--text-muted);">لا توجد طلبات</td></tr>`;
+        return;
+    }
+    
+    requests.forEach(req => {
+        let statusText = '';
+        let statusColor = '';
+        let actions = '';
+        
+        if (req.status === 'pending') {
+            statusText = 'قيد الانتظار';
+            statusColor = '#f59e0b';
+            actions = `
+                <button class="btn-primary" style="width:auto; padding:5px 10px; font-size:0.8rem; background:var(--secondary);" onclick="approveDeviceChangeRequest('${req.id}')">موافقة</button>
+                <button class="btn-danger" style="width:auto; padding:5px 10px; font-size:0.8rem;" onclick="rejectDeviceChangeRequest('${req.id}')">رفض</button>
+            `;
+        } else if (req.status === 'approved') {
+            statusText = 'مقبول';
+            statusColor = 'var(--secondary)';
+            actions = '<span style="color:var(--text-muted); font-size:0.8rem;">تمت الموافقة</span>';
+        } else if (req.status === 'rejected') {
+            statusText = 'مرفوض';
+            statusColor = 'var(--danger)';
+            actions = '<span style="color:var(--text-muted); font-size:0.8rem;">تم الرفض</span>';
+        }
+        
+        const createdAt = formatCairoDate(req.created_at) + ' ' + formatCairoTime(req.created_at);
+        const oldDeviceShort = req.old_device_id ? req.old_device_id.substring(0, 20) + '...' : 'لا يوجد';
+        const newDeviceShort = req.new_device_id ? req.new_device_id.substring(0, 20) + '...' : 'غير معروف';
+        
+        tbody.innerHTML += `
+            <tr>
+                <td data-label="الموظف">${req.user_name || req.user_id}</td>
+                <td data-label="الجهاز القديم" title="${req.old_device_id || ''}">${oldDeviceShort}</td>
+                <td data-label="الجهاز الجديد" title="${req.new_device_id || ''}">${newDeviceShort}</td>
+                <td data-label="نظام التشغيل">${req.new_os_type || '-'}</td>
+                <td data-label="التاريخ">${createdAt}</td>
+                <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
+                <td data-label="الإجراءات" style="display:flex; gap:5px;">${actions}</td>
+            </tr>
+        `;
+    });
+}
+
+async function approveDeviceChangeRequest(requestId) {
+    if (!confirm('هل أنت متأكد من الموافقة على تغيير الجهاز؟ سيتم إلغاء تفعيل الجهاز القديم وتفعيل الجهاز الجديد.')) return;
+    
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({
+                action: 'approveDeviceChangeRequest',
+                requestId: requestId,
+                adminId: hrSession.id,
+                adminName: hrSession.name
+            }),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+        if (result.success) {
+            alert('✅ ' + result.message);
+            fetchDeviceChangeRequests();
+            fetchAllDevices();
+        } else {
+            alert('❌ ' + result.message);
+        }
+    } catch (e) {
+        console.error('Error approving device change:', e);
+        alert('حدث خطأ في الاتصال');
+    }
+    document.getElementById('loader').classList.add('hidden');
+}
+
+async function rejectDeviceChangeRequest(requestId) {
+    const adminNote = prompt('سبب الرفض (اختياري):');
+    if (adminNote === null) return; // Cancelled
+    
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({
+                action: 'rejectDeviceChangeRequest',
+                requestId: requestId,
+                adminNote: adminNote,
+                adminId: hrSession.id,
+                adminName: hrSession.name
+            }),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+        if (result.success) {
+            alert('✅ ' + result.message);
+            fetchDeviceChangeRequests();
+        } else {
+            alert('❌ ' + result.message);
+        }
+    } catch (e) {
+        console.error('Error rejecting device change:', e);
+        alert('حدث خطأ في الاتصال');
+    }
+    document.getElementById('loader').classList.add('hidden');
+}
+
+async function fetchAllDevices() {
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'getAllDevices' }),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+        if (result.success) {
+            renderDevicesTable(result.data || []);
+        }
+    } catch (e) {
+        console.error('Error fetching devices:', e);
+    }
+    document.getElementById('loader').classList.add('hidden');
+}
+
+function renderDevicesTable(devices) {
+    const tbody = document.getElementById('devicesTableBody');
+    tbody.innerHTML = '';
+    
+    if (devices.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--text-muted);">لا توجد أجهزة مسجلة</td></tr>`;
+        return;
+    }
+    
+    devices.forEach(device => {
+        const statusText = device.is_active ? 'نشط' : 'غير نشط';
+        const statusColor = device.is_active ? 'var(--secondary)' : 'var(--text-muted)';
+        const createdAt = formatCairoDate(device.created_at) + ' ' + formatCairoTime(device.created_at);
+        const deviceIdShort = device.device_id ? device.device_id.substring(0, 20) + '...' : '-';
+        
+        tbody.innerHTML += `
+            <tr>
+                <td data-label="الموظف">${device.userName || device.user_id}</td>
+                <td data-label="معرف الجهاز" title="${device.device_id || ''}">${deviceIdShort}</td>
+                <td data-label="الطراز">${device.device_model || '-'}</td>
+                <td data-label="نظام التشغيل">${device.os_type || '-'}</td>
+                <td data-label="تاريخ التسجيل">${createdAt}</td>
+                <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
+                <td data-label="الإجراءات">
+                    <button class="btn-danger" style="width:auto; padding:5px 10px; font-size:0.8rem;" onclick="deleteDevice('${device.id}', '${device.user_id}', '${device.device_id}')">حذف</button>
+                </td>
+            </tr>
+        `;
+    });
+}
+
+async function deleteDevice(deviceId, userId, deviceIdString) {
+    if (!confirm('⚠️ هل أنت متأكد من حذف هذا الجهاز؟\n\nسيتم أيضاً حذف جميع سجلات الحضور المرتبطة بهذا الجهاز.\n\nهذا الإجراء لا يمكن التراجع عنه!')) return;
+    
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({
+                action: 'deleteDevice',
+                deviceId: deviceId,
+                userId: userId
+            }),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+        if (result.success) {
+            alert('✅ ' + result.message);
+            fetchAllDevices();
+        } else {
+            alert('❌ ' + result.message);
+        }
+    } catch (e) {
+        console.error('Error deleting device:', e);
+        alert('حدث خطأ في الاتصال');
+    }
     document.getElementById('loader').classList.add('hidden');
 }
