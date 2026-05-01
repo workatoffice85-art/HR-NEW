@@ -1393,6 +1393,18 @@ if (action === "updateEmployee") {
             return res.status(200).json({ success: true, message: `تم مسح ${count} طلب بدلات منتهي بنجاح` });
         }
 
+        if (action === "clearProcessedDeviceRequests") {
+            // Delete all device change requests that have been processed (approved or rejected)
+            const { data: deletedData, error } = await supabase
+                .from('device_change_requests')
+                .delete()
+                .in('status', ['approved', 'rejected'])
+                .select();
+            if (error) throw error;
+            const count = deletedData ? deletedData.length : 0;
+            return res.status(200).json({ success: true, message: `تم مسح ${count} طلب تغيير جهاز منتهي بنجاح` });
+        }
+
         // --- OFFICIAL HOLIDAYS ---
         if (action === "getOfficialHolidays") {
             const { data: holidays, error } = await supabase.from('official_holidays').select('*').order('holidayDate', { ascending: true });

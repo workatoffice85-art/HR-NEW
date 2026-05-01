@@ -2550,3 +2550,27 @@ async function deleteDevice(deviceId, userId, deviceIdString) {
     }
     document.getElementById('loader').classList.add('hidden');
 }
+
+async function clearProcessedDeviceRequests() {
+    if (!confirm('هل أنت متأكد من مسح جميع طلبات تغيير الجهاز التي تمت الموافقة عليها أو رفضها؟ هذا الإجراء لا يمكن التراجع عنه.')) return;
+    
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'clearProcessedDeviceRequests' }),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+        if (result.success) {
+            alert('✅ ' + result.message);
+            await fetchDeviceChangeRequests();
+        } else {
+            alert('❌ ' + result.message);
+        }
+    } catch (e) {
+        console.error('Error clearing processed device requests:', e);
+        alert('حدث خطأ في الاتصال');
+    }
+    document.getElementById('loader').classList.add('hidden');
+}
