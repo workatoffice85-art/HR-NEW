@@ -409,6 +409,8 @@ if (action === "login") {
                     role: user.role,
                     assignedSites: user.assignedSites ? String(user.assignedSites).split(',').map((s) => s.trim()).filter(Boolean) : [],
                     faceDescriptor: user.faceDescriptor,
+                    biometricType: user.biometricType || (user.faceDescriptor ? 'face' : null),
+                    biometricData: user.biometricData || user.faceDescriptor,
                     transportPrice: user.transportPrice,
                     salary: user.salary || 0
                 }
@@ -840,6 +842,8 @@ if (action === "saveEmployee") {
                  role: data.role || 'employee',
                  assignedSites: data.assignedSites || '',
                  faceDescriptor: data.faceDescriptor || null,
+                 biometricType: data.biometricType || (data.faceDescriptor ? 'face' : null),
+                 biometricData: data.biometricData || data.faceDescriptor || null,
                  salary: data.salary || 0,
                  transportPrice: data.transportPrice || 0
              };
@@ -885,6 +889,8 @@ if (action === "updateEmployee") {
              };
              
              if (data.faceDescriptor) payload.faceDescriptor = data.faceDescriptor;
+             if (data.biometricType) payload.biometricType = data.biometricType;
+             if (data.biometricData) payload.biometricData = data.biometricData;
              if (data.password) payload.password = hashedPassword;
              
              // 1. Update employees table

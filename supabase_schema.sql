@@ -10,7 +10,9 @@ CREATE TABLE IF NOT EXISTS employees (
     phone TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'employee',
     "assignedSites" TEXT,
-    "faceDescriptor" TEXT,
+    "faceDescriptor" TEXT, -- DEPRECATED: use biometricData instead
+    "biometricType" TEXT DEFAULT 'face', -- 'face' or 'fingerprint'
+    "biometricData" TEXT, -- JSON string: face descriptor OR WebAuthn credential ID
     "transportPrice" NUMERIC DEFAULT 0,
     salary NUMERIC DEFAULT 0
 );
