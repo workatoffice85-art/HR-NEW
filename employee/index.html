@@ -8,7 +8,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../assets/global.css?v=1.1">
     <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
-    <script defer src="biometric-manager.js"></script>
     <style>
         .portal-container {
             max-width: 500px;
@@ -184,17 +183,9 @@
                 <input type="password" id="regPass" placeholder="******">
             </div>
 
-            <!-- Biometric Selection -->
-            <div id="biometricSelection" class="hidden" style="margin-bottom: 15px; text-align: center;">
-                <label style="display:block; margin-bottom:10px;">اختر طريقة البصمة <small>(بصمة واحدة فقط لكل موظف)</small></label>
-                <div id="biometricOptions" style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
-                    <!-- Options will be populated by JS -->
-                </div>
-            </div>
-
-            <!-- Face Registration Section -->
-            <div id="faceRegistrationSection" class="hidden" style="margin-bottom: 15px; text-align: center;">
-                <label style="display:block; margin-bottom:10px;">التقط بصمة الوجه <small>(هام جداً للحضور)</small></label>
+            <div style="margin-bottom: 15px; text-align: center;">
+                <label style="display:block; margin-bottom:10px;">التقط بصمة الوجه <small>(هام جداً
+                        للحضور)</small></label>
                 <div class="camera-container" style="height: 250px;">
                     <video id="regVideo" autoplay muted playsinline></video>
                     <canvas id="regCanvas"></canvas>
@@ -202,18 +193,6 @@
                 <button class="btn-primary" style="background:var(--secondary); width:80%"
                     onclick="captureFaceRegistration()">التقاط البصمة</button>
                 <p id="regStatusMessage" class="hidden"></p>
-            </div>
-
-            <!-- Fingerprint Registration Section -->
-            <div id="fingerprintRegistrationSection" class="hidden" style="margin-bottom: 15px; text-align: center;">
-                <label style="display:block; margin-bottom:10px;">بصمة الإصبع <small>(هامة جداً للحضور)</small></label>
-                <div style="padding: 40px; background: rgba(255,255,255,0.05); border-radius: 12px; border: 2px dashed rgba(16, 185, 129, 0.3);">
-                    <div style="font-size: 3rem; margin-bottom: 10px;">👆</div>
-                    <p style="color: var(--text-muted);">اضغط الزر أدناه لتسجيل بصمة إصبعك</p>
-                </div>
-                <button class="btn-primary" style="background:var(--secondary); width:80%; margin-top: 15px;"
-                    onclick="captureFingerprintRegistration()">تسجيل بصمة الإصبع</button>
-                <p id="fingerprintRegStatusMessage" class="hidden"></p>
             </div>
 
             <button class="btn-primary" onclick="completeRegistration()" id="btnCompleteReg">حفظ وإنشاء الحساب</button>
