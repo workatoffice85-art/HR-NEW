@@ -229,110 +229,31 @@ async function startRegistrationVideo() {
         .catch(err => alert("لا يمكن الوصول للكاميرا"));
 }
 
-// Biometric Registration Functions
+// Biometric Registration Functions - Camera Face Only
 async function initBiometricRegistration() {
     const availableBiometrics = await biometricManager.checkAvailableBiometrics();
     
-    // DEBUG: Log what was detected
-    console.log('=== BIOMETRIC DETECTION DEBUG ===');
-    console.log('Available biometrics:', availableBiometrics);
-    console.log('User Agent:', navigator.userAgent);
-    console.log('PublicKeyCredential available:', !!window.PublicKeyCredential);
-    
     if (availableBiometrics.length === 0) {
-        showError('regError', 'جهازك لا يدعم بيومتريك (وجه أو بصمة)');
+        showError('regError', 'جهازك لا يدعم الكاميرا - مطلوب كاميرا للتسجيل');
         return;
     }
     
-    const selectionDiv = document.getElementById('biometricSelection');
-    const optionsDiv = document.getElementById('biometricOptions');
-    
-    // AUTO-SELECT: Always pick the fastest (priority 1) for best performance
-    const bestBiometric = availableBiometrics[0]; // Already sorted by priority
-    const hasHardware = availableBiometrics.some(b => b.isHardware);
-    
-    console.log('Has hardware:', hasHardware);
-    console.log('Best biometric:', bestBiometric);
-    console.log('===================================');
-    
-    // Show detection result to user (temporary for debugging)
-    const detectionMsg = hasHardware 
-        ? `✅ تم اكتشاف بصمة hardware: ${bestBiometric.name}`
-        : `📷 لم يتم اكتشاف hardware - سيتم استخدام الكاميرا`;
-    console.log(detectionMsg);
-    
-    // TEMP: Show alert for debugging (remove after testing)
-    setTimeout(() => {
-        alert('Biometric Detection:\n' + availableBiometrics.map(b => `${b.icon} ${b.name} (priority: ${b.priority}, hardware: ${b.isHardware})`).join('\n'));
-    }, 1000);
-    
-    if (availableBiometrics.length > 1) {
-        // Show options but pre-select the best (highlighted)
-        selectionDiv.classList.remove('hidden');
-        optionsDiv.innerHTML = availableBiometrics.map(bio => `
-            <button class="btn-primary" style="flex:1; min-width: 140px; ${bio.priority === 1 ? 'background:var(--secondary); transform:scale(1.05);' : 'background:var(--primary); opacity:0.8;'}"
-                onclick="selectBiometricType('${bio.type}')">
-                ${bio.icon} ${bio.name}
-                ${bio.priority === 1 ? '<br><small>⚡ الأسرع</small>' : '<br><small>بديل</small>'}
-            </button>
-        `).join('');
-        
-        // Auto-select the best after short delay so user sees it
-        setTimeout(() => selectBiometricType(bestBiometric.type), 500);
-    } else if (hasHardware) {
-        // Only hardware option - select immediately
-        selectionDiv.classList.add('hidden');
-        selectBiometricType(availableBiometrics[0].type);
-    } else {
-        // Only camera available (no hardware) - select immediately and show message
-        selectionDiv.classList.add('hidden');
-        selectBiometricType(availableBiometrics[0].type);
-        
-        // Show info that only camera is available
-        const infoEl = document.createElement('div');
-        infoEl.className = 'text-muted';
-        infoEl.style.cssText = 'text-align:center; margin-bottom:15px; font-size:0.85rem;';
-        infoEl.innerHTML = '📷 جهازك يدعم بصمة الوجه بالكاميرا فقط';
-        
-        // Insert before face registration section
-        const faceSection = document.getElementById('faceRegistrationSection');
-        if (faceSection && !faceSection.previousElementSibling?.classList?.contains('bio-info')) {
-            infoEl.classList.add('bio-info');
-            faceSection.parentNode.insertBefore(infoEl, faceSection);
-        }
-    }
+    // Only camera-based face is available - show it directly
+    document.getElementById('biometricSelection').classList.add('hidden');
+    document.getElementById('faceRegistrationSection').classList.remove('hidden');
+    document.getElementById('fingerprintRegistrationSection').classList.add('hidden');
+    startRegistrationVideo();
 }
 
+// selectBiometricType is no longer needed - only camera face is used
 function selectBiometricType(type) {
-    userBiometricType = type;
-    
-    // Hide selection and show appropriate section
-    document.getElementById('biometricSelection').classList.add('hidden');
-    document.getElementById('faceRegistrationSection').classList.add('hidden');
-    document.getElementById('fingerprintRegistrationSection').classList.add('hidden');
-    
+    // Only camera face is supported
     if (type === 'face') {
-        // Camera-based face recognition
+        userBiometricType = 'face';
+        document.getElementById('biometricSelection').classList.add('hidden');
         document.getElementById('faceRegistrationSection').classList.remove('hidden');
+        document.getElementById('fingerprintRegistrationSection').classList.add('hidden');
         startRegistrationVideo();
-    } else if (type === 'fingerprint' || type === 'face_hardware') {
-        // Hardware biometric (fingerprint or Face ID) - both use same WebAuthn flow
-        document.getElementById('fingerprintRegistrationSection').classList.remove('hidden');
-        
-        // Update UI based on type
-        const isFaceId = type === 'face_hardware';
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-        
-        const label = isFaceId ? (isIOS ? 'Face ID' : 'Face Unlock') : 'بصمة الإصبع';
-        const icon = isFaceId ? '📱' : '👆';
-        const desc = isFaceId ? 'استخدم بصمة وجهك للتسجيل' : 'اضغط الزر أدناه لتسجيل بصمة إصبعك';
-        const btnText = isFaceId ? 'تسجيل Face ID' : 'تسجيل بصمة الإصبع';
-        
-        // Update all UI elements
-        document.getElementById('hardwareBioLabel').innerHTML = `${label} <small>(هام جداً للحضور)</small>`;
-        document.getElementById('hardwareBioIcon').innerText = icon;
-        document.getElementById('hardwareBioDesc').innerText = desc;
-        document.getElementById('hardwareBioBtn').innerText = btnText;
     }
 }
 
@@ -358,35 +279,10 @@ async function captureFaceRegistration() {
     }
 }
 
+// captureFingerprintRegistration removed - only camera face is supported
 async function captureFingerprintRegistration() {
-    const statusEl = document.getElementById('fingerprintRegStatusMessage');
-    const bioType = userBiometricType || 'fingerprint'; // 'fingerprint' or 'face_hardware'
-    const isFaceId = bioType === 'face_hardware';
-    
-    statusEl.classList.remove('hidden');
-    statusEl.innerText = isFaceId ? 'استخدم Face ID للتسجيل...' : 'ضع إصبعك على الماسح...';
-    statusEl.className = '';
-    
-    try {
-        const name = document.getElementById('regName').value.trim() || 'User';
-        const result = await biometricManager.enroll(bioType, { 
-            userId: 'TEMP_' + Date.now(), 
-            userName: name 
-        });
-        registeredBiometricData = result;
-        
-        const successMsg = isFaceId ? 'تم تسجيل Face ID بنجاح ✓' : 'تم تسجيل بصمة الإصبع بنجاح ✓';
-        statusEl.innerText = successMsg;
-        statusEl.className = 'success-text';
-        playSuccessSound();
-        vibrateSuccess();
-    } catch (e) {
-        const errorMsg = isFaceId ? 'فشل في تسجيل Face ID' : 'فشل في تسجيل بصمة الإصبع';
-        statusEl.innerText = e.message || errorMsg;
-        statusEl.className = 'error-text';
-        playErrorSound();
-        vibrateError();
-    }
+    // No longer supported - fingerprint registration disabled
+    alert('Fingerprint registration is no longer supported. Please use camera face recognition.');
 }
 
 // 5. Complete Registration
@@ -394,7 +290,7 @@ async function completeRegistration() {
     const name = document.getElementById('regName').value.trim();
     const pass = document.getElementById('regPass').value.trim();
     if(!name || !pass || !registeredBiometricData) {
-        return showError('regError', 'أكمل بياناتك وسجل بصمة واحدة (وجه أو إصبع)');
+        return showError('regError', 'أكمل بياناتك وسجل بصمة الوجه');
     }
 
     document.getElementById('btnCompleteReg').innerText = 'جاري الإنشاء...';
@@ -498,16 +394,8 @@ async function initSystem() {
     // Step 3: Setup Biometric System
     await initBiometricSystem();
 
-    // Step 4: Start video only for camera-based face recognition users
-    // For hardware biometric users (fingerprint/face_id), hide camera and don't start video
-    const userBioType = currentUser.biometricType || (currentUser.faceDescriptor ? 'face' : null);
-    if (userBioType === 'face') {
-        startVideo();
-    } else {
-        // Hide camera container for hardware biometric users
-        const cameraContainer = document.querySelector('.camera-container');
-        if (cameraContainer) cameraContainer.classList.add('hidden');
-    }
+    // Step 4: Start video for face recognition
+    startVideo();
     getLocation();
 }
 
@@ -525,7 +413,7 @@ function processAttendanceStatus(data) {
     }
 }
 
-// Initialize biometric system based on user registered biometric type
+// Initialize biometric system - only camera face recognition
 async function initBiometricSystem() {
     // Determine user's biometric type
     const userBioType = currentUser.biometricType || (currentUser.faceDescriptor ? 'face' : null);
@@ -537,20 +425,10 @@ async function initBiometricSystem() {
     }
     
     // Show biometric type badge
-    const bioNames = {
-        'face': '📷 كاميرا',
-        'fingerprint': '👆 بصمة إصبع',
-        'face_hardware': '📱 Face ID'
-    };
-    document.getElementById('bioTypeBadge').innerText = bioNames[userBioType] || '📷 كاميرا';
+    document.getElementById('bioTypeBadge').innerText = '📷 كاميرا';
     
-    // Setup based on registered biometric type
-    if (userBioType === 'face') {
-        await initFaceVerification();
-    } else {
-        // Hardware biometric (fingerprint or Face ID)
-        await initHardwareBiometricVerification(userBioType);
-    }
+    // Setup face verification
+    await initFaceVerification();
 }
 
 async function initFaceVerification() {
@@ -593,82 +471,15 @@ async function initFaceVerification() {
     }
 }
 
-async function initHardwareBiometricVerification(bioType) {
-    try {
-        const biometricData = currentUser.biometricData || currentUser.faceDescriptor;
-        if (!biometricData) {
-            const typeName = bioType === 'face_hardware' ? 'Face ID' : 'بصمة الإصبع';
-            setStatus(`⚠️ لم يتم تسجيل ${typeName}`, 'error-text');
-            return;
-        }
-        
-        // For hardware biometrics, we don't need to load face models
-        // Just show ready status
-        const typeName = bioType === 'face_hardware' ? 'Face ID' : 'بصمة إصبعك';
-        const icon = bioType === 'face_hardware' ? '📱' : '👆';
-        setStatus(`✅ النظام جاهز. اضغط زر الحضور للتحقق من ${icon} ${typeName}`, 'success-text');
-    } catch(e) {
-        setStatus('⚠️ خطأ في تهيئة نظام البصمة', 'error-text');
-    }
-}
+// initHardwareBiometricVerification removed - only camera face is supported
 
-// Unified biometric verification function
+// Face verification function - camera only
 async function verifyBiometric() {
-    const userBioType = currentUser.biometricType || (currentUser.faceDescriptor ? 'face' : null);
-    
-    if (!userBioType) {
-        return { success: false, message: 'لم يتم تسجيل بصمة' };
-    }
-    
-    if (userBioType === 'face') {
-        // Camera-based face verification is handled continuously by startVideo
-        return { success: isBiometricVerified, message: isBiometricVerified ? 'تم التحقق' : 'الوجه غير متطابق' };
-    } else if (userBioType === 'fingerprint' || userBioType === 'face_hardware') {
-        // Hardware biometric needs explicit verification on button click
-        return await verifyHardwareBiometric(userBioType);
-    }
-    
-    return { success: false, message: 'نوع بصمة غير معروف' };
+    // Camera-based face verification is handled continuously by startVideo
+    return { success: isBiometricVerified, message: isBiometricVerified ? 'تم التحقق' : 'الوجه غير متطابق' };
 }
 
-// Device Fingerprint - unique identifier for hardware biometric binding
-function getDeviceFingerprint() {
-    const nav = navigator;
-    const screen = window.screen;
-    const components = [
-        nav.userAgent,
-        nav.language,
-        nav.platform,
-        screen.width + 'x' + screen.height,
-        screen.colorDepth,
-        nav.hardwareConcurrency,
-        nav.deviceMemory || 'unknown'
-    ];
-    // Simple hash function
-    let hash = 0;
-    const str = components.join('|');
-    for (let i = 0; i < str.length; i++) {
-        const char = str.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
-        hash = hash & hash;
-    }
-    return Math.abs(hash).toString(16) + '-' + components[0].slice(0, 20);
-}
-
-async function verifyHardwareBiometric(bioType) {
-    try {
-        const biometricData = currentUser.biometricData || currentUser.faceDescriptor;
-        const result = await biometricManager.authenticate(biometricData);
-        if (result.success) {
-            isBiometricVerified = true;
-            currentBiometricVerification = { type: bioType, data: biometricData };
-            updateActionButtonsState();
-        }
-        return result;
-    } catch (e) {
-        return { success: false, message: e.message };
-    }
-}
+// verifyHardwareBiometric removed - only camera face is supported
 
 async function checkCurrentStatus() {
     try {
@@ -715,19 +526,8 @@ function updateActionButtonsState() {
     const btnIn = document.getElementById('btnCheckIn');
     const btnOut = document.getElementById('btnCheckOut');
     
-    const userBioType = currentUser?.biometricType || (currentUser?.faceDescriptor ? 'face' : null);
-    
-    let shouldBeEnabled;
-    if (userBioType === 'fingerprint' || userBioType === 'face_hardware') {
-        // Hardware: enable if at valid site (verification happens on click)
-        shouldBeEnabled = !!lastDetectedSite;
-    } else if (userBioType === 'face') {
-        // Camera: need both face verified and valid site
-        shouldBeEnabled = (isBiometricVerified || isFaceVerified) && lastDetectedSite;
-    } else {
-        // No biometric registered - disable buttons
-        shouldBeEnabled = false;
-    }
+    // Camera face: need both face verified and valid site
+    const shouldBeEnabled = (isBiometricVerified || isFaceVerified) && lastDetectedSite;
     
     if (btnIn) btnIn.disabled = !shouldBeEnabled;
     if (btnOut) btnOut.disabled = !shouldBeEnabled;
@@ -1840,25 +1640,19 @@ let bioUpdateVideoStream = null;
 
 function openBiometricUpdateModal() {
     const modal = document.getElementById('biometricUpdateModal');
-    const currentType = currentUser.biometricType || (currentUser.faceDescriptor ? 'face' : 'none');
     
-    // Show current biometric type
-    const typeNames = {
-        'face': '📷 بصمة الوجه (بالكاميرا)',
-        'fingerprint': '👆 بصمة الإصبع',
-        'face_hardware': '📱 Face ID',
-        'none': '❌ لا يوجد'
-    };
+    // Show current biometric type - only camera face is supported
+    document.getElementById('currentBioType').innerText = '📷 بصمة الوجه (بالكاميرا)';
+    document.getElementById('currentBioDisplay').innerText = '📷 بصمة الوجه (بالكاميرا)';
     
-    document.getElementById('currentBioType').innerText = typeNames[currentType] || currentType;
-    document.getElementById('currentBioDisplay').innerText = typeNames[currentType] || currentType;
-    
-    // Load available options
+    // Load available options - only face camera
     loadBiometricUpdateOptions();
     
     // Hide sections
     document.getElementById('bioUpdateFaceSection').classList.add('hidden');
-    document.getElementById('bioUpdateHardwareSection').classList.add('hidden');
+    if (document.getElementById('bioUpdateHardwareSection')) {
+        document.getElementById('bioUpdateHardwareSection').classList.add('hidden');
+    }
     
     bioUpdateType = null;
     bioUpdateData = null;
@@ -1879,67 +1673,44 @@ function closeBiometricUpdateModal() {
 
 async function loadBiometricUpdateOptions() {
     const optionsDiv = document.getElementById('bioUpdateOptions');
-    const available = await biometricManager.checkAvailableBiometrics();
     
-    const currentType = currentUser.biometricType || (currentUser.faceDescriptor ? 'face' : 'none');
-    
-    let html = '<label style="display:block; margin-bottom:10px;">اختر البصمة الجديدة:</label>';
+    // Only camera-based face is available
+    let html = '<label style="display:block; margin-bottom:10px;">بصمة الوجه (بالكاميرا):</label>';
     html += '<div style="display:flex; flex-direction:column; gap:10px;">';
-    
-    available.forEach(bio => {
-        const isCurrent = bio.type === currentType;
-        const badge = isCurrent ? '<span style="background:var(--primary); padding:2px 8px; border-radius:4px; font-size:0.7rem; margin-right:5px;">الحالية</span>' : '';
-        const speedBadge = bio.isHardware ? '<span style="background:var(--secondary); padding:2px 8px; border-radius:4px; font-size:0.7rem; margin-right:5px;">⚡ سريع</span>' : '';
-        const recommended = bio.priority === 1 ? '<span style="background:#f59e0b; padding:2px 8px; border-radius:4px; font-size:0.7rem; margin-right:5px;">موصى به</span>' : '';
-        
-        html += `
-            <button class="btn-primary" style="text-align:right; ${isCurrent ? 'opacity:0.6;' : ''} ${bio.priority === 1 ? 'background:var(--secondary);' : ''}"
-                onclick="selectBioUpdateType('${bio.type}')" ${isCurrent ? 'disabled' : ''}>
-                ${bio.icon} ${bio.name}
-                <div style="font-size:0.75rem; margin-top:5px;">${badge}${speedBadge}${recommended}</div>
-            </button>
-        `;
-    });
-    
+    html += `
+        <button class="btn-primary" style="text-align:right; background:var(--secondary);"
+            onclick="selectBioUpdateType('face')">
+            📷 بصمة الوجه (بالكاميرا)
+            <div style="font-size:0.75rem; margin-top:5px;"><span style="background:#f59e0b; padding:2px 8px; border-radius:4px; font-size:0.7rem; margin-right:5px;">متاح</span></div>
+        </button>
+    `;
     html += '</div>';
     optionsDiv.innerHTML = html;
 }
 
 async function selectBioUpdateType(type) {
+    // Only camera face is supported
+    if (type !== 'face') {
+        alert('فقط بصمة الوجه بالكاميرا متاحة');
+        return;
+    }
+    
     bioUpdateType = type;
     bioUpdateData = null;
     
-    // Hide all sections first
-    document.getElementById('bioUpdateFaceSection').classList.add('hidden');
-    document.getElementById('bioUpdateHardwareSection').classList.add('hidden');
+    // Show face section only
+    document.getElementById('bioUpdateFaceSection').classList.remove('hidden');
+    if (document.getElementById('bioUpdateHardwareSection')) {
+        document.getElementById('bioUpdateHardwareSection').classList.add('hidden');
+    }
     
-    if (type === 'face') {
-        // Camera-based face
-        document.getElementById('bioUpdateFaceSection').classList.remove('hidden');
-        
-        // Start video
-        const video = document.getElementById('bioUpdateVideo');
-        try {
-            bioUpdateVideoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
-            video.srcObject = bioUpdateVideoStream;
-        } catch (e) {
-            alert('لا يمكن الوصول للكاميرا: ' + e.message);
-        }
-    } else if (type === 'fingerprint' || type === 'face_hardware') {
-        // Hardware biometric
-        document.getElementById('bioUpdateHardwareSection').classList.remove('hidden');
-        
-        const isFaceId = type === 'face_hardware';
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-        
-        const label = isFaceId ? (isIOS ? 'Face ID' : 'Face Unlock') : 'بصمة الإصبع';
-        const icon = isFaceId ? '📱' : '👆';
-        const desc = isFaceId ? 'استخدم بصمة وجهك للتسجيل' : 'اضغط الزر أدناه لتسجيل بصمة إصبعك';
-        const btnText = isFaceId ? 'تسجيل Face ID' : 'تسجيل بصمة الإصبع';
-        
-        document.getElementById('bioUpdateHardwareIcon').innerText = icon;
-        document.getElementById('bioUpdateHardwareDesc').innerText = desc;
-        document.getElementById('bioUpdateHardwareBtn').innerText = btnText;
+    // Start video
+    const video = document.getElementById('bioUpdateVideo');
+    try {
+        bioUpdateVideoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+        video.srcObject = bioUpdateVideoStream;
+    } catch (e) {
+        alert('لا يمكن الوصول للكاميرا: ' + e.message);
     }
 }
 
@@ -1965,31 +1736,9 @@ async function captureBioUpdateFace() {
     }
 }
 
+// captureBioUpdateHardware removed - only camera face is supported
 async function captureBioUpdateHardware() {
-    const statusEl = document.getElementById('bioUpdateHardwareStatus');
-    const isFaceId = bioUpdateType === 'face_hardware';
-    
-    statusEl.classList.remove('hidden');
-    statusEl.innerText = isFaceId ? 'استخدم Face ID للتسجيل...' : 'ضع إصبعك على الماسح...';
-    statusEl.className = '';
-    
-    try {
-        const result = await biometricManager.enroll(bioUpdateType, { 
-            userId: currentUser.id, 
-            userName: currentUser.name 
-        });
-        bioUpdateData = result;
-        
-        const successMsg = isFaceId ? '✓ تم تسجيل Face ID بنجاح!' : '✓ تم تسجيل بصمة الإصبع بنجاح!';
-        statusEl.innerText = successMsg;
-        statusEl.className = 'success-text';
-        playSuccessSound();
-    } catch (e) {
-        const errorMsg = isFaceId ? '✗ فشل في تسجيل Face ID' : '✗ فشل في تسجيل بصمة الإصبع';
-        statusEl.innerText = errorMsg + ': ' + (e.message || '');
-        statusEl.className = 'error-text';
-        playErrorSound();
-    }
+    alert('فقط بصمة الوجه بالكاميرا متاحة');
 }
 
 async function saveBiometricUpdate() {

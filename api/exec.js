@@ -599,7 +599,7 @@ if (action === "login") {
             }
 
             // 1. Biometric/PIN Check - BLOCK password-only authentication
-            // Must have biometric data (face, fingerprint, or Face ID) - NO PIN/password fallback
+            // Must have biometric data (face only) - NO PIN/password fallback
             const userBioType = data.biometricType || (data.faceDescriptor ? 'face' : null);
             
             // REJECT if no biometric data provided (password/PIN not allowed)
@@ -617,10 +617,10 @@ if (action === "login") {
                 throw new Error("⚠️ لم يتم تسجيل بصمة لهذا الموظف - يرجى التواصل مع HR");
             }
             
-            // Check if employee has ANY biometric registered (face, fingerprint, or Face ID)
+            // Check if employee has face biometric registered
             const hasBiometric = empBioData.biometricData || empBioData.faceDescriptor;
             if (!hasBiometric) {
-                throw new Error("⚠️ لم يتم تسجيل بصمة لهذا الموظف - يرجى التواصل مع HR لتسجيل الوجه أو البصمة");
+                throw new Error("⚠️ لم يتم تسجيل بصمة لهذا الموظف - يرجى التواصل مع HR لتسجيل الوجه");
             }
 
             // 2. Check Location logic
@@ -747,7 +747,7 @@ if (action === "login") {
         // --- CHECK OUT ---
         if (action === "checkoutAttendance") {
             // 0. Biometric/PIN Check - BLOCK password-only authentication
-            // Must have biometric data (face, fingerprint, or Face ID) - NO PIN/password fallback
+            // Must have biometric data (face only) - NO PIN/password fallback
             if (!data.biometricData && !data.faceDescriptor) {
                 throw new Error("⚠️ مطلوب بصمة للتسجيل - لا يُسمح باستخدام PIN أو كلمة المرور للانصراف");
             }
@@ -762,10 +762,10 @@ if (action === "login") {
                 throw new Error("⚠️ لم يتم تسجيل بصمة لهذا الموظف - يرجى التواصل مع HR");
             }
             
-            // Check if employee has ANY biometric registered (face, fingerprint, or Face ID)
+            // Check if employee has face biometric registered
             const hasBiometric = empBioData.biometricData || empBioData.faceDescriptor;
             if (!hasBiometric) {
-                throw new Error("⚠️ لم يتم تسجيل بصمة لهذا الموظف - يرجى التواصل مع HR لتسجيل الوجه أو البصمة");
+                throw new Error("⚠️ لم يتم تسجيل بصمة لهذا الموظف - يرجى التواصل مع HR لتسجيل الوجه");
             }
 
             // Support checkout by specific ID (for force-close) or latest open session
