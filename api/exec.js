@@ -788,6 +788,25 @@ if (action === "login") {
 
         // --- CHECK OUT ---
         if (action === "checkoutAttendance") {
+            // 0. Device Binding Check for Hardware Biometric (same as check-in)
+            if (data.biometricType === 'fingerprint' || data.biometricType === 'face_hardware') {
+                const { data: empData } = await supabase.from('employees')
+                    .select('"registeredDeviceId", "biometricType"')
+                    .eq('id', String(data.employeeId))
+                    .maybeSingle();
+                
+                if (empData && empData.registeredDeviceId) {
+                    if (empData.registeredDeviceId !== data.deviceId) {
+                        console.error('🚨 Checkout Device Mismatch:', {
+                            expected: empData.registeredDeviceId,
+                            received: data.deviceId,
+                            employeeId: data.employeeId
+                        });
+                        throw new Error("⚠️ جهاز غير مسموح - يرجى استخدام جهازك المسجل للتسجيل");
+                    }
+                }
+            }
+
             // Support checkout by specific ID (for force-close) or latest open session
             let existing, errExist;
             if (data.attendanceId) {
