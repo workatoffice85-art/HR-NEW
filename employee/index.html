@@ -8,6 +8,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../assets/global.css?v=1.1">
     <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <script defer src="biometric-manager.js"></script>
     <style>
         .portal-container {
             max-width: 500px;
@@ -109,128 +110,28 @@
         .check-out-btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
+            filter: grayscale(0.5);
         }
 
-        /* Biometric Method Selector */
-        .biometric-selector {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-bottom: 20px;
+        /* Glowing effect when button is enabled */
+        .check-in-btn:not(:disabled) {
+            animation: pulse-green 2s infinite;
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.5);
         }
 
-        .method-btn {
-            padding: 12px 15px;
-            border: 2px solid rgba(255, 255, 255, 0.2);
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 12px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            color: #fff;
-            font-size: 0.95rem;
-            font-weight: 500;
-            transition: all 0.3s ease;
+        .check-out-btn:not(:disabled) {
+            animation: pulse-red 2s infinite;
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.5);
         }
 
-        .method-btn:hover {
-            background: rgba(255, 255, 255, 0.1);
-            border-color: rgba(255, 255, 255, 0.3);
+        @keyframes pulse-green {
+            0%, 100% { box-shadow: 0 0 15px rgba(16, 185, 129, 0.5); }
+            50% { box-shadow: 0 0 25px rgba(16, 185, 129, 0.8); }
         }
 
-        .method-btn.active {
-            background: var(--secondary);
-            border-color: var(--secondary);
-            color: #fff;
-        }
-
-        .method-icon {
-            font-size: 1.2rem;
-        }
-
-        /* Fingerprint Container */
-        .fingerprint-container {
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 16px;
-            padding: 40px 20px;
-            text-align: center;
-            margin-bottom: 20px;
-            border: 2px dashed rgba(255, 255, 255, 0.2);
-        }
-
-        .fingerprint-icon {
-            font-size: 4rem;
-            margin-bottom: 15px;
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { transform: scale(1); opacity: 1; }
-            50% { transform: scale(1.1); opacity: 0.7; }
-        }
-
-        .fingerprint-status {
-            font-size: 1.1rem;
-            font-weight: 500;
-            margin-bottom: 20px;
-        }
-
-        .fingerprint-waiting {
-            color: var(--text-muted);
-        }
-
-        .fingerprint-success {
-            color: var(--secondary);
-        }
-
-        .fingerprint-error {
-            color: var(--danger);
-        }
-
-        .btn-test-fingerprint {
-            padding: 8px 16px;
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            color: var(--text-muted);
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 0.8rem;
-            transition: all 0.3s ease;
-        }
-
-        .btn-test-fingerprint:hover {
-            background: rgba(255, 255, 255, 0.2);
-            color: #fff;
-        }
-
-        /* Refresh Button */
-        .btn-refresh {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            width: 100%;
-            padding: 12px;
-            margin-bottom: 15px;
-            background: rgba(59, 130, 246, 0.2);
-            border: 1px solid rgba(59, 130, 246, 0.4);
-            color: #3b82f6;
-            border-radius: 10px;
-            cursor: pointer;
-            font-size: 0.95rem;
-            font-weight: 500;
-            transition: all 0.3s ease;
-        }
-
-        .btn-refresh:hover {
-            background: rgba(59, 130, 246, 0.3);
-            transform: translateY(-1px);
-        }
-
-        .btn-refresh:active {
-            transform: translateY(0);
+        @keyframes pulse-red {
+            0%, 100% { box-shadow: 0 0 15px rgba(239, 68, 68, 0.5); }
+            50% { box-shadow: 0 0 25px rgba(239, 68, 68, 0.8); }
         }
     </style>
 </head>
@@ -305,9 +206,17 @@
                 <input type="password" id="regPass" placeholder="******">
             </div>
 
-            <div style="margin-bottom: 15px; text-align: center;">
-                <label style="display:block; margin-bottom:10px;">التقط بصمة الوجه <small>(هام جداً
-                        للحضور)</small></label>
+            <!-- Biometric Selection -->
+            <div id="biometricSelection" class="hidden" style="margin-bottom: 15px; text-align: center;">
+                <label style="display:block; margin-bottom:10px;">اختر طريقة البصمة <small>(بصمة واحدة فقط لكل موظف)</small></label>
+                <div id="biometricOptions" style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                    <!-- Options will be populated by JS -->
+                </div>
+            </div>
+
+            <!-- Face Registration Section -->
+            <div id="faceRegistrationSection" class="hidden" style="margin-bottom: 15px; text-align: center;">
+                <label style="display:block; margin-bottom:10px;">التقط بصمة الوجه <small>(هام جداً للحضور)</small></label>
                 <div class="camera-container" style="height: 250px;">
                     <video id="regVideo" autoplay muted playsinline></video>
                     <canvas id="regCanvas"></canvas>
@@ -315,6 +224,18 @@
                 <button class="btn-primary" style="background:var(--secondary); width:80%"
                     onclick="captureFaceRegistration()">التقاط البصمة</button>
                 <p id="regStatusMessage" class="hidden"></p>
+            </div>
+
+            <!-- Hardware Biometric Registration Section (Fingerprint or Face ID) -->
+            <div id="fingerprintRegistrationSection" class="hidden" style="margin-bottom: 15px; text-align: center;">
+                <label id="hardwareBioLabel" style="display:block; margin-bottom:10px;">بصمة الإصبع / Face ID <small>(هامة جداً للحضور)</small></label>
+                <div id="hardwareBioIconContainer" style="padding: 40px; background: rgba(255,255,255,0.05); border-radius: 12px; border: 2px dashed rgba(16, 185, 129, 0.3);">
+                    <div id="hardwareBioIcon" style="font-size: 3rem; margin-bottom: 10px;">👆</div>
+                    <p id="hardwareBioDesc" style="color: var(--text-muted);">اضغط الزر أدناه لتسجيل البصمة</p>
+                </div>
+                <button class="btn-primary" id="hardwareBioBtn" style="background:var(--secondary); width:80%; margin-top: 15px;"
+                    onclick="captureFingerprintRegistration()">تسجيل البصمة</button>
+                <p id="fingerprintRegStatusMessage" class="hidden"></p>
             </div>
 
             <button class="btn-primary" onclick="completeRegistration()" id="btnCompleteReg">حفظ وإنشاء الحساب</button>
@@ -327,47 +248,19 @@
             <div class="header">
                 <h2 id="welcomeText">مرحباً</h2>
                 <p id="siteText" style="color:var(--text-muted); font-size:0.9rem;"></p>
-            </div>
-
-            <!-- Biometric Method Selector -->
-            <div class="biometric-selector">
-                <button id="btnFaceMethod" class="method-btn active" onclick="switchBiometricMethod('face')">
-                    <span class="method-icon">📷</span>
-                    <span>بصمة الوجه</span>
-                </button>
-                <button id="btnFingerprintMethod" class="method-btn" onclick="switchBiometricMethod('fingerprint')">
-                    <span class="method-icon">👆</span>
-                    <span>بصمة الإصبع</span>
-                </button>
+                <div id="currentBioDisplay" style="font-size:0.8rem; color:var(--secondary); margin-top:8px; background:rgba(16,185,129,0.1); padding:6px 12px; border-radius:20px; display:inline-block;">
+                    🔐 <span id="bioTypeBadge">جاري التحديد...</span>
+                </div>
             </div>
 
             <div id="loader" class="loader hidden"></div>
 
-            <!-- Camera Container (hidden when fingerprint mode) -->
-            <div class="camera-container" id="cameraContainer">
+            <div class="camera-container">
                 <video id="videoElement" autoplay muted playsinline></video>
                 <canvas id="overlay"></canvas>
             </div>
 
-            <!-- Fingerprint Status (shown when fingerprint mode) -->
-            <div id="fingerprintContainer" class="fingerprint-container hidden">
-                <div class="fingerprint-icon">👆</div>
-                <div id="fingerprintStatus" class="fingerprint-status">
-                    <span class="fingerprint-waiting">ضع إصبعك على جهاز البصمة...</span>
-                </div>
-                <!-- Test button for development (remove in production) -->
-                <button class="btn-test-fingerprint" onclick="simulateFingerprintScan()">
-                    محاكاة بصمة (للاختبار)
-                </button>
-            </div>
-
             <div id="statusMessage">جاري تهيئة النظام...</div>
-
-            <!-- Refresh Button -->
-            <button class="btn-refresh" onclick="refreshSystem()" title="تحديث النظام">
-                <span>🔄</span>
-                <span>تحديث</span>
-            </button>
 
             <!-- Timer Display -->
             <div id="timerContainer" class="hidden"
@@ -391,6 +284,12 @@
             <button id="btnAllowanceRequest" class="btn-primary"
                 style="margin-top:10px; background:#8b5cf6;" onclick="openAllowanceModal()">
                 💰 طلب زيادة بدلات
+            </button>
+
+            <!-- Update Biometric Button (Always visible) -->
+            <button id="btnUpdateBiometric" class="btn-primary"
+                style="margin-top:10px; background:var(--secondary);" onclick="openBiometricUpdateModal()">
+                🔐 تحديث/تغيير البصمة
             </button>
 
             <!-- Request Site Button (Hidden by default, shown when outside range) -->
@@ -432,6 +331,53 @@
                     <button class="btn-primary" style="background:#8b5cf6;" onclick="submitAllowanceRequest()">إرسال الطلب</button>
                     <button class="btn-danger" style="background:transparent; border:1px solid var(--danger);"
                         onclick="closeAllowanceModal()">إلغاء</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Biometric Update Modal -->
+        <div id="biometricUpdateModal" class="modal hidden"
+            style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); display:flex; align-items:center; justify-content:center; z-index:1001;">
+            <div class="glass-card" style="width:90%; max-width:400px; padding:25px; max-height:90vh; overflow-y:auto;">
+                <h3 style="margin-bottom:15px;">🔐 تحديث البصمة</h3>
+                <p style="font-size:0.9rem; color:var(--text-muted); margin-bottom:15px;">
+                    اختر البصمة الأسرع لجهازك. البصمة الحالية: <strong id="currentBioType">-</strong>
+                </p>
+                
+                <!-- Current Biometric Info -->
+                <div id="currentBioInfo" style="background:rgba(59,130,246,0.1); padding:10px; border-radius:8px; margin-bottom:15px; border:1px solid rgba(59,130,246,0.3);">
+                    <small style="color:var(--text-muted);">البصمة الحالية</small>
+                    <div id="currentBioDisplay" style="font-weight:bold; color:#3b82f6;">-</div>
+                </div>
+
+                <!-- Available Options -->
+                <div id="bioUpdateOptions" style="margin-bottom:15px;">
+                    <!-- Options populated by JS -->
+                </div>
+
+                <!-- Face Registration for Camera -->
+                <div id="bioUpdateFaceSection" class="hidden" style="margin-bottom:15px;">
+                    <div class="camera-container" style="height:200px; margin-bottom:10px;">
+                        <video id="bioUpdateVideo" autoplay muted playsinline></video>
+                    </div>
+                    <button class="btn-primary" style="width:100%; background:var(--secondary);" onclick="captureBioUpdateFace()">التقاط بصمة الوجه</button>
+                    <p id="bioUpdateFaceStatus" class="hidden" style="margin-top:10px; text-align:center;"></p>
+                </div>
+
+                <!-- Hardware Registration Section -->
+                <div id="bioUpdateHardwareSection" class="hidden" style="margin-bottom:15px; text-align:center;">
+                    <div style="padding:30px; background:rgba(255,255,255,0.05); border-radius:12px; border:2px dashed rgba(16,185,129,0.3);">
+                        <div id="bioUpdateHardwareIcon" style="font-size:3rem; margin-bottom:10px;">👆</div>
+                        <p id="bioUpdateHardwareDesc" style="color:var(--text-muted);">اضغط الزر أدناه لتسجيل البصمة</p>
+                    </div>
+                    <button class="btn-primary" id="bioUpdateHardwareBtn" style="width:100%; margin-top:15px; background:var(--secondary);" onclick="captureBioUpdateHardware()">تسجيل البصمة</button>
+                    <p id="bioUpdateHardwareStatus" class="hidden" style="margin-top:10px; text-align:center;"></p>
+                </div>
+
+                <div style="display:flex; gap:10px;">
+                    <button class="btn-primary" style="flex:1;" onclick="saveBiometricUpdate()">💾 حفظ البصمة الجديدة</button>
+                    <button class="btn-danger" style="background:transparent; border:1px solid var(--danger);"
+                        onclick="closeBiometricUpdateModal()">إلغاء</button>
                 </div>
             </div>
         </div>
@@ -520,7 +466,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=1.1"></script>
+    <script src="app.js?v=2.1"></script>
 </body>
 
 </html>

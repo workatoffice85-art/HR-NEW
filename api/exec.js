@@ -409,6 +409,8 @@ if (action === "login") {
                     role: user.role,
                     assignedSites: user.assignedSites ? String(user.assignedSites).split(',').map((s) => s.trim()).filter(Boolean) : [],
                     faceDescriptor: user.faceDescriptor,
+                    biometricType: user.biometricType || (user.faceDescriptor ? 'face' : null),
+                    biometricData: user.biometricData || user.faceDescriptor,
                     transportPrice: user.transportPrice,
                     salary: user.salary || 0
                 }
@@ -555,21 +557,44 @@ if (action === "login") {
                 });
             }
 
-            // 0.6 Additional protection: Check if there's ANY record in the last 2 minutes
+            // 0.6 Additional protection: Check if there's ANY record in the last 30 seconds
             // regardless of checkout status - prevents duplicate check-ins entirely
-            const twoMinutesAgo = new Date(clientCheckIn.getTime() - 120000);
+            // Use Cairo time (not UTC) to match the stored checkIn times
+            const rateLimitNow = getCairoTime(new Date());
+            const thirtySecondsAgo = new Date(rateLimitNow.getTime() - 30000);
+            
+            console.log('🚨 Rate Limit Debug:', {
+                serverTime: new Date().toISOString(),
+                cairoTime: rateLimitNow.toISOString(),
+                thirtySecondsAgo: thirtySecondsAgo.toISOString(),
+                employeeId: data.employeeId
+            });
+            
             const { data: anyRecentRecord } = await supabase.from('attendance')
                 .select('id, checkIn, checkOut')
                 .eq('employeeId', data.employeeId)
-                .gte('checkIn', twoMinutesAgo.toISOString())
+                .gte('checkIn', thirtySecondsAgo.toISOString())
                 .order('checkIn', { ascending: false })
                 .limit(1);
 
+            console.log('🚨 Recent records found:', anyRecentRecord?.length || 0);
+            
             if (anyRecentRecord && anyRecentRecord.length > 0) {
+                const lastRecordTime = new Date(anyRecentRecord[0].checkIn);
+                const secondsElapsed = Math.floor((rateLimitNow - lastRecordTime) / 1000);
+                const secondsRemaining = 30 - secondsElapsed;
+                
+                console.log('🚨 Last record:', {
+                    checkIn: anyRecentRecord[0].checkIn,
+                    parsedTime: lastRecordTime.toISOString(),
+                    secondsElapsed,
+                    secondsRemaining
+                });
+                
                 return res.status(200).json({
                     success: false,
                     duplicateEntry: true,
-                    message: "تم تسجيل حضور في الدقيقتين الأخيرتين. يرجى الانتظار قبل إعادة المحاولة."
+                    message: `تم تسجيل حضور منذ ${secondsElapsed} ثانية. يرجى الانتظار ${Math.max(0, secondsRemaining)} ثانية أخرى قبل إعادة المحاولة.`
                 });
             }
 
@@ -840,6 +865,8 @@ if (action === "saveEmployee") {
                  role: data.role || 'employee',
                  assignedSites: data.assignedSites || '',
                  faceDescriptor: data.faceDescriptor || null,
+                 biometricType: data.biometricType || (data.faceDescriptor ? 'face' : null),
+                 biometricData: data.biometricData || data.faceDescriptor || null,
                  salary: data.salary || 0,
                  transportPrice: data.transportPrice || 0
              };
@@ -885,6 +912,8 @@ if (action === "updateEmployee") {
              };
              
              if (data.faceDescriptor) payload.faceDescriptor = data.faceDescriptor;
+             if (data.biometricType) payload.biometricType = data.biometricType;
+             if (data.biometricData) payload.biometricData = data.biometricData;
              if (data.password) payload.password = hashedPassword;
              
              // 1. Update employees table
