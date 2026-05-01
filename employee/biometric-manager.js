@@ -316,8 +316,35 @@ class BiometricManager {
         };
     }
 
+    // Check if platform authenticator with biometric is available (NOT PIN/password)
+    async isBiometricAvailable() {
+        try {
+            if (!window.PublicKeyCredential) {
+                return { available: false, reason: 'WebAuthn not supported' };
+            }
+            
+            // Check if user-verifying platform authenticator is available
+            const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+            
+            if (!available) {
+                return { available: false, reason: 'لا يوجد بصمة على هذا الجهاز' };
+            }
+            
+            return { available: true };
+        } catch (e) {
+            console.error('Error checking biometric availability:', e);
+            return { available: false, reason: e.message };
+        }
+    }
+
     async _enrollHardwareBiometric(bioType, userId, userName) {
         try {
+            // First check if biometric is available (not just PIN/password)
+            const bioCheck = await this.isBiometricAvailable();
+            if (!bioCheck.available) {
+                throw new Error('⚠️ ' + (bioCheck.reason || 'جهازك لا يدعم بصمة الإصبع أو Face ID'));
+            }
+            
             const challenge = crypto.getRandomValues(new Uint8Array(32));
             
             const publicKeyCredentialCreationOptions = {
@@ -341,7 +368,7 @@ class BiometricManager {
                     residentKey: 'required'
                 },
                 timeout: 60000,
-                attestation: 'none'
+                attestation: 'direct' // Changed from 'none' to verify authenticator type
             };
             
             const credential = await navigator.credentials.create({
@@ -472,6 +499,12 @@ class BiometricManager {
 
     async _authenticateHardwareBiometric(storedData) {
         try {
+            // Check if biometric is available (not just PIN/password)
+            const bioCheck = await this.isBiometricAvailable();
+            if (!bioCheck.available) {
+                return { success: false, message: '⚠️ ' + (bioCheck.reason || 'جهازك لا يدعم بصمة الإصبع أو Face ID') };
+            }
+            
             const data = typeof storedData === 'string' ? JSON.parse(storedData) : storedData;
             
             // Decode rawId from base64
@@ -496,6 +529,23 @@ class BiometricManager {
             
             if (!assertion) {
                 return { success: false, message: 'فشل التحقق من البصمة' };
+            }
+            
+            // Check assertion flags - userPresent and userVerified must be true
+            // This ensures actual biometric verification happened (not just PIN)
+            const flags = assertion.response.authenticatorData ? 
+                new Uint8Array(assertion.response.authenticatorData)[32] : null;
+            
+            if (flags !== null) {
+                const userPresent = (flags & 0x01) !== 0;
+                const userVerified = (flags & 0x04) !== 0;
+                
+                if (!userPresent || !userVerified) {
+                    return { 
+                        success: false, 
+                        message: '⚠️ التحقق غير مكتمل - يرجى استخدام بصمة الإصبع أو Face ID (ممنوع استخدام PIN)' 
+                    };
+                }
             }
             
             return {

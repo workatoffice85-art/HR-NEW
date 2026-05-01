@@ -769,6 +769,136 @@ function setStatus(msg, className) {
     if(el) { el.innerText = msg; el.className = className; }
 }
 
+// Helper: Start video for one-time face verification (used when hardware biometric fails)
+let verificationVideoStream = null;
+let verificationVideoElement = null;
+
+async function startVideoForVerification() {
+    // Create temporary video element if not exists
+    if (!verificationVideoElement) {
+        verificationVideoElement = document.createElement('video');
+        verificationVideoElement.style.position = 'fixed';
+        verificationVideoElement.style.top = '50%';
+        verificationVideoElement.style.left = '50%';
+        verificationVideoElement.style.transform = 'translate(-50%, -50%)';
+        verificationVideoElement.style.width = '300px';
+        verificationVideoElement.style.height = '225px';
+        verificationVideoElement.style.zIndex = '9999';
+        verificationVideoElement.style.borderRadius = '10px';
+        verificationVideoElement.style.boxShadow = '0 4px 20px rgba(0,0,0,0.5)';
+        document.body.appendChild(verificationVideoElement);
+        
+        // Add overlay text
+        const overlay = document.createElement('div');
+        overlay.id = 'verificationOverlay';
+        overlay.style.position = 'fixed';
+        overlay.style.top = '50%';
+        overlay.style.left = '50%';
+        overlay.style.transform = 'translate(-50%, -80%)';
+        overlay.style.zIndex = '10000';
+        overlay.style.background = 'rgba(0,0,0,0.7)';
+        overlay.style.color = 'white';
+        overlay.style.padding = '10px 20px';
+        overlay.style.borderRadius = '5px';
+        overlay.innerText = '👤 يرجى النظر للكاميرا للتحقق من الوجه';
+        document.body.appendChild(overlay);
+    }
+    
+    try {
+        verificationVideoStream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: 'user' } 
+        });
+        verificationVideoElement.srcObject = verificationVideoStream;
+        verificationVideoElement.play();
+        
+        // Wait for video to be ready
+        await new Promise((resolve) => {
+            verificationVideoElement.onloadedmetadata = () => {
+                setTimeout(resolve, 1000); // Give time for focus/exposure
+            };
+        });
+    } catch (err) {
+        console.error('Camera error:', err);
+        throw new Error('لا يمكن الوصول للكاميرا');
+    }
+}
+
+async function captureAndVerifyFace() {
+    if (!verificationVideoElement || !verificationVideoStream) {
+        return { success: false, message: 'الكاميرا غير جاهزة' };
+    }
+    
+    try {
+        // Ensure face-api models are loaded
+        await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
+        await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+        await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+        
+        // Create face matcher with registered face
+        const storedDescriptor = currentUser.faceDescriptor || 
+            (currentUser.biometricData && currentUser.biometricType === 'face' ? currentUser.biometricData : null);
+        
+        if (!storedDescriptor) {
+            cleanupVerificationVideo();
+            return { success: false, message: 'لا يوجد بصمة وجه مسجلة للموظف' };
+        }
+        
+        const parsedDescriptor = typeof storedDescriptor === 'string' 
+            ? JSON.parse(storedDescriptor) 
+            : storedDescriptor;
+        
+        const labeledDescriptor = new faceapi.LabeledFaceDescriptors(
+            'employee', 
+            [new Float32Array(parsedDescriptor)]
+        );
+        const matcher = new faceapi.FaceMatcher(labeledDescriptor, 0.6);
+        
+        // Detect face from video
+        const detection = await faceapi.detectSingleFace(
+            verificationVideoElement, 
+            new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 })
+        ).withFaceLandmarks().withFaceDescriptor();
+        
+        if (!detection) {
+            cleanupVerificationVideo();
+            return { success: false, message: 'لم يتم التعرف على وجه - يرجى المحاولة مرة أخرى' };
+        }
+        
+        // Match against stored face
+        const bestMatch = matcher.findBestMatch(detection.descriptor);
+        
+        // Cleanup
+        cleanupVerificationVideo();
+        
+        if (bestMatch.label === 'unknown') {
+            return { success: false, message: 'الوجه غير متطابق - ممنوع استخدام PIN/Password' };
+        }
+        
+        return { 
+            success: true, 
+            descriptor: Array.from(detection.descriptor),
+            message: 'تم التحقق من الوجه بنجاح'
+        };
+        
+    } catch (e) {
+        cleanupVerificationVideo();
+        return { success: false, message: 'خطأ في التحقق: ' + e.message };
+    }
+}
+
+function cleanupVerificationVideo() {
+    if (verificationVideoStream) {
+        verificationVideoStream.getTracks().forEach(track => track.stop());
+        verificationVideoStream = null;
+    }
+    if (verificationVideoElement) {
+        verificationVideoElement.remove();
+        verificationVideoElement = null;
+    }
+    const overlay = document.getElementById('verificationOverlay');
+    if (overlay) overlay.remove();
+}
+
 function startVideo() {
     const video = document.getElementById('videoElement');
     navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
@@ -1034,19 +1164,38 @@ async function handleCheckIn() {
     
     // Check biometric verification based on user type
     const userBioType = currentUser.biometricType || (currentUser.faceDescriptor ? 'face' : null);
+    let finalBioType = userBioType;
+    let finalBiometricData = null;
     
     if (userBioType === 'fingerprint' || userBioType === 'face_hardware') {
         // For hardware biometrics, verify on button click
         const result = await verifyHardwareBiometric(userBioType);
-        if (!result.success) {
-            const typeName = userBioType === 'face_hardware' ? 'Face ID' : 'بصمة الإصبع';
-            return alert(`فشل التحقق من ${typeName}: ` + result.message);
+        if (result.success) {
+            // Hardware biometric verified successfully
+            finalBiometricData = currentBiometricVerification?.data;
+        } else {
+            // Hardware biometric failed (possibly PIN used) - FALLBACK to camera face
+            if (currentUser.faceDescriptor) {
+                alert('⚠️ لم يتم التحقق من بصمة الجهاز. جاري التحقق من بصمة الوجه...');
+                // Start camera for face verification
+                await startVideoForVerification();
+                const faceResult = await captureAndVerifyFace();
+                if (!faceResult.success) {
+                    return alert('❌ فشل التحقق: ' + faceResult.message);
+                }
+                finalBioType = 'face';
+                finalBiometricData = faceResult.descriptor;
+            } else {
+                const typeName = userBioType === 'face_hardware' ? 'Face ID' : 'بصمة الإصبع';
+                return alert(`❌ فشل التحقق من ${typeName}: ` + result.message);
+            }
         }
     } else if (userBioType === 'face') {
         // For camera face, check if already verified continuously
         if (!isBiometricVerified && !currentFaceDescriptor) {
             return alert('بصمة الوجه غير ملتقطة الحين');
         }
+        finalBiometricData = currentFaceDescriptor;
     } else {
         return alert('لم يتم تسجيل بصمة. يرجى التواصل مع HR');
     }
@@ -1055,14 +1204,12 @@ async function handleCheckIn() {
     document.getElementById('loader').classList.remove('hidden');
     
     // Prepare biometric data for payload
-    const biometricData = currentBiometricVerification?.data || currentFaceDescriptor;
-    
     const payload = {
         action: 'addAttendance', employeeId: currentUser.id, employeeName: currentUser.name,
         checkIn: new Date().toISOString(), latitude: lastLocation.lat, longitude: lastLocation.lng,
-        biometricType: userBioType,
-        biometricData: biometricData ? JSON.stringify(biometricData) : null,
-        faceDescriptor: biometricData ? JSON.stringify(biometricData) : null // Legacy support
+        biometricType: finalBioType,
+        biometricData: finalBiometricData ? JSON.stringify(finalBiometricData) : null,
+        faceDescriptor: finalBiometricData ? JSON.stringify(finalBiometricData) : null // Legacy support
     };
 
     try {
@@ -1160,19 +1307,38 @@ async function handleCheckOut() {
     
     // Check biometric verification based on user type
     const userBioType = currentUser.biometricType || (currentUser.faceDescriptor ? 'face' : null);
+    let finalBioType = userBioType;
+    let finalBiometricData = null;
     
     if (userBioType === 'fingerprint' || userBioType === 'face_hardware') {
         // For hardware biometrics, verify on button click
         const result = await verifyHardwareBiometric(userBioType);
-        if (!result.success) {
-            const typeName = userBioType === 'face_hardware' ? 'Face ID' : 'بصمة الإصبع';
-            return alert(`فشل التحقق من ${typeName}: ` + result.message);
+        if (result.success) {
+            // Hardware biometric verified successfully
+            finalBiometricData = currentBiometricVerification?.data;
+        } else {
+            // Hardware biometric failed (possibly PIN used) - FALLBACK to camera face
+            if (currentUser.faceDescriptor) {
+                alert('⚠️ لم يتم التحقق من بصمة الجهاز. جاري التحقق من بصمة الوجه...');
+                // Start camera for face verification
+                await startVideoForVerification();
+                const faceResult = await captureAndVerifyFace();
+                if (!faceResult.success) {
+                    return alert('❌ فشل التحقق: ' + faceResult.message);
+                }
+                finalBioType = 'face';
+                finalBiometricData = faceResult.descriptor;
+            } else {
+                const typeName = userBioType === 'face_hardware' ? 'Face ID' : 'بصمة الإصبع';
+                return alert(`❌ فشل التحقق من ${typeName}: ` + result.message);
+            }
         }
     } else if (userBioType === 'face') {
         // For camera face, check if already verified continuously
         if (!isBiometricVerified && !currentFaceDescriptor) {
             return alert('بصمة الوجه غير ملتقطة الحين');
         }
+        finalBiometricData = currentFaceDescriptor;
     } else {
         return alert('لم يتم تسجيل بصمة. يرجى التواصل مع HR');
     }
@@ -1180,14 +1346,12 @@ async function handleCheckOut() {
     document.getElementById('loader').classList.remove('hidden');
     
     // Prepare biometric data for payload
-    const biometricData = currentBiometricVerification?.data || currentFaceDescriptor;
-    
     const payload = { 
         action: 'checkoutAttendance', employeeId: currentUser.id, 
         checkOut: new Date().toISOString(), latitude: lastLocation.lat, longitude: lastLocation.lng,
-        biometricType: userBioType,
-        biometricData: biometricData ? JSON.stringify(biometricData) : null,
-        faceDescriptor: biometricData ? JSON.stringify(biometricData) : null
+        biometricType: finalBioType,
+        biometricData: finalBiometricData ? JSON.stringify(finalBiometricData) : null,
+        faceDescriptor: finalBiometricData ? JSON.stringify(finalBiometricData) : null
     };
     try {
         const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'text/plain' } });
