@@ -557,13 +557,13 @@ if (action === "login") {
                 });
             }
 
-            // 0.6 Additional protection: Check if there's ANY record in the last 2 minutes
+            // 0.6 Additional protection: Check if there's ANY record in the last 30 seconds
             // regardless of checkout status - prevents duplicate check-ins entirely
-            const twoMinutesAgo = new Date(clientCheckIn.getTime() - 120000);
+            const thirtySecondsAgo = new Date(clientCheckIn.getTime() - 30000);
             const { data: anyRecentRecord } = await supabase.from('attendance')
                 .select('id, checkIn, checkOut')
                 .eq('employeeId', data.employeeId)
-                .gte('checkIn', twoMinutesAgo.toISOString())
+                .gte('checkIn', thirtySecondsAgo.toISOString())
                 .order('checkIn', { ascending: false })
                 .limit(1);
 
@@ -571,7 +571,7 @@ if (action === "login") {
                 return res.status(200).json({
                     success: false,
                     duplicateEntry: true,
-                    message: "تم تسجيل حضور في الدقيقتين الأخيرتين. يرجى الانتظار قبل إعادة المحاولة."
+                    message: "تم تسجيل حضور في الثواني الأخيرة. يرجى الانتظار 30 ثانية قبل إعادة المحاولة."
                 });
             }
 
