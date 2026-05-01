@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="../assets/global.css?v=1.2">
     <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <style>
         /* Sidebar Styles (HR-specific) */
         .sidebar { width: 250px; background: rgba(15, 23, 42, 0.9); padding: 20px; border-left: 1px solid var(--card-border); }
@@ -130,7 +131,7 @@
                     <input type="date" id="reportEndDate">
                     <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="generateReport()">توليد التقرير</button>
                     <button class="btn-primary" style="width:auto; padding:8px 15px; background:#10b981;" onclick="sendCustomReport()">إرسال للإيميل 📧</button>
-                    <button class="btn-primary" style="width:auto; padding:8px 15px; background:var(--secondary);" onclick="window.print()">طباعة</button>
+                    <button class="btn-primary" style="width:auto; padding:8px 15px; background:#217346;" onclick="exportReportToExcel()">📥 تحميل Excel</button>
                 </div>
 
                 <div class="kpi-grid">

@@ -783,6 +783,143 @@ async function sendCustomReport() {
     document.getElementById('loader').classList.add('hidden');
 }
 
+// Export Report to Excel - Professional HR Report
+function exportReportToExcel() {
+    const startStr = document.getElementById('reportStartDate').value;
+    const endStr = document.getElementById('reportEndDate').value;
+    const tbody = document.getElementById('reportsTableBody');
+    
+    if (!tbody || tbody.children.length === 0) {
+        alert('لا يوجد بيانات للتصدير. قم بتوليد التقرير أولاً.');
+        return;
+    }
+    
+    // Extract data from the table
+    const data = [];
+    const rows = tbody.querySelectorAll('tr');
+    
+    rows.forEach(row => {
+        const cells = row.querySelectorAll('td');
+        if (cells.length >= 9) {
+            data.push({
+                'ID الموظف': cells[0].textContent.trim(),
+                'اسم الموظف': cells[1].textContent.trim(),
+                'أيام الحضور': cells[2].textContent.trim(),
+                'أيام الغياب': cells[3].textContent.trim(),
+                'التأخير': cells[4].textContent.trim(),
+                'العمل الإضافي': cells[5].textContent.trim(),
+                'لم يتم الانصراف': cells[6].textContent.trim(),
+                'مبلغ العمل الإضافي': cells[7].textContent.trim(),
+                'بدل الانتقال': cells[8].textContent.trim()
+            });
+        }
+    });
+    
+    if (data.length === 0) {
+        alert('لا يوجد بيانات للتصدير');
+        return;
+    }
+    
+    // Create worksheet
+    const ws = XLSX.utils.json_to_sheet(data);
+    
+    // Set column widths
+    const colWidths = [
+        { wch: 15 }, // ID
+        { wch: 25 }, // Name
+        { wch: 12 }, // Present
+        { wch: 12 }, // Absent
+        { wch: 10 }, // Late
+        { wch: 14 }, // Overtime
+        { wch: 15 }, // No Checkout
+        { wch: 18 }, // Overtime Pay
+        { wch: 15 }  // Transport
+    ];
+    ws['!cols'] = colWidths;
+    
+    // Add title row
+    const titleRow = ['تقرير الحضور والبدلات - نظام HR'];
+    const dateRangeRow = [`الفترة: ${startStr} إلى ${endStr}`];
+    const emptyRow = [''];
+    
+    // Insert title at the top
+    XLSX.utils.sheet_add_aoa(ws, [titleRow, dateRangeRow, emptyRow], { origin: 'A1' });
+    
+    // Move data to start from row 4 (after title)
+    const dataWithOffset = data.map((row, idx) => ({
+        ...row,
+        __rowNum: idx + 3 // Start from row 4 (0-indexed = 3)
+    }));
+    
+    // Recreate sheet with proper structure
+    const finalData = [
+        ['تقرير الحضور والبدلات - نظام HR'],
+        [`الفترة: ${startStr} إلى ${endStr}`],
+        [''],
+        ['ID الموظف', 'اسم الموظف', 'أيام الحضور', 'أيام الغياب', 'التأخير', 'العمل الإضافي', 'لم يتم الانصراف', 'مبلغ العمل الإضافي', 'بدل الانتقال'],
+        ...data.map(row => [
+            row['ID الموظف'],
+            row['اسم الموظف'],
+            row['أيام الحضور'],
+            row['أيام الغياب'],
+            row['التأخير'],
+            row['العمل الإضافي'],
+            row['لم يتم الانصراف'],
+            row['مبلغ العمل الإضافي'],
+            row['بدل الانتقال']
+        ])
+    ];
+    
+    const wsFinal = XLSX.utils.aoa_to_sheet(finalData);
+    wsFinal['!cols'] = colWidths;
+    
+    // Apply styles to header row (row 4 - index 3)
+    const headerRange = XLSX.utils.decode_range(wsFinal['!ref']);
+    for (let C = headerRange.s.c; C <= headerRange.e.c; ++C) {
+        const cellAddress = XLSX.utils.encode_cell({ r: 3, c: C });
+        if (!wsFinal[cellAddress]) continue;
+        
+        wsFinal[cellAddress].s = {
+            font: { bold: true, color: { rgb: "FFFFFF" }, size: 12 },
+            fill: { fgColor: { rgb: "217346" }, patternType: "solid" },
+            alignment: { horizontal: "center", vertical: "center" },
+            border: {
+                top: { style: "thin", color: { rgb: "000000" } },
+                bottom: { style: "thin", color: { rgb: "000000" } },
+                left: { style: "thin", color: { rgb: "000000" } },
+                right: { style: "thin", color: { rgb: "000000" } }
+            }
+        };
+    }
+    
+    // Style title row
+    wsFinal['A1'].s = {
+        font: { bold: true, size: 16, color: { rgb: "217346" } },
+        alignment: { horizontal: "center" }
+    };
+    wsFinal['A2'].s = {
+        font: { italic: true, size: 11, color: { rgb: "666666" } },
+        alignment: { horizontal: "center" }
+    };
+    
+    // Merge title cells
+    wsFinal['!merges'] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 8 } },
+        { s: { r: 1, c: 0 }, e: { r: 1, c: 8 } }
+    ];
+    
+    // Create workbook
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, wsFinal, 'تقرير الحضور');
+    
+    // Generate filename with date
+    const today = new Date().toISOString().split('T')[0];
+    const filename = `HR_Report_${today}.xlsx`;
+    
+    // Download
+    XLSX.writeFile(wb, filename);
+}
+
 function updateCharts(labels, latesData) {
     const ctxLates = document.getElementById('latesChart').getContext('2d');
 

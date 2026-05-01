@@ -634,6 +634,37 @@ if (action === "login") {
                  }
              }
 
+            // 1.5 Device Binding Check (Hardware Biometric Security)
+            // For hardware biometrics (fingerprint/Face ID), verify device binding
+            if (data.biometricType === 'fingerprint' || data.biometricType === 'face_hardware') {
+                // Fetch employee's registered device ID
+                const { data: empData } = await supabase.from('employees')
+                    .select('"registeredDeviceId", "biometricType"')
+                    .eq('id', String(data.employeeId))
+                    .maybeSingle();
+                
+                if (empData) {
+                    if (empData.registeredDeviceId) {
+                        // Device already registered - must match
+                        if (empData.registeredDeviceId !== data.deviceId) {
+                            console.error('🚨 Device Mismatch:', {
+                                expected: empData.registeredDeviceId,
+                                received: data.deviceId,
+                                employeeId: data.employeeId
+                            });
+                            throw new Error("⚠️ جهاز غير مسموح - يرجى استخدام جهازك المسجل للتسجيل");
+                        }
+                    } else {
+                        // First time using hardware biometric - register this device
+                        // Only register if biometric verification succeeded
+                        console.log('📱 Registering new device for employee:', data.employeeId, 'Device:', data.deviceId);
+                        await supabase.from('employees')
+                            .update({ "registeredDeviceId": data.deviceId })
+                            .eq('id', String(data.employeeId));
+                    }
+                }
+            }
+
             // 2. Check Location logic
             const { data: sites } = await supabase.from('sites').select('*');
             let matchedSite = null;

@@ -630,6 +630,30 @@ async function verifyBiometric() {
     return { success: false, message: 'نوع بصمة غير معروف' };
 }
 
+// Device Fingerprint - unique identifier for hardware biometric binding
+function getDeviceFingerprint() {
+    const nav = navigator;
+    const screen = window.screen;
+    const components = [
+        nav.userAgent,
+        nav.language,
+        nav.platform,
+        screen.width + 'x' + screen.height,
+        screen.colorDepth,
+        nav.hardwareConcurrency,
+        nav.deviceMemory || 'unknown'
+    ];
+    // Simple hash function
+    let hash = 0;
+    const str = components.join('|');
+    for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash;
+    }
+    return Math.abs(hash).toString(16) + '-' + components[0].slice(0, 20);
+}
+
 async function verifyHardwareBiometric(bioType) {
     try {
         const result = await biometricManager.authenticate(currentUser.biometricData);
@@ -1032,13 +1056,15 @@ async function handleCheckIn() {
     
     // Prepare biometric data for payload
     const biometricData = currentBiometricVerification?.data || currentFaceDescriptor;
+    const deviceId = getDeviceFingerprint();
     
     const payload = {
         action: 'addAttendance', employeeId: currentUser.id, employeeName: currentUser.name,
         checkIn: new Date().toISOString(), latitude: lastLocation.lat, longitude: lastLocation.lng,
         biometricType: userBioType,
         biometricData: biometricData ? JSON.stringify(biometricData) : null,
-        faceDescriptor: biometricData ? JSON.stringify(biometricData) : null // Legacy support
+        faceDescriptor: biometricData ? JSON.stringify(biometricData) : null, // Legacy support
+        deviceId: deviceId // Device fingerprint for hardware biometric binding
     };
 
     try {
@@ -1157,13 +1183,15 @@ async function handleCheckOut() {
     
     // Prepare biometric data for payload
     const biometricData = currentBiometricVerification?.data || currentFaceDescriptor;
+    const deviceId = getDeviceFingerprint();
     
     const payload = { 
         action: 'checkoutAttendance', employeeId: currentUser.id, 
         checkOut: new Date().toISOString(), latitude: lastLocation.lat, longitude: lastLocation.lng,
         biometricType: userBioType,
         biometricData: biometricData ? JSON.stringify(biometricData) : null,
-        faceDescriptor: biometricData ? JSON.stringify(biometricData) : null
+        faceDescriptor: biometricData ? JSON.stringify(biometricData) : null,
+        deviceId: deviceId // Device fingerprint for hardware biometric binding
     };
     try {
         const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'text/plain' } });
