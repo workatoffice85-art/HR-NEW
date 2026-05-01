@@ -5,6 +5,7 @@ let currentSite = null;
 let lastLocation = null;
 let lastDetection = null;
 let sitesData = [];
+let allAttendanceData = [];
 let faceMatcher = null;
 let currentFaceDescriptor = null; // DEPRECATED: use currentBiometricVerification
 let currentBiometricVerification = null; // { type: 'face'|'fingerprint', data: any }
@@ -21,6 +22,7 @@ let tempEmail = ""; // used during registration
 let tempPhone = ""; // used during registration
 let userBiometricType = null; // selected biometric type during registration
 let registeredBiometricData = null; // captured biometric data during registration
+let registeredFaceDescriptor = null; // DEPRECATED: for backward compatibility
 let allOfficialHolidays = [];
 let appSettings = {}; // Store system settings including weekend days
 const MODEL_URL = '../models';
@@ -570,24 +572,38 @@ async function initFaceVerification() {
     try {
         const biometricData = currentUser.biometricData || currentUser.faceDescriptor;
         console.log('🔐 initFaceVerification - biometricData exists:', !!biometricData);
-        
+
         if (!biometricData) {
             setStatus('⚠️ لم يتم تسجيل بصمة وجه', 'error-text');
             return;
         }
-        
-        const parsedData = JSON.parse(biometricData);
+
+        let parsedData = JSON.parse(biometricData);
         console.log('🔐 Parsed biometric data type:', typeof parsedData, 'isArray:', Array.isArray(parsedData));
-        
+
+        // Handle new format: { type: 'face', data: [...] }
+        if (parsedData && typeof parsedData === 'object' && !Array.isArray(parsedData)) {
+            if (parsedData.type === 'face' && parsedData.data) {
+                console.log('🔐 Detected new format biometric data, extracting descriptor...');
+                // Data might be double-encoded string or already parsed
+                let descriptorData = parsedData.data;
+                if (typeof descriptorData === 'string') {
+                    descriptorData = JSON.parse(descriptorData);
+                }
+                parsedData = descriptorData;
+            }
+        }
+
         const descArray = new Float32Array(parsedData);
         console.log('🔐 Descriptor array length:', descArray.length);
-        
+
         const labeledDescriptor = new faceapi.LabeledFaceDescriptors(currentUser.name, [descArray]);
         faceMatcher = new faceapi.FaceMatcher([labeledDescriptor], 0.6);
-        
+
         console.log('🔐 Face matcher initialized successfully');
         setStatus('✅ النظام جاهز. وجّه الكاميرا إليك...', 'success-text');
     } catch(e) {
+        console.error('🔐 Face verification init error:', e);
         setStatus('⚠️ خطأ في قراءة بصمة الوجه المسجلة', 'error-text');
     }
 }
