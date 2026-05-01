@@ -23,7 +23,7 @@ let userBiometricType = null; // selected biometric type during registration
 let registeredBiometricData = null; // captured biometric data during registration
 let allOfficialHolidays = [];
 let appSettings = {}; // Store system settings including weekend days
-const MODEL_URL = './models';
+const MODEL_URL = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights';
 
 // Helper: Extract Cairo time from ISO string (format: 2026-04-26T09:34:48+02:00)
 // Returns time in format "9:34:48 ص" without any timezone conversion
@@ -217,9 +217,10 @@ async function verifyOTP() {
 
 // 4. Face Registration Capture
 async function startRegistrationVideo() {
-    await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
-    await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-    await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+    const regModelUrl = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights';
+    await faceapi.nets.ssdMobilenetv1.loadFromUri(regModelUrl);
+    await faceapi.nets.faceLandmark68Net.loadFromUri(regModelUrl);
+    await faceapi.nets.faceRecognitionNet.loadFromUri(regModelUrl);
     
     const video = document.getElementById('regVideo');
     navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
@@ -472,13 +473,44 @@ async function initSystem() {
         const dataPromise = fetch(`${API_URL}?action=getPortalInitialData&employeeId=${encodeURIComponent(currentUser.id)}`).then(r => r.json());
         const holidaysPromise = fetch(`${API_URL}?action=getOfficialHolidays`).then(r => r.json());
         const settingsPromise = fetch(`${API_URL}?action=getSettings`).then(r => r.json());
-        const modelPromise = Promise.all([
-            faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
-            faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-            faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
-        ]);
+        
+        // Enhanced model loading with better error handling
+        const modelPromise = (async () => {
+            try {
+                console.log('🤖 Loading AI models from:', MODEL_URL);
+                await Promise.all([
+                    faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+                ]);
+                console.log('✅ AI models loaded successfully');
+                return true;
+            } catch (modelError) {
+                console.error('❌ Failed to load AI models:', modelError);
+                console.log('🔍 Attempting to load models from alternative paths...');
+                
+                // Try alternative paths
+                const alternativePaths = ['../models', './models', 'models'];
+                for (const path of alternativePaths) {
+                    try {
+                        console.log(`🔄 Trying path: ${path}`);
+                        await Promise.all([
+                            faceapi.nets.ssdMobilenetv1.loadFromUri(path),
+                            faceapi.nets.faceLandmark68Net.loadFromUri(path),
+                            faceapi.nets.faceRecognitionNet.loadFromUri(path)
+                        ]);
+                        console.log(`✅ Models loaded from alternative path: ${path}`);
+                        return true;
+                    } catch (e) {
+                        console.log(`❌ Path ${path} failed:`, e.message);
+                        continue;
+                    }
+                }
+                throw new Error(`Failed to load AI models from all paths. Last error: ${modelError.message}`);
+            }
+        })();
 
-        const [dataResult, holidaysResult, _] = await Promise.all([dataPromise, holidaysPromise, modelPromise]);
+        const [dataResult, holidaysResult, modelLoadResult] = await Promise.all([dataPromise, holidaysPromise, modelPromise]);
 
         if (dataResult.success) {
             sitesData = dataResult.sites || [];
@@ -513,8 +545,20 @@ async function initSystem() {
         }
     } catch(e) {
         console.error("Initial load error", e);
-        setStatus('❌ خطأ في الاتصال أو تحميل ملفات الذكاء الاصطناعي', 'error-text');
-        return;
+        // Check if this is specifically a model loading error
+        if (e.message && e.message.includes('AI models')) {
+            setStatus('⚠️ فشل تحميل موديلات الوجه - يمكن استخدام بصمة الإصبع فقط', 'warning-text');
+            // Continue with system initialization but hide camera
+            const cameraContainer = document.querySelector('.camera-container');
+            if (cameraContainer) cameraContainer.classList.add('hidden');
+            // Continue with other initialization steps
+            getLocation();
+            setTimeout(checkPersistedTimerState, 1000);
+            return;
+        } else {
+            setStatus('❌ خطأ في الاتصال أو تحميل ملفات الذكاء الاصطناعي', 'error-text');
+            return;
+        }
     }
 
     // Step 3: Setup Biometric System
