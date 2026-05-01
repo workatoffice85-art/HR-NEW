@@ -404,9 +404,9 @@ async function completeRegistration() {
         action: 'saveEmployee',
         id: newId, name: name, email: tempEmail, password: pass, phone: tempPhone, role: 'employee', assignedSites: '',
         biometricType: registeredBiometricData.type,
-        biometricData: JSON.stringify(registeredBiometricData.data),
-        // Legacy field for backward compatibility
-        faceDescriptor: registeredBiometricData.type === 'face' ? JSON.stringify(registeredBiometricData.data) : null
+        biometricData: JSON.stringify(registeredBiometricData), // Store full object with type and data
+        // Legacy field for backward compatibility (camera face only)
+        faceDescriptor: registeredBiometricData.type === 'face' ? registeredBiometricData.data : null
     };
 
     try {

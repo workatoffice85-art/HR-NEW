@@ -310,7 +310,38 @@ class BiometricManager {
     // ============================================================
     
     async authenticate(biometricData, options = {}) {
-        const data = typeof biometricData === 'string' ? JSON.parse(biometricData) : biometricData;
+        let data = typeof biometricData === 'string' ? JSON.parse(biometricData) : biometricData;
+        
+        console.log('🔐 Auth Debug - After first parse:', { type: typeof data, isString: typeof data === 'string', dataType: data?.type, hasCredentialId: !!data?.credentialId });
+        
+        // Handle double-encoded data from old registrations (data might still be a string)
+        if (typeof data === 'string') {
+            try {
+                data = JSON.parse(data);
+                console.log('🔐 Auth Debug - After second parse (double-encoded fix):', { type: typeof data, dataType: data?.type });
+            } catch (e) {
+                console.log('🔐 Auth Debug - Second parse failed:', e.message);
+            }
+        }
+        
+        // Handle new format: { type: 'fingerprint', data: {...} }
+        if (data.type === 'fingerprint' || data.type === 'face_hardware') {
+            console.log('🔐 Auth Debug - Extracting nested data for', data.type);
+            // Extract the actual credential data from nested structure
+            if (typeof data.data === 'string') {
+                try {
+                    data = JSON.parse(data.data);
+                    console.log('🔐 Auth Debug - Nested data parsed, credentialId:', !!data.credentialId);
+                } catch (e) {
+                    console.log('🔐 Auth Debug - Nested parse failed:', e.message);
+                }
+            } else if (data.data) {
+                data = data.data;
+                console.log('🔐 Auth Debug - Using nested data object, credentialId:', !!data.credentialId);
+            }
+        }
+        
+        console.log('🔐 Auth Debug - Final data check:', { type: data?.type, isArray: Array.isArray(data), hasCredentialId: !!data?.credentialId });
         
         if (data.type === 'face' || (data.credentialId === undefined && Array.isArray(data))) {
             // Camera-based face recognition (face-api.js)
