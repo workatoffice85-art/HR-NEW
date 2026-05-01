@@ -1820,9 +1820,9 @@ async function saveBiometricUpdate() {
             role: currentUser.role,
             assignedSites: currentUser.assignedSites ? currentUser.assignedSites.join(',') : '',
             biometricType: bioUpdateData.type,
-            biometricData: JSON.stringify(bioUpdateData.data),
+            biometricData: bioUpdateData.data,  // Already JSON string from enrollment
             // Legacy field
-            faceDescriptor: bioUpdateData.type === 'face' ? JSON.stringify(bioUpdateData.data) : null
+            faceDescriptor: bioUpdateData.type === 'face' ? bioUpdateData.data : null
         };
         
         const res = await fetch(API_URL, {
@@ -1836,9 +1836,9 @@ async function saveBiometricUpdate() {
         if (result.success) {
             // Update local user data
             currentUser.biometricType = bioUpdateData.type;
-            currentUser.biometricData = JSON.stringify(bioUpdateData.data);
+            currentUser.biometricData = bioUpdateData.data;  // Already JSON string
             if (bioUpdateData.type === 'face') {
-                currentUser.faceDescriptor = JSON.stringify(bioUpdateData.data);
+                currentUser.faceDescriptor = bioUpdateData.data;  // Already JSON string
             }
             localStorage.setItem('empSession', JSON.stringify(currentUser));
             
