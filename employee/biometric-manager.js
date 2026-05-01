@@ -127,6 +127,7 @@ class BiometricManager {
         try {
             // Check if WebAuthn is supported
             if (!window.PublicKeyCredential) {
+                console.log('WebAuthn: PublicKeyCredential not available');
                 return false;
             }
             
@@ -136,6 +137,8 @@ class BiometricManager {
             const isAndroid = /Android/.test(navigator.userAgent);
             const isModernMobile = isIOS || isAndroid;
             
+            console.log('WebAuthn Detection:', { isIOS, isAndroid, isModernMobile, hasPublicKeyCredential: !!window.PublicKeyCredential });
+            
             if (isModernMobile && window.PublicKeyCredential) {
                 console.log('Mobile device detected - assuming hardware biometric support');
                 return true;
@@ -144,6 +147,7 @@ class BiometricManager {
             // For desktop: check properly
             if (PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) {
                 const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+                console.log('Desktop WebAuthn check result:', available);
                 return available;
             }
             
@@ -153,6 +157,7 @@ class BiometricManager {
             // If error but it's mobile, still return true
             const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
             const isAndroid = /Android/.test(navigator.userAgent);
+            console.log('WebAuthn error fallback:', { isIOS, isAndroid });
             return (isIOS || isAndroid) && window.PublicKeyCredential;
         }
     }

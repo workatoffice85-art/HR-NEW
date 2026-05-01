@@ -231,6 +231,12 @@ async function startRegistrationVideo() {
 async function initBiometricRegistration() {
     const availableBiometrics = await biometricManager.checkAvailableBiometrics();
     
+    // DEBUG: Log what was detected
+    console.log('=== BIOMETRIC DETECTION DEBUG ===');
+    console.log('Available biometrics:', availableBiometrics);
+    console.log('User Agent:', navigator.userAgent);
+    console.log('PublicKeyCredential available:', !!window.PublicKeyCredential);
+    
     if (availableBiometrics.length === 0) {
         showError('regError', 'جهازك لا يدعم بيومتريك (وجه أو بصمة)');
         return;
@@ -242,6 +248,21 @@ async function initBiometricRegistration() {
     // AUTO-SELECT: Always pick the fastest (priority 1) for best performance
     const bestBiometric = availableBiometrics[0]; // Already sorted by priority
     const hasHardware = availableBiometrics.some(b => b.isHardware);
+    
+    console.log('Has hardware:', hasHardware);
+    console.log('Best biometric:', bestBiometric);
+    console.log('===================================');
+    
+    // Show detection result to user (temporary for debugging)
+    const detectionMsg = hasHardware 
+        ? `✅ تم اكتشاف بصمة hardware: ${bestBiometric.name}`
+        : `📷 لم يتم اكتشاف hardware - سيتم استخدام الكاميرا`;
+    console.log(detectionMsg);
+    
+    // TEMP: Show alert for debugging (remove after testing)
+    setTimeout(() => {
+        alert('Biometric Detection:\n' + availableBiometrics.map(b => `${b.icon} ${b.name} (priority: ${b.priority}, hardware: ${b.isHardware})`).join('\n'));
+    }, 1000);
     
     if (availableBiometrics.length > 1) {
         // Show options but pre-select the best (highlighted)
