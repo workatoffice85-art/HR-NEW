@@ -23,7 +23,7 @@ let userBiometricType = null; // selected biometric type during registration
 let registeredBiometricData = null; // captured biometric data during registration
 let allOfficialHolidays = [];
 let appSettings = {}; // Store system settings including weekend days
-const MODEL_URL = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights';
+const MODEL_URL = '../models';
 
 // Helper: Extract Cairo time from ISO string (format: 2026-04-26T09:34:48+02:00)
 // Returns time in format "9:34:48 ص" without any timezone conversion
@@ -217,10 +217,9 @@ async function verifyOTP() {
 
 // 4. Face Registration Capture
 async function startRegistrationVideo() {
-    const regModelUrl = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights';
-    await faceapi.nets.ssdMobilenetv1.loadFromUri(regModelUrl);
-    await faceapi.nets.faceLandmark68Net.loadFromUri(regModelUrl);
-    await faceapi.nets.faceRecognitionNet.loadFromUri(regModelUrl);
+    await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
+    await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+    await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
     
     const video = document.getElementById('regVideo');
     navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
@@ -444,73 +443,18 @@ function logout() {
 async function initSystem() {
     setStatus('🔄 جاري بدء النظام (النسخة المحدثة)...', 'text-muted');
 
-    // Step 0: Refresh currentUser data from server to get latest biometric info
-    try {
-        const userRes = await fetch(`${API_URL}?action=getEmployee&employeeId=${encodeURIComponent(currentUser.id)}`);
-        const userResult = await userRes.json();
-        if (userResult.success && userResult.data) {
-            // Merge server data with current session, preserving id and name
-            currentUser = {
-                ...currentUser,
-                ...userResult.data,
-                id: currentUser.id, // Keep original ID
-                name: userResult.data.name || currentUser.name
-            };
-            // Update localStorage with fresh data
-            localStorage.setItem('empSession', JSON.stringify(currentUser));
-            console.log('🔐 User data refreshed from server:', {
-                biometricType: currentUser?.biometricType,
-                hasBiometricData: !!currentUser?.biometricData,
-                hasFaceDescriptor: !!currentUser?.faceDescriptor
-            });
-        }
-    } catch (e) {
-        console.warn('Could not refresh user data:', e);
-    }
-
     // Step 1: Load Data & AI Models in Parallel
     try {
         const dataPromise = fetch(`${API_URL}?action=getPortalInitialData&employeeId=${encodeURIComponent(currentUser.id)}`).then(r => r.json());
         const holidaysPromise = fetch(`${API_URL}?action=getOfficialHolidays`).then(r => r.json());
         const settingsPromise = fetch(`${API_URL}?action=getSettings`).then(r => r.json());
-        
-        // Enhanced model loading with better error handling
-        const modelPromise = (async () => {
-            try {
-                console.log('🤖 Loading AI models from:', MODEL_URL);
-                await Promise.all([
-                    faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
-                    faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-                    faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
-                ]);
-                console.log('✅ AI models loaded successfully');
-                return true;
-            } catch (modelError) {
-                console.error('❌ Failed to load AI models:', modelError);
-                console.log('🔍 Attempting to load models from alternative paths...');
-                
-                // Try alternative paths
-                const alternativePaths = ['../models', './models', 'models'];
-                for (const path of alternativePaths) {
-                    try {
-                        console.log(`🔄 Trying path: ${path}`);
-                        await Promise.all([
-                            faceapi.nets.ssdMobilenetv1.loadFromUri(path),
-                            faceapi.nets.faceLandmark68Net.loadFromUri(path),
-                            faceapi.nets.faceRecognitionNet.loadFromUri(path)
-                        ]);
-                        console.log(`✅ Models loaded from alternative path: ${path}`);
-                        return true;
-                    } catch (e) {
-                        console.log(`❌ Path ${path} failed:`, e.message);
-                        continue;
-                    }
-                }
-                throw new Error(`Failed to load AI models from all paths. Last error: ${modelError.message}`);
-            }
-        })();
+        const modelPromise = Promise.all([
+            faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
+            faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+            faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+        ]);
 
-        const [dataResult, holidaysResult, modelLoadResult] = await Promise.all([dataPromise, holidaysPromise, modelPromise]);
+        const [dataResult, holidaysResult, _] = await Promise.all([dataPromise, holidaysPromise, modelPromise]);
 
         if (dataResult.success) {
             sitesData = dataResult.sites || [];
@@ -545,20 +489,8 @@ async function initSystem() {
         }
     } catch(e) {
         console.error("Initial load error", e);
-        // Check if this is specifically a model loading error
-        if (e.message && e.message.includes('AI models')) {
-            setStatus('⚠️ فشل تحميل موديلات الوجه - يمكن استخدام بصمة الإصبع فقط', 'warning-text');
-            // Continue with system initialization but hide camera
-            const cameraContainer = document.querySelector('.camera-container');
-            if (cameraContainer) cameraContainer.classList.add('hidden');
-            // Continue with other initialization steps
-            getLocation();
-            setTimeout(checkPersistedTimerState, 1000);
-            return;
-        } else {
-            setStatus('❌ خطأ في الاتصال أو تحميل ملفات الذكاء الاصطناعي', 'error-text');
-            return;
-        }
+        setStatus('❌ خطأ في الاتصال أو تحميل ملفات الذكاء الاصطناعي', 'error-text');
+        return;
     }
 
     // Step 3: Setup Biometric System
@@ -566,21 +498,7 @@ async function initSystem() {
 
     // Step 4: Start video only for camera-based face recognition users
     // For hardware biometric users (fingerprint/face_id), hide camera and don't start video
-    // Determine user's biometric type - same logic as initBiometricSystem
-    let userBioType = currentUser?.biometricType;
-    if (!userBioType && currentUser?.biometricData) {
-        try {
-            const parsed = JSON.parse(currentUser.biometricData);
-            if (parsed && parsed.type) {
-                userBioType = parsed.type;
-            }
-        } catch (e) {
-            // Ignore parse error
-        }
-    }
-    if (!userBioType && currentUser?.faceDescriptor) {
-        userBioType = 'face';
-    }
+    const userBioType = currentUser.biometricType || (currentUser.faceDescriptor ? 'face' : null);
     if (userBioType === 'face') {
         startVideo();
     } else {
@@ -589,8 +507,6 @@ async function initSystem() {
         if (cameraContainer) cameraContainer.classList.add('hidden');
     }
     getLocation();
-    // Check for persisted timer state after initialization
-    setTimeout(checkPersistedTimerState, 1000);
 }
 
 function processAttendanceStatus(data) {
@@ -609,31 +525,16 @@ function processAttendanceStatus(data) {
 
 // Initialize biometric system based on user preference and device capabilities
 async function initBiometricSystem() {
-    // Determine user's biometric type - handle empty strings
-    let userBioType = currentUser.biometricType;
-    if (!userBioType && currentUser.biometricData) {
-        // Try to extract type from stored biometric data
-        try {
-            const parsed = JSON.parse(currentUser.biometricData);
-            if (parsed && parsed.type) {
-                userBioType = parsed.type;
-            }
-        } catch (e) {
-            console.log('Could not parse biometricData to extract type');
-        }
-    }
-    // Fallback to face if faceDescriptor exists (legacy)
-    if (!userBioType && currentUser.faceDescriptor) {
-        userBioType = 'face';
-    }
-
+    // Determine user's biometric type
+    const userBioType = currentUser.biometricType || (currentUser.faceDescriptor ? 'face' : null);
+    
     console.log('🔐 initBiometricSystem - userBioType:', userBioType);
-    console.log('🔐 currentUser data:', {
-        biometricType: currentUser?.biometricType,
+    console.log('🔐 currentUser data:', { 
+        biometricType: currentUser?.biometricType, 
         faceDescriptor: currentUser?.faceDescriptor ? 'exists' : 'null',
         biometricData: currentUser?.biometricData ? 'exists' : 'null'
     });
-
+    
     if (!userBioType) {
         setStatus('⚠️ لم يتم تسجيل بصمة. يرجى التواصل مع HR', 'error-text');
         return;
@@ -669,37 +570,24 @@ async function initFaceVerification() {
     try {
         const biometricData = currentUser.biometricData || currentUser.faceDescriptor;
         console.log('🔐 initFaceVerification - biometricData exists:', !!biometricData);
-
+        
         if (!biometricData) {
             setStatus('⚠️ لم يتم تسجيل بصمة وجه', 'error-text');
             return;
         }
-
-        let parsedData = JSON.parse(biometricData);
-        console.log('🔐 Parsed biometric data type:', typeof parsedData, 'isArray:', Array.isArray(parsedData), 'hasDataProp:', !!parsedData?.data);
-
-        // Handle both formats: direct array or object with {type, data}
-        let descriptorArray;
-        if (Array.isArray(parsedData)) {
-            // Direct array format (legacy)
-            descriptorArray = parsedData;
-        } else if (parsedData && parsedData.data) {
-            // New format: {type: 'face', data: [...]}
-            descriptorArray = typeof parsedData.data === 'string' ? JSON.parse(parsedData.data) : parsedData.data;
-        } else {
-            throw new Error('Invalid biometric data format');
-        }
-
-        const descArray = new Float32Array(descriptorArray);
+        
+        const parsedData = JSON.parse(biometricData);
+        console.log('🔐 Parsed biometric data type:', typeof parsedData, 'isArray:', Array.isArray(parsedData));
+        
+        const descArray = new Float32Array(parsedData);
         console.log('🔐 Descriptor array length:', descArray.length);
-
+        
         const labeledDescriptor = new faceapi.LabeledFaceDescriptors(currentUser.name, [descArray]);
         faceMatcher = new faceapi.FaceMatcher([labeledDescriptor], 0.6);
-
+        
         console.log('🔐 Face matcher initialized successfully');
         setStatus('✅ النظام جاهز. وجّه الكاميرا إليك...', 'success-text');
     } catch(e) {
-        console.error('🔐 initFaceVerification error:', e);
         setStatus('⚠️ خطأ في قراءة بصمة الوجه المسجلة', 'error-text');
     }
 }
@@ -724,22 +612,8 @@ async function initHardwareBiometricVerification(bioType) {
 
 // Unified biometric verification function
 async function verifyBiometric() {
-    // Determine user's biometric type - same logic as initBiometricSystem
-    let userBioType = currentUser?.biometricType;
-    if (!userBioType && currentUser?.biometricData) {
-        try {
-            const parsed = JSON.parse(currentUser.biometricData);
-            if (parsed && parsed.type) {
-                userBioType = parsed.type;
-            }
-        } catch (e) {
-            // Ignore parse error
-        }
-    }
-    if (!userBioType && currentUser?.faceDescriptor) {
-        userBioType = 'face';
-    }
-
+    const userBioType = currentUser.biometricType || (currentUser.faceDescriptor ? 'face' : null);
+    
     if (!userBioType) {
         return { success: false, message: 'لم يتم تسجيل بصمة' };
     }
@@ -789,7 +663,6 @@ async function checkCurrentStatus() {
         console.error("Status check failed", e);
         setAppState('out'); 
     }
-    return Promise.resolve();
 }
 
 function setAppState(state, startTime) {
@@ -801,15 +674,11 @@ function setAppState(state, startTime) {
         btnIn.classList.add('hidden');
         btnOut.classList.remove('hidden');
         timerContainer.classList.remove('hidden');
-        // Store check-in time in localStorage to persist across refreshes
-        localStorage.setItem('checkInTime', startTime);
         startWorkTimer(startTime);
     } else {
         btnIn.classList.remove('hidden');
         btnOut.classList.add('hidden');
         timerContainer.classList.add('hidden');
-        // Clear stored check-in time
-        localStorage.removeItem('checkInTime');
         stopWorkTimer();
     }
     updateActionButtonsState();
@@ -818,29 +687,15 @@ function setAppState(state, startTime) {
 function updateActionButtonsState() {
     const btnIn = document.getElementById('btnCheckIn');
     const btnOut = document.getElementById('btnCheckOut');
-
+    
     // Debug currentUser data
     console.log('👤 currentUser Debug:', {
         biometricType: currentUser?.biometricType,
         faceDescriptor: currentUser?.faceDescriptor ? 'exists' : 'null',
         biometricData: currentUser?.biometricData ? 'exists' : 'null'
     });
-
-    // Determine user's biometric type - same logic as initBiometricSystem
-    let userBioType = currentUser?.biometricType;
-    if (!userBioType && currentUser?.biometricData) {
-        try {
-            const parsed = JSON.parse(currentUser.biometricData);
-            if (parsed && parsed.type) {
-                userBioType = parsed.type;
-            }
-        } catch (e) {
-            // Ignore parse error
-        }
-    }
-    if (!userBioType && currentUser?.faceDescriptor) {
-        userBioType = 'face';
-    }
+    
+    const userBioType = currentUser?.biometricType || (currentUser?.faceDescriptor ? 'face' : null);
     
     let shouldBeEnabled;
     if (userBioType === 'fingerprint' || userBioType === 'face_hardware') {
@@ -905,24 +760,6 @@ function stopWorkTimer() {
     if (faceDetectionInterval) {
         clearInterval(faceDetectionInterval);
         faceDetectionInterval = null;
-    }
-}
-
-// Check for persisted timer state on page load
-function checkPersistedTimerState() {
-    const storedCheckInTime = localStorage.getItem('checkInTime');
-    if (storedCheckInTime) {
-        // Verify if there's still an active session
-        checkCurrentStatus().then(() => {
-            // If still checked in, restore timer
-            const btnIn = document.getElementById('btnCheckIn');
-            if (btnIn && btnIn.classList.contains('hidden')) {
-                setAppState('in', storedCheckInTime);
-            } else {
-                // No longer checked in, clear stored time
-                localStorage.removeItem('checkInTime');
-            }
-        });
     }
 }
 
@@ -1193,23 +1030,9 @@ function vibrateError() {
 async function handleCheckIn() {
     if(isCheckInProgress) return; // Prevent duplicate clicks
     if(!lastLocation) return alert('يجب تفعيل الـ GPS');
-
+    
     // Check biometric verification based on user type
-    // Determine user's biometric type - same logic as initBiometricSystem
-    let userBioType = currentUser?.biometricType;
-    if (!userBioType && currentUser?.biometricData) {
-        try {
-            const parsed = JSON.parse(currentUser.biometricData);
-            if (parsed && parsed.type) {
-                userBioType = parsed.type;
-            }
-        } catch (e) {
-            // Ignore parse error
-        }
-    }
-    if (!userBioType && currentUser?.faceDescriptor) {
-        userBioType = 'face';
-    }
+    const userBioType = currentUser.biometricType || (currentUser.faceDescriptor ? 'face' : null);
     
     if (userBioType === 'fingerprint' || userBioType === 'face_hardware') {
         // For hardware biometrics, verify on button click

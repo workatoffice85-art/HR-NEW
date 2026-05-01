@@ -289,7 +289,7 @@ class BiometricManager {
         }
     }
 
-    async _enrollFace(videoElement, modelUrl = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights') {
+    async _enrollFace(videoElement, modelUrl = '../models') {
         if (!faceapi) {
             throw new Error('face-api.js not loaded');
         }
@@ -515,7 +515,7 @@ class BiometricManager {
     // Helper: Load face-api models
     // ============================================================
     
-    async loadFaceModels(modelUrl = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights') {
+    async loadFaceModels(modelUrl = '../models') {
         if (!faceapi) {
             throw new Error('face-api.js not loaded');
         }

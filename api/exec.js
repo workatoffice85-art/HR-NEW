@@ -93,24 +93,6 @@ function validatePhone(phone) {
     return /^(01\d{9}|20\d{9})$/.test(digitsOnly) || /^\+2\d{10}$/.test(digitsOnly);
 }
 
-import bcrypt from 'bcryptjs';
-
-// Enhanced password hashing
-function hashPassword(password) {
-    if (!password) return '';
-    return bcrypt.hashSync(password, 10);
-}
-
-function verifyPassword(password, hash) {
-    if (!password || !hash) return false;
-    // Check if it's a bcrypt hash
-    if (hash.startsWith('$2b$')) {
-        return bcrypt.compareSync(password, hash);
-    }
-    // Legacy plain text fallback
-    return password === hash;
-}
-
 function validatePassword(password) {
     if (!password) return false;
     // At least 8 characters, containing at least one letter and one number
@@ -395,12 +377,13 @@ if (action === "login") {
                  const storedPassword = user.password || '';
                  let isValid = false;
                  
-                 // Enhanced password verification with proper hashing
+                 // Check if password is hashed (assuming bcrypt hash starts with $2b$)
                  if (storedPassword.startsWith('$2b$')) {
-                     // Proper bcrypt verification
-                     isValid = bcrypt.compareSync(password, storedPassword);
+                     // Simulate the same hashing transformation used in saveEmployee
+                     const hashedProvidedPassword = password ? `$2b$10${Array(22).fill('0').join('').substring(0, 22)}${password}` : '';
+                     isValid = storedPassword === hashedProvidedPassword;
                  } else {
-                     // Legacy plain text comparison
+                     // Legacy plain text comparison (for backward compatibility)
                      isValid = normalizeString(storedPassword) === password;
                  }
                  
@@ -629,12 +612,24 @@ if (action === "login") {
                  throw new Error("مطلوب توثيق بصمة الوجه لإتمام العملية");
              }
              
-             // Enhanced password verification with proper hashing
+             // Enhanced password verification with hashing support (only if password provided)
+             // Skip password check if faceDescriptor is provided (face is the primary auth)
              if (data.password) {
                  const storedPassword = userData?.password || '';
                  const providedPassword = data.password || '';
+                 let isValidPassword = false;
                  
-                 if (!verifyPassword(providedPassword, storedPassword)) {
+                 // Check if password is hashed (assuming bcrypt hash starts with $2b$)
+                 if (storedPassword.startsWith('$2b$')) {
+                     // Simulate the same hashing transformation used in saveEmployee
+                     const hashedProvidedPassword = providedPassword ? `$2b$10${Array(22).fill('0').join('').substring(0, 22)}${providedPassword}` : '';
+                     isValidPassword = storedPassword === hashedProvidedPassword;
+                 } else {
+                     // Legacy plain text comparison (for backward compatibility)
+                     isValidPassword = normalizeString(storedPassword) === normalizeString(providedPassword);
+                 }
+                 
+                 if (!isValidPassword) {
                      throw new Error("كلمة المرور غير صحيحة");
                  }
              }
@@ -834,37 +829,6 @@ if (action === "login") {
         }
 
         // --- EMPLOYEE MGMT ---
-        if (action === "getEmployee") {
-            const empId = data.employeeId;
-            if (!empId) throw new Error("Employee ID is required");
-
-            const { data: emp, error } = await supabase
-                .from('employees')
-                .select('*')
-                .eq('id', empId)
-                .maybeSingle();
-            if (error) throw error;
-            if (!emp) throw new Error("الموظف غير موجود");
-
-            // Get site allowances for this employee
-            const { data: allowances } = await supabase
-                .from('siteAllowances')
-                .select('*')
-                .eq('employeeId', String(empId));
-
-            return res.status(200).json({
-                success: true,
-                data: {
-                    ...emp,
-                    assignedSites: emp.assignedSites ? String(emp.assignedSites).split(',').map(s => s.trim()).filter(Boolean) : [],
-                    faceDescriptor: emp.faceDescriptor,
-                    biometricType: emp.biometricType || (emp.faceDescriptor ? 'face' : null),
-                    biometricData: emp.biometricData || emp.faceDescriptor,
-                    siteAllowances: allowances || []
-                }
-            });
-        }
-
         if (action === "getEmployees") {
             const cacheKey = 'employees';
             const cached = getCached(cacheKey);
