@@ -1032,7 +1032,7 @@ async function handleCheckIn() {
     if(isCheckInProgress) return; // Prevent duplicate clicks
     if(!lastLocation) return alert('يجب تفعيل الـ GPS');
     
-    // ENFORCE: Hardware biometric ONLY - NO camera face, NO password/PIN
+    // Check biometric verification based on user type
     const userBioType = currentUser.biometricType || (currentUser.faceDescriptor ? 'face' : null);
     
     if (userBioType === 'fingerprint' || userBioType === 'face_hardware') {
@@ -1043,10 +1043,12 @@ async function handleCheckIn() {
             return alert(`فشل التحقق من ${typeName}: ` + result.message);
         }
     } else if (userBioType === 'face') {
-        // Camera face is NOT ALLOWED - must use hardware biometric
-        return alert('⚠️ بصمة الكاميرا غير مسموح بها. يرجى استخدام بصمة الجهاز (Fingerprint أو Face ID) أو التواصل مع HR لتسجيلها.');
+        // For camera face, check if already verified continuously
+        if (!isBiometricVerified && !currentFaceDescriptor) {
+            return alert('بصمة الوجه غير ملتقطة الحين');
+        }
     } else {
-        return alert('⚠️ لم يتم تسجيل بصمة جهاز. يرجى التواصل مع HR لتسجيل بصمة الإصبع أو Face ID');
+        return alert('لم يتم تسجيل بصمة. يرجى التواصل مع HR');
     }
 
     isCheckInProgress = true;
@@ -1054,15 +1056,13 @@ async function handleCheckIn() {
     
     // Prepare biometric data for payload
     const biometricData = currentBiometricVerification?.data || currentFaceDescriptor;
-    const deviceId = getDeviceFingerprint();
     
     const payload = {
         action: 'addAttendance', employeeId: currentUser.id, employeeName: currentUser.name,
         checkIn: new Date().toISOString(), latitude: lastLocation.lat, longitude: lastLocation.lng,
         biometricType: userBioType,
         biometricData: biometricData ? JSON.stringify(biometricData) : null,
-        faceDescriptor: biometricData ? JSON.stringify(biometricData) : null, // Legacy support
-        deviceId: deviceId // Device fingerprint for hardware biometric binding
+        faceDescriptor: biometricData ? JSON.stringify(biometricData) : null // Legacy support
     };
 
     try {
@@ -1104,24 +1104,9 @@ async function handleCheckIn() {
 async function forceCloseAndRecheckIn(openSessionId, originalPayload) {
     document.getElementById('loader').classList.remove('hidden');
     
-    // ENFORCE: Hardware biometric ONLY
+    // Prepare biometric data
     const userBioType = currentUser.biometricType || (currentUser.faceDescriptor ? 'face' : null);
-    
-    if (userBioType === 'face') {
-        alert('⚠️ بصمة الكاميرا غير مسموح بها. يرجى استخدام بصمة الجهاز (Fingerprint أو Face ID) أو التواصل مع HR لتسجيلها.');
-        document.getElementById('loader').classList.add('hidden');
-        return;
-    }
-    
-    if (userBioType !== 'fingerprint' && userBioType !== 'face_hardware') {
-        alert('⚠️ لم يتم تسجيل بصمة جهاز. يرجى التواصل مع HR لتسجيل بصمة الإصبع أو Face ID');
-        document.getElementById('loader').classList.add('hidden');
-        return;
-    }
-    
-    // Prepare biometric data and device fingerprint
     const biometricData = currentBiometricVerification?.data || currentFaceDescriptor;
-    const deviceId = getDeviceFingerprint();
     
     try {
         // Step 1: Close the old session
@@ -1136,8 +1121,7 @@ async function forceCloseAndRecheckIn(openSessionId, originalPayload) {
                 longitude: lastLocation ? lastLocation.lng : 0,
                 biometricType: userBioType,
                 biometricData: biometricData ? JSON.stringify(biometricData) : null,
-                faceDescriptor: biometricData ? JSON.stringify(biometricData) : null,
-                deviceId: deviceId
+                faceDescriptor: biometricData ? JSON.stringify(biometricData) : null
             }),
             headers: { 'Content-Type': 'text/plain' }
         });
@@ -1174,7 +1158,7 @@ async function forceCloseAndRecheckIn(openSessionId, originalPayload) {
 async function handleCheckOut() {
     if(!lastLocation) return alert('يجب تفعيل الـ GPS');
     
-    // ENFORCE: Hardware biometric ONLY - NO camera face, NO password/PIN
+    // Check biometric verification based on user type
     const userBioType = currentUser.biometricType || (currentUser.faceDescriptor ? 'face' : null);
     
     if (userBioType === 'fingerprint' || userBioType === 'face_hardware') {
@@ -1185,25 +1169,25 @@ async function handleCheckOut() {
             return alert(`فشل التحقق من ${typeName}: ` + result.message);
         }
     } else if (userBioType === 'face') {
-        // Camera face is NOT ALLOWED - must use hardware biometric
-        return alert('⚠️ بصمة الكاميرا غير مسموح بها. يرجى استخدام بصمة الجهاز (Fingerprint أو Face ID) أو التواصل مع HR لتسجيلها.');
+        // For camera face, check if already verified continuously
+        if (!isBiometricVerified && !currentFaceDescriptor) {
+            return alert('بصمة الوجه غير ملتقطة الحين');
+        }
     } else {
-        return alert('⚠️ لم يتم تسجيل بصمة جهاز. يرجى التواصل مع HR لتسجيل بصمة الإصبع أو Face ID');
+        return alert('لم يتم تسجيل بصمة. يرجى التواصل مع HR');
     }
 
     document.getElementById('loader').classList.remove('hidden');
     
     // Prepare biometric data for payload
     const biometricData = currentBiometricVerification?.data || currentFaceDescriptor;
-    const deviceId = getDeviceFingerprint();
     
     const payload = { 
         action: 'checkoutAttendance', employeeId: currentUser.id, 
         checkOut: new Date().toISOString(), latitude: lastLocation.lat, longitude: lastLocation.lng,
         biometricType: userBioType,
         biometricData: biometricData ? JSON.stringify(biometricData) : null,
-        faceDescriptor: biometricData ? JSON.stringify(biometricData) : null,
-        deviceId: deviceId // Device fingerprint for hardware biometric binding
+        faceDescriptor: biometricData ? JSON.stringify(biometricData) : null
     };
     try {
         const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'text/plain' } });

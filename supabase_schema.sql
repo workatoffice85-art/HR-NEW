@@ -13,7 +13,6 @@ CREATE TABLE IF NOT EXISTS employees (
     "faceDescriptor" TEXT, -- DEPRECATED: use biometricData instead
     "biometricType" TEXT DEFAULT 'face', -- 'face' (camera), 'fingerprint' (hardware), 'face_hardware' (Face ID)
     "biometricData" TEXT, -- JSON string: face descriptor OR WebAuthn credential ID
-    "registeredDeviceId" TEXT, -- Device fingerprint for hardware biometric binding
     "transportPrice" NUMERIC DEFAULT 0,
     salary NUMERIC DEFAULT 0
 );

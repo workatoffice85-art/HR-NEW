@@ -598,59 +598,29 @@ if (action === "login") {
                 });
             }
 
-            // 1. Hardware Biometric MANDATORY - NO password/PIN fallback
-            // Only fingerprint or Face ID allowed - NO camera face, NO password
-            if (data.biometricType !== 'fingerprint' && data.biometricType !== 'face_hardware') {
-                throw new Error("⚠️ مطلوب بصمة الجهاز فقط (Fingerprint أو Face ID) - لا يُسمح بالكاميرا أو كلمة المرور");
+            // 1. Biometric/PIN Check - BLOCK password-only authentication
+            // Must have biometric data (face, fingerprint, or Face ID) - NO PIN/password fallback
+            const userBioType = data.biometricType || (data.faceDescriptor ? 'face' : null);
+            
+            // REJECT if no biometric data provided (password/PIN not allowed)
+            if (!data.biometricData && !data.faceDescriptor) {
+                throw new Error("⚠️ مطلوب بصمة للتسجيل - لا يُسمح باستخدام PIN أو كلمة المرور للحضور");
             }
             
-            if (!data.biometricData || !data.deviceId) {
-                throw new Error("⚠️ بيانات البصمة أو الجهاز غير مكتملة - يرجى التأكد من تسجيل البصمة الصحيحة");
-            }
-            
-            // Verify employee has hardware biometric registered
+            // Verify employee has biometric registered
             const { data: empBioData } = await supabase.from('employees')
-                .select('"biometricType", "biometricData"')
+                .select('"biometricType", "biometricData", "faceDescriptor"')
                 .eq('id', String(data.employeeId))
                 .maybeSingle();
             
-            if (!empBioData || !empBioData.biometricData) {
-                throw new Error("⚠️ لم يتم تسجيل بصمة جهاز لهذا الموظف - يرجى التواصل مع HR");
+            if (!empBioData) {
+                throw new Error("⚠️ لم يتم تسجيل بصمة لهذا الموظف - يرجى التواصل مع HR");
             }
             
-            if (empBioData.biometricType !== 'fingerprint' && empBioData.biometricType !== 'face_hardware') {
-                throw new Error("⚠️ يجب تسجيل بصمة الجهاز (Fingerprint أو Face ID) فقط - لا يُسمح ببصمة الكاميرا");
-            }
-
-            // 1.5 Device Binding Check (Hardware Biometric Security)
-            // For hardware biometrics (fingerprint/Face ID), verify device binding
-            if (data.biometricType === 'fingerprint' || data.biometricType === 'face_hardware') {
-                // Fetch employee's registered device ID
-                const { data: empData } = await supabase.from('employees')
-                    .select('"registeredDeviceId", "biometricType"')
-                    .eq('id', String(data.employeeId))
-                    .maybeSingle();
-                
-                if (empData) {
-                    if (empData.registeredDeviceId) {
-                        // Device already registered - must match
-                        if (empData.registeredDeviceId !== data.deviceId) {
-                            console.error('🚨 Device Mismatch:', {
-                                expected: empData.registeredDeviceId,
-                                received: data.deviceId,
-                                employeeId: data.employeeId
-                            });
-                            throw new Error("⚠️ جهاز غير مسموح - يرجى استخدام جهازك المسجل للتسجيل");
-                        }
-                    } else {
-                        // First time using hardware biometric - register this device
-                        // Only register if biometric verification succeeded
-                        console.log('📱 Registering new device for employee:', data.employeeId, 'Device:', data.deviceId);
-                        await supabase.from('employees')
-                            .update({ "registeredDeviceId": data.deviceId })
-                            .eq('id', String(data.employeeId));
-                    }
-                }
+            // Check if employee has ANY biometric registered (face, fingerprint, or Face ID)
+            const hasBiometric = empBioData.biometricData || empBioData.faceDescriptor;
+            if (!hasBiometric) {
+                throw new Error("⚠️ لم يتم تسجيل بصمة لهذا الموظف - يرجى التواصل مع HR لتسجيل الوجه أو البصمة");
             }
 
             // 2. Check Location logic
@@ -762,8 +732,7 @@ if (action === "login") {
                 latitude: data.latitude,
                 longitude: data.longitude,
                 status: status,
-                transportPrice: finalTransport,
-                deviceId: data.deviceId || null // Track device for audit trail
+                transportPrice: finalTransport
             };
 
             const { error } = await supabase.from('attendance').insert([payload]);
@@ -777,46 +746,26 @@ if (action === "login") {
 
         // --- CHECK OUT ---
         if (action === "checkoutAttendance") {
-            // 0. Hardware Biometric MANDATORY for checkout - NO password/PIN fallback
-            if (data.biometricType !== 'fingerprint' && data.biometricType !== 'face_hardware') {
-                throw new Error("⚠️ مطلوب بصمة الجهاز فقط (Fingerprint أو Face ID) - لا يُسمح بالكاميرا أو كلمة المرور");
+            // 0. Biometric/PIN Check - BLOCK password-only authentication
+            // Must have biometric data (face, fingerprint, or Face ID) - NO PIN/password fallback
+            if (!data.biometricData && !data.faceDescriptor) {
+                throw new Error("⚠️ مطلوب بصمة للتسجيل - لا يُسمح باستخدام PIN أو كلمة المرور للانصراف");
             }
             
-            if (!data.biometricData || !data.deviceId) {
-                throw new Error("⚠️ بيانات البصمة أو الجهاز غير مكتملة - يرجى التأكد من تسجيل البصمة الصحيحة");
-            }
-            
-            // Verify employee has hardware biometric registered
+            // Verify employee has biometric registered
             const { data: empBioData } = await supabase.from('employees')
-                .select('"biometricType", "biometricData"')
+                .select('"biometricType", "biometricData", "faceDescriptor"')
                 .eq('id', String(data.employeeId))
                 .maybeSingle();
             
-            if (!empBioData || !empBioData.biometricData) {
-                throw new Error("⚠️ لم يتم تسجيل بصمة جهاز لهذا الموظف - يرجى التواصل مع HR");
+            if (!empBioData) {
+                throw new Error("⚠️ لم يتم تسجيل بصمة لهذا الموظف - يرجى التواصل مع HR");
             }
             
-            if (empBioData.biometricType !== 'fingerprint' && empBioData.biometricType !== 'face_hardware') {
-                throw new Error("⚠️ يجب تسجيل بصمة الجهاز (Fingerprint أو Face ID) فقط - لا يُسمح ببصمة الكاميرا");
-            }
-
-            // 0.5 Device Binding Check for Hardware Biometric (same as check-in)
-            if (data.biometricType === 'fingerprint' || data.biometricType === 'face_hardware') {
-                const { data: empData } = await supabase.from('employees')
-                    .select('"registeredDeviceId", "biometricType"')
-                    .eq('id', String(data.employeeId))
-                    .maybeSingle();
-                
-                if (empData && empData.registeredDeviceId) {
-                    if (empData.registeredDeviceId !== data.deviceId) {
-                        console.error('🚨 Checkout Device Mismatch:', {
-                            expected: empData.registeredDeviceId,
-                            received: data.deviceId,
-                            employeeId: data.employeeId
-                        });
-                        throw new Error("⚠️ جهاز غير مسموح - يرجى استخدام جهازك المسجل للتسجيل");
-                    }
-                }
+            // Check if employee has ANY biometric registered (face, fingerprint, or Face ID)
+            const hasBiometric = empBioData.biometricData || empBioData.faceDescriptor;
+            if (!hasBiometric) {
+                throw new Error("⚠️ لم يتم تسجيل بصمة لهذا الموظف - يرجى التواصل مع HR لتسجيل الوجه أو البصمة");
             }
 
             // Support checkout by specific ID (for force-close) or latest open session
