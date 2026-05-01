@@ -595,7 +595,8 @@ async function initFaceVerification() {
 
 async function initHardwareBiometricVerification(bioType) {
     try {
-        if (!currentUser.biometricData) {
+        const biometricData = currentUser.biometricData || currentUser.faceDescriptor;
+        if (!biometricData) {
             const typeName = bioType === 'face_hardware' ? 'Face ID' : 'بصمة الإصبع';
             setStatus(`⚠️ لم يتم تسجيل ${typeName}`, 'error-text');
             return;
@@ -656,10 +657,11 @@ function getDeviceFingerprint() {
 
 async function verifyHardwareBiometric(bioType) {
     try {
-        const result = await biometricManager.authenticate(currentUser.biometricData);
+        const biometricData = currentUser.biometricData || currentUser.faceDescriptor;
+        const result = await biometricManager.authenticate(biometricData);
         if (result.success) {
             isBiometricVerified = true;
-            currentBiometricVerification = { type: bioType, data: currentUser.biometricData };
+            currentBiometricVerification = { type: bioType, data: biometricData };
             updateActionButtonsState();
         }
         return result;
