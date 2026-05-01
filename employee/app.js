@@ -681,8 +681,21 @@ function updateActionButtonsState() {
         shouldBeEnabled = false;
     }
     
+    // Debug logging
+    console.log('🔘 Button State Debug:', {
+        userBioType,
+        isBiometricVerified,
+        isFaceVerified,
+        lastDetectedSite: !!lastDetectedSite,
+        shouldBeEnabled,
+        btnInExists: !!btnIn,
+        btnInDisabled: btnIn?.disabled,
+        btnInHidden: btnIn?.classList?.contains('hidden')
+    });
+    
     if (btnIn && btnIn.disabled !== !shouldBeEnabled) {
         btnIn.disabled = !shouldBeEnabled;
+        console.log('🔘 Check-in button disabled set to:', !shouldBeEnabled);
     }
     if (btnOut && btnOut.disabled !== !shouldBeEnabled) {
         btnOut.disabled = !shouldBeEnabled;
@@ -771,7 +784,6 @@ function startVideo() {
 
                     const bestMatch = faceMatcher.findBestMatch(detections.descriptor);
                     if (bestMatch.label !== 'unknown') {
-                        setStatus('تم التحقق من الوجه بنجاح ✓', 'success-text');
                         currentFaceDescriptor = Array.from(detections.descriptor);
                         isFaceVerified = true;
                         // Update unified biometric status
@@ -781,6 +793,14 @@ function startVideo() {
                             data: Array.from(detections.descriptor) 
                         };
                         consecutiveSuccessFrames++;
+                        
+                        // Update status - check if location already detected
+                        const currentStatus = document.getElementById('statusMessage')?.innerText || '';
+                        if (currentStatus.includes('الموقع') || lastDetectedSite) {
+                            setStatus('✓ تم التحقق من الوجه والموقع', 'success-text');
+                        } else {
+                            setStatus('تم التحقق من الوجه بنجاح ✓', 'success-text');
+                        }
 
                         // Reset counter after 5 seconds to resume checking
                         if (consecutiveSuccessFrames === 3) {
@@ -867,7 +887,13 @@ function tryGetPosition(options, onSuccess, onError) {
 function onPositionSuccess(position) {
     lastLocation = { lat: position.coords.latitude, lng: position.coords.longitude };
     verifyLocation();
-    setStatus('تم تحديد الموقع ✓', 'success-text');
+    // Don't overwrite face verification status - append to it or keep it
+    const currentStatus = document.getElementById('statusMessage')?.innerText || '';
+    if (currentStatus.includes('التحقق من الوجه') || isBiometricVerified) {
+        setStatus('✓ تم التحقق من الوجه والموقع', 'success-text');
+    } else {
+        setStatus('تم تحديد الموقع ✓', 'success-text');
+    }
     startWatchingPosition();
 }
 
