@@ -496,7 +496,16 @@ async function initSystem() {
     // Step 3: Setup Biometric System
     await initBiometricSystem();
 
-    startVideo();
+    // Step 4: Start video only for camera-based face recognition users
+    // For hardware biometric users (fingerprint/face_id), hide camera and don't start video
+    const userBioType = currentUser.biometricType || (currentUser.faceDescriptor ? 'face' : null);
+    if (userBioType === 'face') {
+        startVideo();
+    } else {
+        // Hide camera container for hardware biometric users
+        const cameraContainer = document.querySelector('.camera-container');
+        if (cameraContainer) cameraContainer.classList.add('hidden');
+    }
     getLocation();
 }
 
