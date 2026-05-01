@@ -204,15 +204,15 @@
                 <p id="regStatusMessage" class="hidden"></p>
             </div>
 
-            <!-- Fingerprint Registration Section -->
+            <!-- Hardware Biometric Registration Section (Fingerprint or Face ID) -->
             <div id="fingerprintRegistrationSection" class="hidden" style="margin-bottom: 15px; text-align: center;">
-                <label style="display:block; margin-bottom:10px;">بصمة الإصبع <small>(هامة جداً للحضور)</small></label>
-                <div style="padding: 40px; background: rgba(255,255,255,0.05); border-radius: 12px; border: 2px dashed rgba(16, 185, 129, 0.3);">
-                    <div style="font-size: 3rem; margin-bottom: 10px;">👆</div>
-                    <p style="color: var(--text-muted);">اضغط الزر أدناه لتسجيل بصمة إصبعك</p>
+                <label id="hardwareBioLabel" style="display:block; margin-bottom:10px;">بصمة الإصبع / Face ID <small>(هامة جداً للحضور)</small></label>
+                <div id="hardwareBioIconContainer" style="padding: 40px; background: rgba(255,255,255,0.05); border-radius: 12px; border: 2px dashed rgba(16, 185, 129, 0.3);">
+                    <div id="hardwareBioIcon" style="font-size: 3rem; margin-bottom: 10px;">👆</div>
+                    <p id="hardwareBioDesc" style="color: var(--text-muted);">اضغط الزر أدناه لتسجيل البصمة</p>
                 </div>
-                <button class="btn-primary" style="background:var(--secondary); width:80%; margin-top: 15px;"
-                    onclick="captureFingerprintRegistration()">تسجيل بصمة الإصبع</button>
+                <button class="btn-primary" id="hardwareBioBtn" style="background:var(--secondary); width:80%; margin-top: 15px;"
+                    onclick="captureFingerprintRegistration()">تسجيل البصمة</button>
                 <p id="fingerprintRegStatusMessage" class="hidden"></p>
             </div>
 

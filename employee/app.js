@@ -275,12 +275,21 @@ function selectBiometricType(type) {
     } else if (type === 'fingerprint' || type === 'face_hardware') {
         // Hardware biometric (fingerprint or Face ID) - both use same WebAuthn flow
         document.getElementById('fingerprintRegistrationSection').classList.remove('hidden');
-        // Update UI label based on type
-        const label = type === 'face_hardware' ? 'Face ID' : 'بصمة الإصبع';
-        const icon = type === 'face_hardware' ? '📱' : '👆';
-        const container = document.getElementById('fingerprintRegistrationSection');
-        container.querySelector('label').innerHTML = `${label} <small>(هام جداً للحضور)</small>`;
-        container.querySelector('div div').innerText = icon;
+        
+        // Update UI based on type
+        const isFaceId = type === 'face_hardware';
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        
+        const label = isFaceId ? (isIOS ? 'Face ID' : 'Face Unlock') : 'بصمة الإصبع';
+        const icon = isFaceId ? '📱' : '👆';
+        const desc = isFaceId ? 'استخدم بصمة وجهك للتسجيل' : 'اضغط الزر أدناه لتسجيل بصمة إصبعك';
+        const btnText = isFaceId ? 'تسجيل Face ID' : 'تسجيل بصمة الإصبع';
+        
+        // Update all UI elements
+        document.getElementById('hardwareBioLabel').innerHTML = `${label} <small>(هام جداً للحضور)</small>`;
+        document.getElementById('hardwareBioIcon').innerText = icon;
+        document.getElementById('hardwareBioDesc').innerText = desc;
+        document.getElementById('hardwareBioBtn').innerText = btnText;
     }
 }
 

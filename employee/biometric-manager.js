@@ -26,29 +26,66 @@ class BiometricManager {
     async checkAvailableBiometrics() {
         this.availableBiometrics = [];
         
+        // Detect device type
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        const isAndroid = /Android/.test(navigator.userAgent);
+        
         // STEP 1: Check for hardware biometrics (WebAuthn) - FASTER & MORE SECURE
         const hasHardwareBiometric = await this._checkWebAuthnAvailability();
         
         if (hasHardwareBiometric) {
             // Device has hardware biometric sensor
-            // We can't distinguish between Face ID vs Fingerprint from WebAuthn alone
-            // But we offer both options and fingerprint gets higher priority
+            // Priority depends on device type
             
-            this.availableBiometrics.push({
-                type: 'fingerprint',
-                name: 'بصمة الإصبع',
-                icon: '👆',
-                priority: 1, // Highest priority - default choice
-                isHardware: true
-            });
-            
-            this.availableBiometrics.push({
-                type: 'face_hardware',
-                name: 'Face ID',
-                icon: '📱',
-                priority: 2, // Second priority
-                isHardware: true
-            });
+            if (isIOS) {
+                // iPhone/iPad: Face ID is more common and preferred
+                this.availableBiometrics.push({
+                    type: 'face_hardware',
+                    name: 'Face ID',
+                    icon: '📱',
+                    priority: 1, // First priority for iOS
+                    isHardware: true,
+                    deviceType: 'ios'
+                });
+                
+                this.availableBiometrics.push({
+                    type: 'fingerprint',
+                    name: 'Touch ID',
+                    icon: '👆',
+                    priority: 2, // Second for iOS (older devices)
+                    isHardware: true,
+                    deviceType: 'ios'
+                });
+            } else if (isAndroid) {
+                // Android: Fingerprint is more common
+                this.availableBiometrics.push({
+                    type: 'fingerprint',
+                    name: 'بصمة الإصبع',
+                    icon: '👆',
+                    priority: 1, // First priority for Android
+                    isHardware: true,
+                    deviceType: 'android'
+                });
+                
+                this.availableBiometrics.push({
+                    type: 'face_hardware',
+                    name: 'Face Unlock',
+                    icon: '📱',
+                    priority: 2, // Second for Android
+                    isHardware: true,
+                    deviceType: 'android'
+                });
+            } else {
+                // Desktop/Laptop: Fingerprint (Windows Hello, etc.)
+                this.availableBiometrics.push({
+                    type: 'fingerprint',
+                    name: 'بصمة الإصبع',
+                    icon: '👆',
+                    priority: 1,
+                    isHardware: true,
+                    deviceType: 'desktop'
+                });
+            }
         }
         
         // STEP 2: Always offer camera-based face recognition as fallback
@@ -58,9 +95,10 @@ class BiometricManager {
             this.availableBiometrics.push({
                 type: 'face',
                 name: 'بصمة الوجه (بالكاميرا)',
-                icon: '�',
+                icon: '📷',
                 priority: hasHardwareBiometric ? 3 : 1, // Only default if no hardware
-                isHardware: false
+                isHardware: false,
+                deviceType: 'fallback'
             });
         }
         
@@ -92,12 +130,30 @@ class BiometricManager {
                 return false;
             }
             
-            // Check if user verifying platform authenticator is available (fingerprint)
-            const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-            return available;
-        } catch (e) {
-            console.log('WebAuthn not available:', e.message);
+            // For iOS Safari and modern Android: always assume hardware biometrics available
+            // because isUserVerifyingPlatformAuthenticatorAvailable is unreliable
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+            const isAndroid = /Android/.test(navigator.userAgent);
+            const isModernMobile = isIOS || isAndroid;
+            
+            if (isModernMobile && window.PublicKeyCredential) {
+                console.log('Mobile device detected - assuming hardware biometric support');
+                return true;
+            }
+            
+            // For desktop: check properly
+            if (PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable) {
+                const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+                return available;
+            }
+            
             return false;
+        } catch (e) {
+            console.log('WebAuthn check error:', e.message);
+            // If error but it's mobile, still return true
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+            const isAndroid = /Android/.test(navigator.userAgent);
+            return (isIOS || isAndroid) && window.PublicKeyCredential;
         }
     }
 
