@@ -443,6 +443,30 @@ function logout() {
 async function initSystem() {
     setStatus('🔄 جاري بدء النظام (النسخة المحدثة)...', 'text-muted');
 
+    // Step 0: Refresh currentUser data from server to get latest biometric info
+    try {
+        const userRes = await fetch(`${API_URL}?action=getEmployee&employeeId=${encodeURIComponent(currentUser.id)}`);
+        const userResult = await userRes.json();
+        if (userResult.success && userResult.data) {
+            // Merge server data with current session, preserving id and name
+            currentUser = {
+                ...currentUser,
+                ...userResult.data,
+                id: currentUser.id, // Keep original ID
+                name: userResult.data.name || currentUser.name
+            };
+            // Update localStorage with fresh data
+            localStorage.setItem('empSession', JSON.stringify(currentUser));
+            console.log('🔐 User data refreshed from server:', {
+                biometricType: currentUser?.biometricType,
+                hasBiometricData: !!currentUser?.biometricData,
+                hasFaceDescriptor: !!currentUser?.faceDescriptor
+            });
+        }
+    } catch (e) {
+        console.warn('Could not refresh user data:', e);
+    }
+
     // Step 1: Load Data & AI Models in Parallel
     try {
         const dataPromise = fetch(`${API_URL}?action=getPortalInitialData&employeeId=${encodeURIComponent(currentUser.id)}`).then(r => r.json());
@@ -498,7 +522,21 @@ async function initSystem() {
 
     // Step 4: Start video only for camera-based face recognition users
     // For hardware biometric users (fingerprint/face_id), hide camera and don't start video
-    const userBioType = currentUser.biometricType || (currentUser.faceDescriptor ? 'face' : null);
+    // Determine user's biometric type - same logic as initBiometricSystem
+    let userBioType = currentUser?.biometricType;
+    if (!userBioType && currentUser?.biometricData) {
+        try {
+            const parsed = JSON.parse(currentUser.biometricData);
+            if (parsed && parsed.type) {
+                userBioType = parsed.type;
+            }
+        } catch (e) {
+            // Ignore parse error
+        }
+    }
+    if (!userBioType && currentUser?.faceDescriptor) {
+        userBioType = 'face';
+    }
     if (userBioType === 'face') {
         startVideo();
     } else {
@@ -525,16 +563,31 @@ function processAttendanceStatus(data) {
 
 // Initialize biometric system based on user preference and device capabilities
 async function initBiometricSystem() {
-    // Determine user's biometric type
-    const userBioType = currentUser.biometricType || (currentUser.faceDescriptor ? 'face' : null);
-    
+    // Determine user's biometric type - handle empty strings
+    let userBioType = currentUser.biometricType;
+    if (!userBioType && currentUser.biometricData) {
+        // Try to extract type from stored biometric data
+        try {
+            const parsed = JSON.parse(currentUser.biometricData);
+            if (parsed && parsed.type) {
+                userBioType = parsed.type;
+            }
+        } catch (e) {
+            console.log('Could not parse biometricData to extract type');
+        }
+    }
+    // Fallback to face if faceDescriptor exists (legacy)
+    if (!userBioType && currentUser.faceDescriptor) {
+        userBioType = 'face';
+    }
+
     console.log('🔐 initBiometricSystem - userBioType:', userBioType);
-    console.log('🔐 currentUser data:', { 
-        biometricType: currentUser?.biometricType, 
+    console.log('🔐 currentUser data:', {
+        biometricType: currentUser?.biometricType,
         faceDescriptor: currentUser?.faceDescriptor ? 'exists' : 'null',
         biometricData: currentUser?.biometricData ? 'exists' : 'null'
     });
-    
+
     if (!userBioType) {
         setStatus('⚠️ لم يتم تسجيل بصمة. يرجى التواصل مع HR', 'error-text');
         return;
@@ -570,24 +623,37 @@ async function initFaceVerification() {
     try {
         const biometricData = currentUser.biometricData || currentUser.faceDescriptor;
         console.log('🔐 initFaceVerification - biometricData exists:', !!biometricData);
-        
+
         if (!biometricData) {
             setStatus('⚠️ لم يتم تسجيل بصمة وجه', 'error-text');
             return;
         }
-        
-        const parsedData = JSON.parse(biometricData);
-        console.log('🔐 Parsed biometric data type:', typeof parsedData, 'isArray:', Array.isArray(parsedData));
-        
-        const descArray = new Float32Array(parsedData);
+
+        let parsedData = JSON.parse(biometricData);
+        console.log('🔐 Parsed biometric data type:', typeof parsedData, 'isArray:', Array.isArray(parsedData), 'hasDataProp:', !!parsedData?.data);
+
+        // Handle both formats: direct array or object with {type, data}
+        let descriptorArray;
+        if (Array.isArray(parsedData)) {
+            // Direct array format (legacy)
+            descriptorArray = parsedData;
+        } else if (parsedData && parsedData.data) {
+            // New format: {type: 'face', data: [...]}
+            descriptorArray = typeof parsedData.data === 'string' ? JSON.parse(parsedData.data) : parsedData.data;
+        } else {
+            throw new Error('Invalid biometric data format');
+        }
+
+        const descArray = new Float32Array(descriptorArray);
         console.log('🔐 Descriptor array length:', descArray.length);
-        
+
         const labeledDescriptor = new faceapi.LabeledFaceDescriptors(currentUser.name, [descArray]);
         faceMatcher = new faceapi.FaceMatcher([labeledDescriptor], 0.6);
-        
+
         console.log('🔐 Face matcher initialized successfully');
         setStatus('✅ النظام جاهز. وجّه الكاميرا إليك...', 'success-text');
     } catch(e) {
+        console.error('🔐 initFaceVerification error:', e);
         setStatus('⚠️ خطأ في قراءة بصمة الوجه المسجلة', 'error-text');
     }
 }
@@ -612,8 +678,22 @@ async function initHardwareBiometricVerification(bioType) {
 
 // Unified biometric verification function
 async function verifyBiometric() {
-    const userBioType = currentUser.biometricType || (currentUser.faceDescriptor ? 'face' : null);
-    
+    // Determine user's biometric type - same logic as initBiometricSystem
+    let userBioType = currentUser?.biometricType;
+    if (!userBioType && currentUser?.biometricData) {
+        try {
+            const parsed = JSON.parse(currentUser.biometricData);
+            if (parsed && parsed.type) {
+                userBioType = parsed.type;
+            }
+        } catch (e) {
+            // Ignore parse error
+        }
+    }
+    if (!userBioType && currentUser?.faceDescriptor) {
+        userBioType = 'face';
+    }
+
     if (!userBioType) {
         return { success: false, message: 'لم يتم تسجيل بصمة' };
     }
@@ -687,15 +767,29 @@ function setAppState(state, startTime) {
 function updateActionButtonsState() {
     const btnIn = document.getElementById('btnCheckIn');
     const btnOut = document.getElementById('btnCheckOut');
-    
+
     // Debug currentUser data
     console.log('👤 currentUser Debug:', {
         biometricType: currentUser?.biometricType,
         faceDescriptor: currentUser?.faceDescriptor ? 'exists' : 'null',
         biometricData: currentUser?.biometricData ? 'exists' : 'null'
     });
-    
-    const userBioType = currentUser?.biometricType || (currentUser?.faceDescriptor ? 'face' : null);
+
+    // Determine user's biometric type - same logic as initBiometricSystem
+    let userBioType = currentUser?.biometricType;
+    if (!userBioType && currentUser?.biometricData) {
+        try {
+            const parsed = JSON.parse(currentUser.biometricData);
+            if (parsed && parsed.type) {
+                userBioType = parsed.type;
+            }
+        } catch (e) {
+            // Ignore parse error
+        }
+    }
+    if (!userBioType && currentUser?.faceDescriptor) {
+        userBioType = 'face';
+    }
     
     let shouldBeEnabled;
     if (userBioType === 'fingerprint' || userBioType === 'face_hardware') {
@@ -1030,9 +1124,23 @@ function vibrateError() {
 async function handleCheckIn() {
     if(isCheckInProgress) return; // Prevent duplicate clicks
     if(!lastLocation) return alert('يجب تفعيل الـ GPS');
-    
+
     // Check biometric verification based on user type
-    const userBioType = currentUser.biometricType || (currentUser.faceDescriptor ? 'face' : null);
+    // Determine user's biometric type - same logic as initBiometricSystem
+    let userBioType = currentUser?.biometricType;
+    if (!userBioType && currentUser?.biometricData) {
+        try {
+            const parsed = JSON.parse(currentUser.biometricData);
+            if (parsed && parsed.type) {
+                userBioType = parsed.type;
+            }
+        } catch (e) {
+            // Ignore parse error
+        }
+    }
+    if (!userBioType && currentUser?.faceDescriptor) {
+        userBioType = 'face';
+    }
     
     if (userBioType === 'fingerprint' || userBioType === 'face_hardware') {
         // For hardware biometrics, verify on button click

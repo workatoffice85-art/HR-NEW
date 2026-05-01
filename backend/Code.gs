@@ -809,6 +809,37 @@ function doGet(e) {
       });
     }
 
+    if (action === "getEmployee") {
+      var empId = e.parameter.employeeId;
+      if (!empId) throw new Error("Employee ID is required");
+      var s = getOrCreateSheet("employees",
+        ["id","name","email","password","phone","role","assignedSites","faceDescriptor","transportPrice","biometricType","biometricData"]
+      );
+      var rows = s.getDataRange().getValues();
+      rows.shift();
+      for (var i = 0; i < rows.length; i++) {
+        if (String(rows[i][0]) === String(empId)) {
+          var r = rows[i];
+          return json({
+            success: true,
+            data: {
+              id: r[0],
+              name: r[1],
+              email: r[2],
+              phone: r[4],
+              role: r[5],
+              assignedSites: r[6] ? r[6].toString().split(',') : [],
+              faceDescriptor: r[7] || "",
+              transportPrice: toNumberSafe(r[8], 0),
+              biometricType: r[9] || "",
+              biometricData: r[10] || r[7] || ""
+            }
+          });
+        }
+      }
+      throw new Error("الموظف غير موجود");
+    }
+
     if (action === "getEmployees") {
       var s = getOrCreateSheet("employees",
         ["id","name","email","password","phone","role","assignedSites","faceDescriptor","transportPrice"]
@@ -1069,7 +1100,7 @@ function doPost(e) {
     // LOGIN
     if (action === "login") {
       var s = getOrCreateSheet("employees",
-        ["id","name","email","password","phone","role","assignedSites","faceDescriptor","transportPrice"]
+        ["id","name","email","password","phone","role","assignedSites","faceDescriptor","transportPrice","biometricType","biometricData"]
       );
 
       var rows = s.getDataRange().getValues();
@@ -1083,7 +1114,7 @@ function doPost(e) {
 
       return json({
         success:true,
-        data:{ id:user[0], name:user[1], email:user[2], phone:user[4], role:user[5], assignedSites:user[6]?user[6].toString().split(','):[], faceDescriptor:user[7]||"", transportPrice:toNumberSafe(user[8], 0) },
+        data:{ id:user[0], name:user[1], email:user[2], phone:user[4], role:user[5], assignedSites:user[6]?user[6].toString().split(','):[], faceDescriptor:user[7]||"", transportPrice:toNumberSafe(user[8], 0), biometricType:user[9]||"", biometricData:user[10]||user[7]||"" },
         message: "تم تسجيل الدخول بنجاح"
       });
     }
@@ -1142,7 +1173,7 @@ function doPost(e) {
     // ADD EMPLOYEE
     if (data.action === "saveEmployee") {
       var s = getOrCreateSheet("employees",
-        ["id","name","email","password","phone","role","assignedSites","faceDescriptor","transportPrice"]
+        ["id","name","email","password","phone","role","assignedSites","faceDescriptor","transportPrice","biometricType","biometricData"]
       );
       var existingRows = s.getDataRange().getValues();
       existingRows.shift();
@@ -1150,7 +1181,8 @@ function doPost(e) {
 
       s.appendRow([
         data.id,data.name,normalizedContacts.email,data.password,
-        normalizedContacts.phone,data.role,data.assignedSites,data.faceDescriptor,toNumberSafe(data.transportPrice, 0)
+        normalizedContacts.phone,data.role,data.assignedSites,data.faceDescriptor,toNumberSafe(data.transportPrice, 0),
+        data.biometricType||"",data.biometricData||data.faceDescriptor||""
       ]);
 
       if (data.siteAllowances) {
