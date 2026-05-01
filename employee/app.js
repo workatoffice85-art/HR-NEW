@@ -525,45 +525,30 @@ function processAttendanceStatus(data) {
     }
 }
 
-// Initialize biometric system based on user preference and device capabilities
+// Initialize biometric system based on user registered biometric type
 async function initBiometricSystem() {
     // Determine user's biometric type
     const userBioType = currentUser.biometricType || (currentUser.faceDescriptor ? 'face' : null);
     
-    console.log('🔐 initBiometricSystem - userBioType:', userBioType);
-    console.log('🔐 currentUser data:', { 
-        biometricType: currentUser?.biometricType, 
-        faceDescriptor: currentUser?.faceDescriptor ? 'exists' : 'null',
-        biometricData: currentUser?.biometricData ? 'exists' : 'null'
-    });
-    
     if (!userBioType) {
         setStatus('⚠️ لم يتم تسجيل بصمة. يرجى التواصل مع HR', 'error-text');
+        document.getElementById('bioTypeBadge').innerText = 'غير مسجل';
         return;
     }
     
-    // Check device capabilities
-    const availableBiometrics = await biometricManager.checkAvailableBiometrics();
-    console.log('🔐 Available biometrics:', availableBiometrics.map(b => b.type));
+    // Show biometric type badge
+    const bioNames = {
+        'face': '📷 كاميرا',
+        'fingerprint': '👆 بصمة إصبع',
+        'face_hardware': '📱 Face ID'
+    };
+    document.getElementById('bioTypeBadge').innerText = bioNames[userBioType] || '📷 كاميرا';
     
-    const deviceSupportsUserBio = availableBiometrics.some(b => b.type === userBioType);
-    console.log('🔐 Device supports user bio:', deviceSupportsUserBio);
-    
-    if (!deviceSupportsUserBio) {
-        // User registered with biometric but device doesn't support it
-        const typeName = userBioType === 'face' ? 'بصمة الوجه' : 
-                        userBioType === 'face_hardware' ? 'Face ID' : 'بصمة الإصبع';
-        setStatus(`⚠️ جهازك لا يدعم ${typeName}. استخدم جهازًا آخر.`, 'error-text');
-        return;
-    }
-    
-    // Setup based on biometric type
+    // Setup based on registered biometric type
     if (userBioType === 'face') {
-        console.log('🔐 Initializing face verification...');
         await initFaceVerification();
-    } else if (userBioType === 'fingerprint' || userBioType === 'face_hardware') {
-        // Both hardware types use same flow
-        console.log('🔐 Initializing hardware biometric:', userBioType);
+    } else {
+        // Hardware biometric (fingerprint or Face ID)
         await initHardwareBiometricVerification(userBioType);
     }
 }
@@ -704,46 +689,22 @@ function updateActionButtonsState() {
     const btnIn = document.getElementById('btnCheckIn');
     const btnOut = document.getElementById('btnCheckOut');
     
-    // Debug currentUser data
-    console.log('👤 currentUser Debug:', {
-        biometricType: currentUser?.biometricType,
-        faceDescriptor: currentUser?.faceDescriptor ? 'exists' : 'null',
-        biometricData: currentUser?.biometricData ? 'exists' : 'null'
-    });
-    
     const userBioType = currentUser?.biometricType || (currentUser?.faceDescriptor ? 'face' : null);
     
     let shouldBeEnabled;
     if (userBioType === 'fingerprint' || userBioType === 'face_hardware') {
-        // For hardware biometrics: enable if at valid site (verification happens on click)
+        // Hardware: enable if at valid site (verification happens on click)
         shouldBeEnabled = !!lastDetectedSite;
     } else if (userBioType === 'face') {
-        // For camera face: need both verification and valid site
+        // Camera: need both face verified and valid site
         shouldBeEnabled = (isBiometricVerified || isFaceVerified) && lastDetectedSite;
     } else {
         // No biometric registered - disable buttons
         shouldBeEnabled = false;
     }
     
-    // Debug logging
-    console.log('🔘 Button State Debug:', {
-        userBioType,
-        isBiometricVerified,
-        isFaceVerified,
-        lastDetectedSite: !!lastDetectedSite,
-        shouldBeEnabled,
-        btnInExists: !!btnIn,
-        btnInDisabled: btnIn?.disabled,
-        btnInHidden: btnIn?.classList?.contains('hidden')
-    });
-    
-    if (btnIn && btnIn.disabled !== !shouldBeEnabled) {
-        btnIn.disabled = !shouldBeEnabled;
-        console.log('🔘 Check-in button disabled set to:', !shouldBeEnabled);
-    }
-    if (btnOut && btnOut.disabled !== !shouldBeEnabled) {
-        btnOut.disabled = !shouldBeEnabled;
-    }
+    if (btnIn) btnIn.disabled = !shouldBeEnabled;
+    if (btnOut) btnOut.disabled = !shouldBeEnabled;
 }
 
 function startWorkTimer(startTime) {
