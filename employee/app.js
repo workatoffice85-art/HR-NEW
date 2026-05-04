@@ -229,77 +229,47 @@ async function startRegistrationVideo() {
         .catch(err => alert("لا يمكن الوصول للكاميرا"));
 }
 
-// Biometric Registration Functions
+// Biometric Registration Functions - FACE MODEL ONLY
 async function initBiometricRegistration() {
-    const availableBiometrics = await biometricManager.checkAvailableBiometrics();
+    // ALWAYS use camera-based face recognition for registration
+    // Skip hardware biometric detection entirely
     
-    // DEBUG: Log what was detected
-    console.log('=== BIOMETRIC DETECTION DEBUG ===');
-    console.log('Available biometrics:', availableBiometrics);
-    console.log('User Agent:', navigator.userAgent);
-    console.log('PublicKeyCredential available:', !!window.PublicKeyCredential);
+    // Check if camera is available
+    const hasCamera = await checkCameraAvailability();
     
-    if (availableBiometrics.length === 0) {
-        showError('regError', 'جهازك لا يدعم بيومتريك (وجه أو بصمة)');
+    if (!hasCamera) {
+        showError('regError', '⚠️ يجب السماح بالوصول للكاميرا لتسجيل بصمة الوجه');
         return;
     }
     
-    const selectionDiv = document.getElementById('biometricSelection');
-    const optionsDiv = document.getElementById('biometricOptions');
+    // Force face model (camera-based) registration
+    userBiometricType = 'face';
     
-    // AUTO-SELECT: Always pick the fastest (priority 1) for best performance
-    const bestBiometric = availableBiometrics[0]; // Already sorted by priority
-    const hasHardware = availableBiometrics.some(b => b.isHardware);
+    // Hide selection and hardware sections
+    document.getElementById('biometricSelection').classList.add('hidden');
+    document.getElementById('fingerprintRegistrationSection').classList.add('hidden');
     
-    console.log('Has hardware:', hasHardware);
-    console.log('Best biometric:', bestBiometric);
-    console.log('===================================');
+    // Show face registration section only
+    document.getElementById('faceRegistrationSection').classList.remove('hidden');
     
-    // Show detection result to user (temporary for debugging)
-    const detectionMsg = hasHardware 
-        ? `✅ تم اكتشاف بصمة hardware: ${bestBiometric.name}`
-        : `📷 لم يتم اكتشاف hardware - سيتم استخدام الكاميرا`;
-    console.log(detectionMsg);
+    // Start the camera for face registration
+    startRegistrationVideo();
     
-    // TEMP: Show alert for debugging (remove after testing)
-    setTimeout(() => {
-        alert('Biometric Detection:\n' + availableBiometrics.map(b => `${b.icon} ${b.name} (priority: ${b.priority}, hardware: ${b.isHardware})`).join('\n'));
-    }, 1000);
-    
-    if (availableBiometrics.length > 1) {
-        // Show options but pre-select the best (highlighted)
-        selectionDiv.classList.remove('hidden');
-        optionsDiv.innerHTML = availableBiometrics.map(bio => `
-            <button class="btn-primary" style="flex:1; min-width: 140px; ${bio.priority === 1 ? 'background:var(--secondary); transform:scale(1.05);' : 'background:var(--primary); opacity:0.8;'}"
-                onclick="selectBiometricType('${bio.type}')">
-                ${bio.icon} ${bio.name}
-                ${bio.priority === 1 ? '<br><small>⚡ الأسرع</small>' : '<br><small>بديل</small>'}
-            </button>
-        `).join('');
-        
-        // Auto-select the best after short delay so user sees it
-        setTimeout(() => selectBiometricType(bestBiometric.type), 500);
-    } else if (hasHardware) {
-        // Only hardware option - select immediately
-        selectionDiv.classList.add('hidden');
-        selectBiometricType(availableBiometrics[0].type);
-    } else {
-        // Only camera available (no hardware) - select immediately and show message
-        selectionDiv.classList.add('hidden');
-        selectBiometricType(availableBiometrics[0].type);
-        
-        // Show info that only camera is available
-        const infoEl = document.createElement('div');
-        infoEl.className = 'text-muted';
-        infoEl.style.cssText = 'text-align:center; margin-bottom:15px; font-size:0.85rem;';
-        infoEl.innerHTML = '📷 جهازك يدعم بصمة الوجه بالكاميرا فقط';
-        
-        // Insert before face registration section
-        const faceSection = document.getElementById('faceRegistrationSection');
-        if (faceSection && !faceSection.previousElementSibling?.classList?.contains('bio-info')) {
-            infoEl.classList.add('bio-info');
-            faceSection.parentNode.insertBefore(infoEl, faceSection);
+    console.log('Face model registration initialized');
+}
+
+// Helper: Check camera availability
+async function checkCameraAvailability() {
+    try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            return false;
         }
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        stream.getTracks().forEach(track => track.stop());
+        return true;
+    } catch (e) {
+        console.log('Camera not available:', e.message);
+        return false;
     }
 }
 
