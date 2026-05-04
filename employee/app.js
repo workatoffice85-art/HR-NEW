@@ -907,6 +907,24 @@ function cleanupVerificationVideo() {
     if (overlay) overlay.remove();
 }
 
+// Update Face ID Ring state: 'scanning' (white), 'success' (green), 'error' (red)
+function updateFaceIDRing(state) {
+    const ring = document.getElementById('faceIdRing');
+    if (!ring) return;
+    
+    // Remove all state classes
+    ring.classList.remove('scanning', 'success', 'error');
+    
+    // Add new state class
+    if (state === 'scanning') {
+        ring.classList.add('scanning');
+    } else if (state === 'success') {
+        ring.classList.add('success');
+    } else if (state === 'error') {
+        ring.classList.add('error');
+    }
+}
+
 function startVideo() {
     const video = document.getElementById('videoElement');
     navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
@@ -942,13 +960,11 @@ function startVideo() {
 
                 const detections = await faceapi.detectSingleFace(video, options).withFaceLandmarks().withFaceDescriptor();
 
+                // Clear canvas - no blue box, using Face ID ring instead
                 const ctx = canvas.getContext('2d');
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
 
                 if (detections) {
-                    const resizeDetections = faceapi.resizeResults(detections, displaySize);
-                    faceapi.draw.drawDetections(canvas, resizeDetections);
-
                     const bestMatch = faceMatcher.findBestMatch(detections.descriptor);
                     if (bestMatch.label !== 'unknown') {
                         currentFaceDescriptor = Array.from(detections.descriptor);
@@ -960,6 +976,9 @@ function startVideo() {
                             data: Array.from(detections.descriptor) 
                         };
                         consecutiveSuccessFrames++;
+                        
+                        // Update Face ID ring to success (green)
+                        updateFaceIDRing('success');
                         
                         // Update status - check if location already detected
                         const currentStatus = document.getElementById('statusMessage')?.innerText || '';
@@ -974,7 +993,10 @@ function startVideo() {
 
                         // Reset counter after 5 seconds to resume checking
                         if (consecutiveSuccessFrames === 3) {
-                            setTimeout(() => { consecutiveSuccessFrames = 0; }, 5000);
+                            setTimeout(() => { 
+                                consecutiveSuccessFrames = 0; 
+                                updateFaceIDRing('scanning');
+                            }, 5000);
                         }
                     } else {
                         setStatus('الوجه غير متطابق', 'error-text');
@@ -983,6 +1005,8 @@ function startVideo() {
                         isBiometricVerified = false;
                         currentBiometricVerification = null;
                         consecutiveSuccessFrames = 0;
+                        // Update Face ID ring to error (red)
+                        updateFaceIDRing('error');
                     }
                 } else {
                     setStatus('وجه الكاميرا إليك', 'text-muted');
@@ -991,6 +1015,8 @@ function startVideo() {
                     isBiometricVerified = false;
                     currentBiometricVerification = null;
                     consecutiveSuccessFrames = 0;
+                    // Reset to scanning state
+                    updateFaceIDRing('scanning');
                 }
                 updateActionButtonsState();
             } catch (err) {

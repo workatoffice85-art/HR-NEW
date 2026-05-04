@@ -49,6 +49,78 @@
             height: 100%;
         }
 
+        /* Face ID Style Circle Overlay */
+        .faceid-ring {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            border: 3px solid rgba(255, 255, 255, 0.6);
+            box-shadow: 
+                0 0 0 4px rgba(0, 0, 0, 0.3),
+                0 0 20px rgba(255, 255, 255, 0.3),
+                inset 0 0 20px rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+            pointer-events: none;
+        }
+
+        .faceid-ring.scanning {
+            animation: faceid-pulse 1.5s ease-in-out infinite;
+        }
+
+        .faceid-ring.success {
+            border-color: #10B981;
+            box-shadow: 
+                0 0 0 4px rgba(16, 185, 129, 0.3),
+                0 0 30px rgba(16, 185, 129, 0.6),
+                inset 0 0 20px rgba(16, 185, 129, 0.2);
+        }
+
+        .faceid-ring.error {
+            border-color: #EF4444;
+            box-shadow: 
+                0 0 0 4px rgba(239, 68, 68, 0.3),
+                0 0 30px rgba(239, 68, 68, 0.6),
+                inset 0 0 20px rgba(239, 68, 68, 0.2);
+        }
+
+        .faceid-ring::before {
+            content: '';
+            position: absolute;
+            top: -6px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 12px;
+            height: 12px;
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+        }
+
+        .faceid-ring.success::before {
+            background: #10B981;
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.9);
+        }
+
+        .faceid-ring.error::before {
+            background: #EF4444;
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.9);
+        }
+
+        @keyframes faceid-pulse {
+            0%, 100% {
+                transform: translate(-50%, -50%) scale(1);
+                opacity: 1;
+            }
+            50% {
+                transform: translate(-50%, -50%) scale(1.02);
+                opacity: 0.9;
+            }
+        }
+
         #statusMessage,
         #regStatusMessage {
             text-align: center;
@@ -258,6 +330,7 @@
             <div class="camera-container">
                 <video id="videoElement" autoplay muted playsinline></video>
                 <canvas id="overlay"></canvas>
+                <div id="faceIdRing" class="faceid-ring scanning"></div>
             </div>
 
             <div id="statusMessage">جاري تهيئة النظام...</div>
