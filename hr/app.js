@@ -9,6 +9,7 @@ let allAllowanceRequests = [];
 let appSettings = {};
 let allOfficialHolidays = [];
 let latesChartInstance = null;
+let attendanceViewMode = 'present'; // 'present' or 'absent'
 let parseMapLinkTimer = null;
 let parseMapLinkRequestId = 0;
 let isInitialDataLoaded = false;
@@ -275,7 +276,27 @@ function renderAttendanceTable(data) {
     if (statPresent) statPresent.innerText = presentCount;
     if (statAbsent) statAbsent.innerText = absentCount;
 
-    // Reverse to show newest first
+    // Show absent employees view
+    if (attendanceViewMode === 'absent') {
+        // Find absent employees
+        const absentEmployees = employeeOnlyList.filter(emp => !presentEmployeeIds.has(String(emp.id)));
+        
+        absentEmployees.forEach(emp => {
+            tbody.innerHTML += `
+                <tr style="background:rgba(239,68,68,0.05);">
+                    <td data-label="الموظف">${emp.name}</td>
+                    <td data-label="الموقع">-</td>
+                    <td data-label="وقت الحضور" dir="ltr">-</td>
+                    <td data-label="وقت الانصراف" dir="ltr">-</td>
+                    <td data-label="بدل الانتقال">-</td>
+                    <td data-label="الحالة"><span style="color:var(--danger)">غائب</span></td>
+                </tr>
+            `;
+        });
+        return;
+    }
+
+    // Show present employees (default view)
     [...filtered].reverse().forEach(record => {
         // Display time as-is (server sends Cairo time with offset)
         const checkInTime = formatCairoTime(record.checkIn);
@@ -313,6 +334,19 @@ function renderAttendanceTable(data) {
             </tr>
         `;
     });
+}
+
+function toggleAttendanceView() {
+    attendanceViewMode = attendanceViewMode === 'present' ? 'absent' : 'present';
+    const btn = document.getElementById('viewToggleBtn');
+    if (attendanceViewMode === 'absent') {
+        btn.innerText = '👁️ عرض الحاضرين';
+        btn.style.background = 'var(--secondary)';
+    } else {
+        btn.innerText = '👁️ عرض الغائبين';
+        btn.style.background = 'var(--danger)';
+    }
+    renderAttendanceTable(allAttendanceData);
 }
 
 function getWeekendDaysFromSettings() {

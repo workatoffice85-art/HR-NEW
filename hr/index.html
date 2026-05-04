@@ -102,6 +102,7 @@
                         </div>
                         <label>تاريخ اليوم:</label>
                         <input type="date" id="attendanceDateFilter" onchange="renderAttendanceTable(allAttendanceData)">
+                        <button id="viewToggleBtn" class="btn-primary" style="width:auto; background:var(--danger);" onclick="toggleAttendanceView()">👁️ عرض الغائبين</button>
                         <button class="btn-primary" style="width:auto;" onclick="refreshData()">تحديث مجمع 🔄</button>
                         <button class="btn-primary" style="width:auto; padding:8px 15px; background:#217346;" onclick="exportAttendanceToExcel()">📥 Excel</button>
                     </div>
