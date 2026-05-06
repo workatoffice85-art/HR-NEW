@@ -25,6 +25,30 @@
         .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 1000; }
         .modal-content { background: #1e293b; padding: 30px; border-radius: 16px; width: 90%; max-width: 500px; max-height:90vh; overflow-y:auto; }
 
+        /* Responsive Utilities */
+@media (min-width: 769px) {
+    .mobile-only { display: none !important; }
+    .pc-only { display: flex !important; }
+    .dashboard-layout { display: block; }
+}
+@media (max-width: 768px) {
+    .pc-only { display: none !important; }
+    .mobile-only { display: block !important; }
+    .dashboard-layout { display: flex; }
+}
+
+.badge-dot {
+    position: absolute; top: 0; right: 0; 
+    background: var(--danger); width: 8px; height: 8px; border-radius: 50%;
+}
+.badge-count {
+    position: absolute; top: -5px; right: -5px; 
+    background: var(--danger); color: #fff; border-radius: 50%; 
+    width: 18px; height: 18px; font-size: 10px; 
+    display: flex; align-items: center; justify-content: center; 
+    border: 2px solid #1e293b;
+}
+
         /* Dashboard Layout Fixes */
         .dashboard-layout {
             display: flex;
@@ -86,8 +110,25 @@
 
     <!-- Dashboard Layout -->
     <div id="dashboardSection" class="dashboard-layout hidden fade-in">
-        <div class="sidebar">
-            <h2 style="margin-bottom: 30px; font-size: 1.5rem; text-align: center; color: var(--secondary);">لوحة التحكم</h2>
+        <!-- Sidebar (Mobile Only) -->
+        <div class="sidebar mobile-only">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h2 style="margin:0; font-size:1.5rem; color:var(--secondary);">لوحة التحكم</h2>
+                <!-- Mobile Notification Bell -->
+                <div id="notificationContainerMobile" style="position:relative;">
+                    <button id="notificationBellMobile" onclick="toggleNotifications('mobile')" style="background:transparent; border:1px solid var(--card-border); color:#fff; padding:8px; border-radius:10px; cursor:pointer; position:relative;">
+                        🔔 <span id="notificationBadgeMobile" class="hidden badge-dot"></span>
+                    </button>
+                    <!-- Mobile Dropdown -->
+                    <div id="notificationDropdownMobile" class="hidden" style="position:absolute; top:100%; right:0; margin-top:10px; width:280px; max-height:350px; overflow-y:auto; background:#1e293b; border:1px solid var(--card-border); border-radius:12px; z-index:1100; box-shadow:0 15px 40px rgba(0,0,0,0.6);">
+                        <div style="padding:10px 15px; border-bottom:1px solid var(--card-border); display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02);">
+                            <strong style="font-size:0.9rem;">الإشعارات</strong>
+                            <button style="background:none; border:none; color:var(--secondary); cursor:pointer; font-size:11px;" onclick="markAllNotificationsAsRead()">مسح</button>
+                        </div>
+                        <div id="notificationListMobile"></div>
+                    </div>
+                </div>
+            </div>
             <a class="nav-link active" onclick="showTab('attendance')">مراقبة الحضور اليومي</a>
             <a class="nav-link" onclick="showTab('reports')">التقارير الشهرية</a>
             <a class="nav-link" onclick="showTab('employeeDetails')">التقرير التفصيلي لكل موظف</a>
@@ -103,33 +144,44 @@
         </div>
 
         <div class="main-content">
-            <!-- Top Header (Notifications & User) -->
-            <div class="top-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; background:var(--card-bg); padding:12px 25px; border-radius:12px; border:1px solid var(--card-border); backdrop-filter:blur(10px); position:sticky; top:0; z-index:100; box-shadow:0 10px 30px rgba(0,0,0,0.2);">
-                <div style="display:flex; align-items:center; gap:15px;">
-                    <div id="notificationContainer" style="position:relative;">
-                        <button id="notificationBell" onclick="toggleNotifications()" style="background:rgba(255,255,255,0.05); border:1px solid var(--card-border); color:#fff; padding:10px; border-radius:10px; cursor:pointer; position:relative; transition:all 0.3s;">
+            <!-- Top Header (PC Only) -->
+            <div class="top-header pc-only" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; background:var(--card-bg); padding:12px 25px; border-radius:16px; border:1px solid var(--card-border); backdrop-filter:blur(10px); position:sticky; top:10px; z-index:1001; box-shadow:0 10px 30px rgba(0,0,0,0.3);">
+                <div style="display:flex; align-items:center; gap:20px;">
+                    <h2 style="margin:0; font-size:1.3rem; color:var(--secondary);">HR Portal</h2>
+                    <div id="notificationContainerPC" style="position:relative;">
+                        <button id="notificationBellPC" onclick="toggleNotifications('pc')" style="background:rgba(255,255,255,0.05); border:1px solid var(--card-border); color:#fff; padding:10px; border-radius:12px; cursor:pointer; position:relative;">
                             <span style="font-size:1.1rem;">🔔</span>
-                            <span id="notificationBadge" class="hidden" style="position:absolute; top:-5px; right:-5px; background:var(--danger); color:#fff; border-radius:50%; width:18px; height:18px; font-size:10px; display:flex; align-items:center; justify-content:center; border:2px solid #1e293b;">0</span>
+                            <span id="notificationBadgePC" class="hidden badge-count">0</span>
                         </button>
-                        <!-- Notifications Dropdown -->
-                        <div id="notificationDropdown" class="hidden" style="position:absolute; top:100%; left:0; margin-top:10px; width:350px; max-height:450px; overflow-y:auto; background:#1e293b; border:1px solid var(--card-border); border-radius:16px; z-index:1002; box-shadow:0 20px 50px rgba(0,0,0,0.6); animation: fadeIn 0.3s ease;">
+                        <!-- PC Dropdown -->
+                        <div id="notificationDropdownPC" class="hidden" style="position:absolute; top:100%; left:0; margin-top:10px; width:350px; max-height:450px; overflow-y:auto; background:#1e293b; border:1px solid var(--card-border); border-radius:16px; z-index:1002; box-shadow:0 20px 50px rgba(0,0,0,0.6); animation: fadeIn 0.3s ease;">
                             <div style="padding:15px 20px; border-bottom:1px solid var(--card-border); display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02);">
                                 <strong style="font-size:1.1rem;">الإشعارات</strong>
                                 <button style="background:none; border:none; color:var(--secondary); cursor:pointer; font-size:13px; font-weight:bold;" onclick="markAllNotificationsAsRead()">تحديد الكل كمقروء</button>
                             </div>
-                            <div id="notificationList">
-                                <p style="text-align:center; color:var(--text-muted); padding:40px;">لا توجد إشعارات جديدة</p>
-                            </div>
+                            <div id="notificationListPC"></div>
                         </div>
                     </div>
                 </div>
 
-                <div style="display:flex; align-items:center; gap:15px;">
+                <!-- Horizontal Navigation (PC Only) -->
+                <nav class="top-nav" style="display:flex; gap:8px; flex-wrap:wrap; justify-content:center; flex:1; margin:0 15px;">
+                    <a class="nav-link active" onclick="showTab('attendance')" style="padding:6px 10px; font-size:0.85rem;">الحضور</a>
+                    <a class="nav-link" onclick="showTab('reports')" style="padding:6px 10px; font-size:0.85rem;">التقارير</a>
+                    <a class="nav-link" onclick="showTab('employeeDetails')" style="padding:6px 10px; font-size:0.85rem;">التفصيلي</a>
+                    <a class="nav-link" onclick="showTab('employees')" style="padding:6px 10px; font-size:0.85rem;">الموظفين</a>
+                    <a class="nav-link" onclick="showTab('sites')" style="padding:6px 10px; font-size:0.85rem;">المواقع</a>
+                    <a class="nav-link" onclick="showTab('allowanceRequests')" style="padding:6px 10px; font-size:0.85rem;">البدلات</a>
+                    <a class="nav-link" onclick="showTab('leaveRequests')" style="padding:6px 10px; font-size:0.85rem;">الإجازات</a>
+                    <a class="nav-link" onclick="showTab('settings')" style="padding:6px 10px; font-size:0.85rem;">⚙️</a>
+                </nav>
+
+                <div style="display:flex; align-items:center; gap:12px;">
                     <div style="text-align:left;">
-                        <div id="hrNameDisplay" style="font-weight:bold; color:var(--text-main); font-size:0.9rem;">مدير النظام</div>
-                        <div style="font-size:0.7rem; color:var(--secondary);">متصل الآن</div>
+                        <div id="hrNameDisplay" style="font-weight:bold; color:var(--text-main); font-size:0.85rem;">مدير النظام</div>
+                        <button onclick="logout()" style="background:none; border:none; color:var(--danger); cursor:pointer; font-size:0.7rem; padding:0; display:block; width:100%; text-align:left;">خروج</button>
                     </div>
-                    <div style="width:35px; height:35px; background:linear-gradient(45deg, var(--primary), var(--secondary)); border-radius:8px; display:flex; align-items:center; justify-content:center; font-weight:bold; color:#fff; font-size:0.8rem;">HR</div>
+                    <div style="width:32px; height:32px; background:linear-gradient(45deg, var(--primary), var(--secondary)); border-radius:8px; display:flex; align-items:center; justify-content:center; font-weight:bold; color:#fff; font-size:0.75rem;">HR</div>
                 </div>
             </div>
             

@@ -2963,34 +2963,50 @@ async function fetchNotifications() {
 }
 
 function updateNotificationBadge() {
-    const badge = document.getElementById('notificationBadge');
-    if (!badge) return;
-    
+    const badgePC = document.getElementById('notificationBadgePC');
+    const badgeMobile = document.getElementById('notificationBadgeMobile');
     const count = notificationsData.length;
-    if (count > 0) {
-        badge.innerText = count > 99 ? '99+' : count;
-        badge.classList.remove('hidden');
-    } else {
-        badge.classList.add('hidden');
+
+    if (badgePC) {
+        if (count > 0) {
+            badgePC.innerText = count > 99 ? '99+' : count;
+            badgePC.classList.remove('hidden');
+        } else {
+            badgePC.classList.add('hidden');
+        }
+    }
+    if (badgeMobile) {
+        if (count > 0) {
+            badgeMobile.classList.remove('hidden');
+        } else {
+            badgeMobile.classList.add('hidden');
+        }
     }
 }
 
-function toggleNotifications() {
-    const dropdown = document.getElementById('notificationDropdown');
+function toggleNotifications(type = 'pc') {
+    const id = type === 'pc' ? 'notificationDropdownPC' : 'notificationDropdownMobile';
+    const dropdown = document.getElementById(id);
     if (!dropdown) return;
     
     const isHidden = dropdown.classList.contains('hidden');
     
+    // Close other dropdown if open
+    const otherId = type === 'pc' ? 'notificationDropdownMobile' : 'notificationDropdownPC';
+    const other = document.getElementById(otherId);
+    if (other) other.classList.add('hidden');
+
     if (isHidden) {
-        renderNotificationsList();
+        renderNotificationsList(type);
         dropdown.classList.remove('hidden');
     } else {
         dropdown.classList.add('hidden');
     }
 }
 
-function renderNotificationsList() {
-    const list = document.getElementById('notificationList');
+function renderNotificationsList(type = 'pc') {
+    const listId = type === 'pc' ? 'notificationListPC' : 'notificationListMobile';
+    const list = document.getElementById(listId);
     if (!list) return;
     
     if (notificationsData.length === 0) {
@@ -3006,24 +3022,25 @@ function renderNotificationsList() {
         item.onmouseout = () => item.style.background = 'transparent';
         item.onclick = () => {
             markNotificationAsRead(notif.id);
-            // Navigate to relevant tab based on notification type
             if (notif.type === 'leave_request') showTab('leaveRequests');
             else if (notif.type === 'site_request') showTab('siteRequests');
             else if (notif.type === 'allowance_request') showTab('allowanceRequests');
+            const dropId = type === 'pc' ? 'notificationDropdownPC' : 'notificationDropdownMobile';
+            document.getElementById(dropId).classList.add('hidden');
         };
         
-        const timeAgo = formatTimeAgo(notif.createdAt);
         const icon = getNotificationIcon(notif.type);
+        const timeAgo = formatTimeAgo(notif.createdAt);
         
         item.innerHTML = `
             <div style="display:flex; align-items:flex-start; gap:10px;">
                 <span style="font-size:20px;">${icon}</span>
                 <div style="flex:1;">
-                    <div style="font-weight:bold; margin-bottom:4px;">${notif.title}</div>
-                    <div style="font-size:13px; color:var(--text-muted); margin-bottom:4px;">${notif.message}</div>
-                    <div style="font-size:11px; color:var(--secondary);">${timeAgo}</div>
+                    <div style="font-weight:bold; font-size:13px; margin-bottom:2px;">${notif.title}</div>
+                    <div style="font-size:12px; color:var(--text-muted); margin-bottom:4px;">${notif.message}</div>
+                    <div style="font-size:10px; color:var(--secondary);">${timeAgo}</div>
                 </div>
-                <span style="width:8px; height:8px; background:var(--secondary); border-radius:50%; flex-shrink:0;"></span>
+                <span style="width:6px; height:6px; background:var(--secondary); border-radius:50%; margin-top:5px;"></span>
             </div>
         `;
         list.appendChild(item);
