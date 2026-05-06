@@ -73,7 +73,26 @@
     <!-- Dashboard Layout -->
     <div id="dashboardSection" class="dashboard-layout hidden fade-in">
         <div class="sidebar">
-            <h2>لوحة التحكم</h2>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
+                <h2>لوحة التحكم</h2>
+                <!-- Notification Bell -->
+                <div id="notificationContainer" style="position:relative;">
+                    <button id="notificationBell" class="btn-primary" style="width:auto; padding:10px 15px; background:transparent; border:1px solid var(--card-border); position:relative;" onclick="toggleNotifications()">
+                        🔔
+                        <span id="notificationBadge" class="hidden" style="position:absolute; top:-5px; right:-5px; background:var(--danger); color:#fff; border-radius:50%; width:20px; height:20px; font-size:12px; display:flex; align-items:center; justify-content:center;">0</span>
+                    </button>
+                    <!-- Notifications Dropdown -->
+                    <div id="notificationDropdown" class="hidden" style="position:absolute; top:100%; left:0; margin-top:10px; width:320px; max-height:400px; overflow-y:auto; background:var(--card-bg); border:1px solid var(--card-border); border-radius:12px; z-index:1000; box-shadow:0 10px 40px rgba(0,0,0,0.5);">
+                        <div style="padding:15px; border-bottom:1px solid var(--card-border); display:flex; justify-content:space-between; align-items:center;">
+                            <strong>الإشعارات</strong>
+                            <button style="background:none; border:none; color:var(--secondary); cursor:pointer; font-size:12px;" onclick="markAllNotificationsAsRead()">تحديد الكل كمقروء</button>
+                        </div>
+                        <div id="notificationList" style="padding:10px;">
+                            <p style="text-align:center; color:var(--text-muted); padding:20px;">لا توجد إشعارات جديدة</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
             <a class="nav-link active" onclick="showTab('attendance')">مراقبة الحضور اليومي</a>
             <a class="nav-link" onclick="showTab('reports')">التقارير الشهرية</a>
             <a class="nav-link" onclick="showTab('employeeDetails')">التقرير التفصيلي لكل موظف</a>
@@ -81,6 +100,7 @@
             <a class="nav-link" onclick="showTab('sites')">إدارة المواقع</a>
             <a class="nav-link" onclick="showTab('siteRequests')">طلبات تسجيل المواقع 📍</a>
             <a class="nav-link" onclick="showTab('allowanceRequests')">زيادة البدلات 💰</a>
+            <a class="nav-link" onclick="showTab('leaveRequests')">طلبات الإجازات 📅</a>
             <a class="nav-link" onclick="showTab('deviceManagement')">إدارة الأجهزة 📱</a>
             <a class="nav-link" onclick="showTab('officialHolidays')">الإجازات الرسمية 📅</a>
             <a class="nav-link" onclick="showTab('settings')">الإعدادات ⚙️</a>
@@ -215,6 +235,10 @@
                         <div class="kpi-value" id="employeeDetailNoCheckout" style="color: #f59e0b;">0</div>
                     </div>
                     <div class="kpi-card">
+                        <h3>طلبات الإجازة</h3>
+                        <div class="kpi-value" id="employeeDetailLeaveRequests" style="color: #f59e0b;">0</div>
+                    </div>
+                    <div class="kpi-card">
                         <h3>مبلغ العمل الإضافي</h3>
                         <div class="kpi-value" id="employeeDetailOvertimePay">0.00</div>
                     </div>
@@ -242,6 +266,29 @@
                             </tr>
                         </tbody>
                     </table>
+                </div>
+
+                <!-- Leave Requests Section -->
+                <div id="employeeLeaveRequestsSection" style="margin-top:30px;">
+                    <h3 style="margin-bottom:15px; color:var(--secondary);">📅 طلبات الإجازة</h3>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>تاريخ الإجازة</th>
+                                    <th>السبب</th>
+                                    <th>تاريخ الطلب</th>
+                                    <th>الحالة</th>
+                                    <th>تاريخ الموافقة</th>
+                                </tr>
+                            </thead>
+                            <tbody id="employeeLeaveRequestsTableBody">
+                                <tr>
+                                    <td colspan="5" style="text-align:center; color:var(--text-muted);">لا توجد طلبات إجازة</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
             <!-- Employees Tab -->
@@ -350,6 +397,32 @@
                             </tr>
                         </thead>
                         <tbody id="allowanceRequestsTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Leave Requests Tab -->
+            <div id="tab-leaveRequests" class="tab-content hidden">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                    <h2>طلبات الإجازات 📅</h2>
+                    <div style="display:flex; gap:10px;">
+                        <button class="btn-primary" style="width:auto; padding:8px 15px; background:var(--danger);" onclick="clearProcessedLeaveRequests()">مسح الطلبات المنتهية 🗑️</button>
+                        <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="refreshData()">تحديث 🔄</button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>الموظف</th>
+                                <th>تاريخ الإجازة</th>
+                                <th>السبب</th>
+                                <th>تاريخ الطلب</th>
+                                <th>الحالة</th>
+                                <th>الإجراءات</th>
+                            </tr>
+                        </thead>
+                        <tbody id="leaveRequestsTableBody"></tbody>
                     </table>
                 </div>
             </div>

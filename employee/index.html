@@ -318,8 +318,29 @@
         <!-- 5. Dashboard Section -->
         <div id="dashboardSection" class="glass-card hidden">
             <div class="header">
-                <h2 id="welcomeText">مرحباً</h2>
-                <p id="siteText" style="color:var(--text-muted); font-size:0.9rem;"></p>
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                    <div>
+                        <h2 id="welcomeText">مرحباً</h2>
+                        <p id="siteText" style="color:var(--text-muted); font-size:0.9rem;"></p>
+                    </div>
+                    <!-- Notification Bell -->
+                    <div id="notificationContainer" style="position:relative;">
+                        <button id="notificationBell" class="btn-primary" style="width:auto; padding:10px 15px; background:transparent; border:1px solid var(--card-border); position:relative;" onclick="toggleNotifications()">
+                            🔔
+                            <span id="notificationBadge" class="hidden" style="position:absolute; top:-5px; right:-5px; background:var(--danger); color:#fff; border-radius:50%; width:20px; height:20px; font-size:12px; display:flex; align-items:center; justify-content:center;">0</span>
+                        </button>
+                        <!-- Notifications Dropdown -->
+                        <div id="notificationDropdown" class="hidden" style="position:absolute; top:100%; left:0; margin-top:10px; width:320px; max-height:400px; overflow-y:auto; background:var(--card-bg); border:1px solid var(--card-border); border-radius:12px; z-index:1000; box-shadow:0 10px 40px rgba(0,0,0,0.5);">
+                            <div style="padding:15px; border-bottom:1px solid var(--card-border); display:flex; justify-content:space-between; align-items:center;">
+                                <strong>الإشعارات</strong>
+                                <button style="background:none; border:none; color:var(--secondary); cursor:pointer; font-size:12px;" onclick="markAllNotificationsAsRead()">تحديد الكل كمقروء</button>
+                            </div>
+                            <div id="notificationList" style="padding:10px;">
+                                <p style="text-align:center; color:var(--text-muted); padding:20px;">لا توجد إشعارات جديدة</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 <div id="currentBioDisplay" style="font-size:0.8rem; color:var(--secondary); margin-top:8px; background:rgba(16,185,129,0.1); padding:6px 12px; border-radius:20px; display:inline-block;">
                     🔐 <span id="bioTypeBadge">جاري التحديد...</span>
                 </div>
@@ -357,6 +378,11 @@
             <button id="btnAllowanceRequest" class="btn-primary"
                 style="margin-top:10px; background:#8b5cf6;" onclick="openAllowanceModal()">
                 💰 طلب زيادة بدلات
+            </button>
+
+            <button id="btnLeaveRequest" class="btn-primary"
+                style="margin-top:10px; background:#f59e0b; color:#000;" onclick="openLeaveModal()">
+                📅 طلب إجازة
             </button>
 
             <!-- Update Biometric Button (Always visible) -->
@@ -404,6 +430,27 @@
                     <button class="btn-primary" style="background:#8b5cf6;" onclick="submitAllowanceRequest()">إرسال الطلب</button>
                     <button class="btn-danger" style="background:transparent; border:1px solid var(--danger);"
                         onclick="closeAllowanceModal()">إلغاء</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Leave Request Modal -->
+        <div id="leaveRequestModal" class="modal hidden"
+            style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); display:flex; align-items:center; justify-content:center; z-index:1000;">
+            <div class="glass-card" style="width:90%; max-width:400px; padding:25px;">
+                <h3 style="margin-bottom:15px;">📅 طلب إجازة</h3>
+                <div class="input-group">
+                    <label>تاريخ الإجازة</label>
+                    <input type="date" id="leaveDate">
+                </div>
+                <div class="input-group">
+                    <label>سبب الإجازة</label>
+                    <textarea id="leaveReason" placeholder="اكتب سبب طلب الإجازة..." rows="3"></textarea>
+                </div>
+                <div style="display:flex; gap:10px;">
+                    <button class="btn-primary" style="background:#f59e0b; color:#000;" onclick="submitLeaveRequest()">إرسال الطلب</button>
+                    <button class="btn-danger" style="background:transparent; border:1px solid var(--danger);"
+                        onclick="closeLeaveModal()">إلغاء</button>
                 </div>
             </div>
         </div>

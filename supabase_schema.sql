@@ -83,29 +83,31 @@ CREATE TABLE IF NOT EXISTS settings (
 
 -- Table: allowanceRequests
 CREATE TABLE IF NOT EXISTS "allowanceRequests" (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id TEXT PRIMARY KEY,                           -- Format: ALLOW12345
     "employeeId" TEXT REFERENCES employees(id) ON DELETE CASCADE,
     "employeeName" TEXT,
+    "attendanceId" TEXT,                           -- Related attendance record
     "siteId" TEXT,
     "siteName" TEXT,
-    "attendanceId" UUID REFERENCES attendance(id) ON DELETE CASCADE,
     "requestDate" TEXT NOT NULL,
     "amount" NUMERIC NOT NULL,
     "note" TEXT,
-    "status" TEXT DEFAULT 'pending',
-    "adminNote" TEXT,
-    "createdAt" TEXT
+    "status" TEXT DEFAULT 'pending',               -- pending, approved, rejected
+    "createdAt" TEXT DEFAULT NOW(),
+    "approvedAt" TEXT,                             -- When approved
+    "approvedBy" TEXT,                             -- HR admin name
+    "rejectionReason" TEXT                         -- Reason for rejection
 );
 
 -- Table: approvalLogs
 CREATE TABLE IF NOT EXISTS "approvalLogs" (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    "requestId" UUID REFERENCES "allowanceRequests"(id) ON DELETE CASCADE,
+    id TEXT PRIMARY KEY,                           -- Format: LOG12345
+    "requestId" TEXT REFERENCES "allowanceRequests"(id) ON DELETE CASCADE,
     "adminId" TEXT,
     "adminName" TEXT,
     "action" TEXT,
     "details" TEXT,
-    "timestamp" TEXT
+    "timestamp" TEXT DEFAULT NOW()
 );
 
 -- Table: official_holidays
@@ -114,6 +116,34 @@ CREATE TABLE IF NOT EXISTS official_holidays (
     "holidayDate" DATE NOT NULL UNIQUE,
     "holidayName" TEXT NOT NULL,
     "createdAt" TEXT DEFAULT NOW()
+);
+
+-- Table: leaveRequests
+CREATE TABLE IF NOT EXISTS "leaveRequests" (
+    id TEXT PRIMARY KEY,                           -- Format: LEAVE12345
+    "employeeId" TEXT REFERENCES employees(id) ON DELETE CASCADE,
+    "employeeName" TEXT NOT NULL,
+    "leaveDate" DATE NOT NULL,                     -- Date of leave
+    "reason" TEXT NOT NULL,                        -- Reason for leave
+    "status" TEXT DEFAULT 'pending',               -- pending, approved, rejected
+    "createdAt" TEXT DEFAULT NOW(),
+    "approvedAt" TEXT,                             -- When approved
+    "approvedBy" TEXT,                             -- HR admin name
+    "rejectionReason" TEXT                         -- Reason for rejection
+);
+
+-- Table: notifications
+CREATE TABLE IF NOT EXISTS "notifications" (
+    id TEXT PRIMARY KEY,                           -- Format: NOTIF12345
+    "userId" TEXT,                                 -- Target user ID (for specific users)
+    "userRole" TEXT,                               -- Target role (hr, employee, etc.)
+    "title" TEXT NOT NULL,                         -- Notification title
+    "message" TEXT NOT NULL,                       -- Notification message
+    "type" TEXT NOT NULL,                          -- Notification type: leave_request, site_request, allowance_request, etc.
+    "relatedId" TEXT,                              -- Related record ID
+    "isRead" BOOLEAN DEFAULT FALSE,               -- Read status
+    "createdAt" TEXT DEFAULT NOW(),
+    "readAt" TEXT                                  -- When marked as read
 );
 
 -- ============================================
@@ -143,6 +173,20 @@ CREATE INDEX IF NOT EXISTS idx_allowanceRequests_createdAt ON "allowanceRequests
 -- Site allowances indexes
 CREATE INDEX IF NOT EXISTS idx_siteAllowances_employeeId ON "siteAllowances"("employeeId");
 CREATE INDEX IF NOT EXISTS idx_siteAllowances_siteId ON "siteAllowances"("siteId");
+
+-- Leave requests indexes
+CREATE INDEX IF NOT EXISTS idx_leaveRequests_employeeId ON "leaveRequests"("employeeId");
+CREATE INDEX IF NOT EXISTS idx_leaveRequests_status ON "leaveRequests"("status");
+CREATE INDEX IF NOT EXISTS idx_leaveRequests_leaveDate ON "leaveRequests"("leaveDate");
+CREATE INDEX IF NOT EXISTS idx_leaveRequests_createdAt ON "leaveRequests"("createdAt");
+
+-- Notifications indexes
+CREATE INDEX IF NOT EXISTS idx_notifications_userId ON "notifications"("userId");
+CREATE INDEX IF NOT EXISTS idx_notifications_userRole ON "notifications"("userRole");
+CREATE INDEX IF NOT EXISTS idx_notifications_isRead ON "notifications"("isRead");
+CREATE INDEX IF NOT EXISTS idx_notifications_type ON "notifications"("type");
+CREATE INDEX IF NOT EXISTS idx_notifications_createdAt ON "notifications"("createdAt");
+CREATE INDEX IF NOT EXISTS idx_notifications_relatedId ON "notifications"("relatedId");
 
 -- ============================================
 -- DATABASE SIZE MONITORING FUNCTION

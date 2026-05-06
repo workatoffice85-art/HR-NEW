@@ -6,6 +6,7 @@ let allEmployees = [];
 let allSites = [];
 let allSiteRequests = [];
 let allAllowanceRequests = [];
+let allLeaveRequests = [];
 let appSettings = {};
 let allOfficialHolidays = [];
 let latesChartInstance = null;
@@ -154,6 +155,7 @@ async function initDashboard(forceRefresh = false) {
             allSites = result.sites || [];
             allSiteRequests = result.siteRequests || [];
             allAllowanceRequests = result.allowanceRequests || [];
+            allLeaveRequests = result.leaveRequests || [];
             appSettings = result.settings || {};
 
             // Load official holidays
@@ -166,6 +168,9 @@ async function initDashboard(forceRefresh = false) {
             // Render the current active tab
             const activeTab = localStorage.getItem('hrActiveTab') || 'attendance';
             renderActiveTab(activeTab);
+
+            // Initialize notifications
+            initNotifications();
         }
     } catch (e) {
         console.error("Initial load failed", e);
@@ -179,6 +184,7 @@ function renderActiveTab(tabName) {
     if (tabName === 'sites') renderSitesTable(allSites);
     if (tabName === 'siteRequests') renderRequestsTable(allSiteRequests);
     if (tabName === 'allowanceRequests') renderAllowanceRequestsTable(allAllowanceRequests);
+    if (tabName === 'leaveRequests') renderLeaveRequestsTable(allLeaveRequests);
     if (tabName === 'settings') renderSettings(appSettings);
     if (tabName === 'deviceManagement') {
         setTimeout(() => {
@@ -434,18 +440,25 @@ function resetEmployeeDetailedReportView(message) {
     document.getElementById('employeeDetailAbsent').innerText = '0';
     document.getElementById('employeeDetailLate').innerText = '0';
     document.getElementById('employeeDetailOvertime').innerText = '0';
+    document.getElementById('employeeDetailLeaveRequests').innerText = '0';
     document.getElementById('employeeDetailNoCheckout').innerText = '0';
     document.getElementById('employeeDetailOvertimePay').innerText = '0.00';
     document.getElementById('employeeDetailTransport').innerText = '0.00';
     document.getElementById('employeeDetailMeta').innerText = message || 'اختر موظفًا وحدد الفترة الزمنية ثم اضغط "عرض التقرير".';
 
     const tbody = document.getElementById('employeeDetailTableBody');
-    if (!tbody) return;
-    tbody.innerHTML = `
-        <tr>
-            <td colspan="7" class="employee-report-empty">لا توجد بيانات معروضة بعد.</td>
-        </tr>
-    `;
+    if (tbody) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="7" class="employee-report-empty">لا توجد بيانات معروضة بعد.</td>
+            </tr>
+        `;
+    }
+
+    const leaveTbody = document.getElementById('employeeLeaveRequestsTableBody');
+    if (leaveTbody) {
+        leaveTbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--text-muted);">لا توجد طلبات إجازة</td></tr>';
+    }
 }
 
 function populateEmployeeDetailEmployees() {
@@ -554,11 +567,19 @@ async function generateEmployeeDetailedReport() {
     const dailyRate = salary / 30;
     const overtimePay = dailyRate * overtimeDays;
 
+    // Calculate leave requests for this employee in the date range
+    const employeeLeaveRequests = allLeaveRequests.filter(req => {
+        return String(req.employeeId) === String(employeeId) &&
+               req.leaveDate >= startStr && req.leaveDate <= endStr;
+    });
+    const leaveRequestsCount = employeeLeaveRequests.length;
+
     document.getElementById('employeeDetailPresent').innerText = String(daysPresent);
     document.getElementById('employeeDetailAbsent').innerText = String(daysAbsent);
     document.getElementById('employeeDetailLate').innerText = String(lateDates.size);
     document.getElementById('employeeDetailOvertime').innerText = String(overtimeDays);
     document.getElementById('employeeDetailNoCheckout').innerText = String(noCheckoutDates.size);
+    document.getElementById('employeeDetailLeaveRequests').innerText = String(leaveRequestsCount);
     document.getElementById('employeeDetailOvertimePay').innerText = overtimePay.toFixed(2);
     document.getElementById('employeeDetailTransport').innerText = totalTransport.toFixed(2);
 
@@ -608,6 +629,42 @@ async function generateEmployeeDetailedReport() {
             </tr>
         `;
     });
+
+    // Render leave requests table
+    const leaveTbody = document.getElementById('employeeLeaveRequestsTableBody');
+    if (leaveTbody) {
+        if (employeeLeaveRequests.length === 0) {
+            leaveTbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--text-muted);">لا توجد طلبات إجازة</td></tr>';
+        } else {
+            leaveTbody.innerHTML = '';
+            // Sort by leave date
+            const sortedLeaves = [...employeeLeaveRequests].sort((a, b) => new Date(a.leaveDate) - new Date(b.leaveDate));
+            sortedLeaves.forEach(req => {
+                let statusText = '';
+                let statusColor = '';
+                if (req.status === 'pending') {
+                    statusText = 'قيد الانتظار';
+                    statusColor = '#f59e0b';
+                } else if (req.status === 'approved') {
+                    statusText = 'تمت الموافقة';
+                    statusColor = '#10b981';
+                } else if (req.status === 'rejected') {
+                    statusText = 'مرفوض';
+                    statusColor = '#ef4444';
+                }
+
+                leaveTbody.innerHTML += `
+                    <tr>
+                        <td>${req.leaveDate}</td>
+                        <td>${req.reason}</td>
+                        <td>${formatDate(req.createdAt)}</td>
+                        <td><span style="color:${statusColor}; font-weight:bold;">${statusText}</span></td>
+                        <td>${req.approvedAt ? formatDate(req.approvedAt) : '-'}</td>
+                    </tr>
+                `;
+            });
+        }
+    }
 }
 
 async function sendEmployeeDetailedReport() {
@@ -2379,6 +2436,135 @@ async function clearProcessedAllowances() {
 }
 
 // ============================================
+// LEAVE REQUESTS SYSTEM
+// ============================================
+
+function renderLeaveRequestsTable(data) {
+    const tbody = document.getElementById('leaveRequestsTableBody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-muted);">لا توجد طلبات إجازة</td></tr>';
+        return;
+    }
+
+    // Sort by status (pending first) then by date
+    const sorted = [...data].sort((a, b) => {
+        if (a.status === 'pending' && b.status !== 'pending') return -1;
+        if (a.status !== 'pending' && b.status === 'pending') return 1;
+        return new Date(b.createdAt) - new Date(a.createdAt);
+    });
+
+    sorted.forEach(req => {
+        let statusText = '';
+        let statusColor = '';
+        let actions = '';
+
+        if (req.status === 'pending') {
+            statusText = 'قيد الانتظار';
+            statusColor = '#f59e0b';
+            actions = `
+                <button class="btn-primary" style="width:auto; padding:5px 10px; background:var(--secondary);" onclick="approveLeaveRequest('${req.id}')">موافقة</button>
+                <button class="btn-danger" style="width:auto; padding:5px 10px; margin-right:5px;" onclick="rejectLeaveRequest('${req.id}')">رفض</button>
+            `;
+        } else if (req.status === 'approved') {
+            statusText = 'تمت الموافقة';
+            statusColor = '#10b981';
+            actions = `<span style="color:var(--text-muted);">تمت الموافقة بتاريخ ${formatDate(req.approvedAt)}</span>`;
+        } else if (req.status === 'rejected') {
+            statusText = 'مرفوض';
+            statusColor = '#ef4444';
+            actions = `<span style="color:var(--text-muted);">تم الرفض</span>`;
+        }
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><strong>${req.employeeName}</strong></td>
+            <td>${req.leaveDate}</td>
+            <td>${req.reason}</td>
+            <td>${formatDate(req.createdAt)}</td>
+            <td><span style="color:${statusColor}; font-weight:bold;">${statusText}</span></td>
+            <td>${actions}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+async function approveLeaveRequest(id) {
+    if (!confirm('هل أنت متأكد من الموافقة على طلب الإجازة هذا؟')) return;
+
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'approveLeaveRequest', id: id, approvedBy: hrSession?.name || 'HR' }),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+        if (result.success) {
+            alert(result.message);
+            await initDashboard(true);
+        } else {
+            alert('خطأ: ' + result.message);
+        }
+    } catch (e) {
+        console.error(e);
+        alert('خطأ في الاتصال');
+    }
+    document.getElementById('loader').classList.add('hidden');
+}
+
+async function rejectLeaveRequest(id) {
+    const reason = prompt('سبب الرفض (اختياري):');
+    if (reason === null) return; // User cancelled
+
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'rejectLeaveRequest', id: id, rejectionReason: reason }),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+        if (result.success) {
+            alert(result.message);
+            await initDashboard(true);
+        } else {
+            alert('خطأ: ' + result.message);
+        }
+    } catch (e) {
+        console.error(e);
+        alert('خطأ في الاتصال');
+    }
+    document.getElementById('loader').classList.add('hidden');
+}
+
+async function clearProcessedLeaveRequests() {
+    if (!confirm('هل أنت متأكد من مسح جميع طلبات الإجازة التي تمت الموافقة عليها أو رفضها؟ هذا الإجراء لا يمكن التراجع عنه.')) return;
+
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'clearProcessedLeaveRequests' }),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+        if (result.success) {
+            alert(result.message);
+            await initDashboard(true);
+        } else {
+            alert('خطأ: ' + result.message);
+        }
+    } catch (e) {
+        console.error(e);
+        alert('خطأ في الاتصال');
+    }
+    document.getElementById('loader').classList.add('hidden');
+}
+
+// ============================================
 // DEVICE MANAGEMENT FUNCTIONS
 // ============================================
 
@@ -2612,3 +2798,173 @@ async function clearProcessedDeviceRequests() {
     }
     document.getElementById('loader').classList.add('hidden');
 }
+
+// ------ NOTIFICATIONS SYSTEM ------ //
+let notificationsData = [];
+let notificationsInterval = null;
+
+function initNotifications() {
+    // Fetch notifications immediately
+    fetchNotifications();
+    
+    // Set up periodic fetching every 2 minutes
+    if (notificationsInterval) clearInterval(notificationsInterval);
+    notificationsInterval = setInterval(fetchNotifications, 2 * 60 * 1000);
+}
+
+async function fetchNotifications() {
+    if (!hrSession) return;
+    
+    try {
+        const res = await fetch(`${API_URL}?action=getNotifications&userRole=hr`);
+        const result = await res.json();
+        
+        if (result.success) {
+            notificationsData = result.notifications || [];
+            updateNotificationBadge();
+        }
+    } catch (e) {
+        console.error('Error fetching notifications:', e);
+    }
+}
+
+function updateNotificationBadge() {
+    const badge = document.getElementById('notificationBadge');
+    if (!badge) return;
+    
+    const count = notificationsData.length;
+    if (count > 0) {
+        badge.innerText = count > 99 ? '99+' : count;
+        badge.classList.remove('hidden');
+    } else {
+        badge.classList.add('hidden');
+    }
+}
+
+function toggleNotifications() {
+    const dropdown = document.getElementById('notificationDropdown');
+    if (!dropdown) return;
+    
+    const isHidden = dropdown.classList.contains('hidden');
+    
+    if (isHidden) {
+        renderNotificationsList();
+        dropdown.classList.remove('hidden');
+    } else {
+        dropdown.classList.add('hidden');
+    }
+}
+
+function renderNotificationsList() {
+    const list = document.getElementById('notificationList');
+    if (!list) return;
+    
+    if (notificationsData.length === 0) {
+        list.innerHTML = '<p style="text-align:center; color:var(--text-muted); padding:20px;">لا توجد إشعارات جديدة</p>';
+        return;
+    }
+    
+    list.innerHTML = '';
+    notificationsData.forEach(notif => {
+        const item = document.createElement('div');
+        item.style.cssText = 'padding:12px; border-bottom:1px solid var(--card-border); cursor:pointer; transition:background 0.2s;';
+        item.onmouseover = () => item.style.background = 'rgba(255,255,255,0.05)';
+        item.onmouseout = () => item.style.background = 'transparent';
+        item.onclick = () => {
+            markNotificationAsRead(notif.id);
+            // Navigate to relevant tab based on notification type
+            if (notif.type === 'leave_request') showTab('leaveRequests');
+            else if (notif.type === 'site_request') showTab('siteRequests');
+            else if (notif.type === 'allowance_request') showTab('allowanceRequests');
+        };
+        
+        const timeAgo = formatTimeAgo(notif.createdAt);
+        const icon = getNotificationIcon(notif.type);
+        
+        item.innerHTML = `
+            <div style="display:flex; align-items:flex-start; gap:10px;">
+                <span style="font-size:20px;">${icon}</span>
+                <div style="flex:1;">
+                    <div style="font-weight:bold; margin-bottom:4px;">${notif.title}</div>
+                    <div style="font-size:13px; color:var(--text-muted); margin-bottom:4px;">${notif.message}</div>
+                    <div style="font-size:11px; color:var(--secondary);">${timeAgo}</div>
+                </div>
+                <span style="width:8px; height:8px; background:var(--secondary); border-radius:50%; flex-shrink:0;"></span>
+            </div>
+        `;
+        list.appendChild(item);
+    });
+}
+
+function getNotificationIcon(type) {
+    const icons = {
+        'leave_request': '📅',
+        'site_request': '📍',
+        'allowance_request': '💰',
+        'default': '📢'
+    };
+    return icons[type] || icons['default'];
+}
+
+function formatTimeAgo(dateString) {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    
+    if (diffMins < 1) return 'الآن';
+    if (diffMins < 60) return `منذ ${diffMins} دقيقة`;
+    if (diffHours < 24) return `منذ ${diffHours} ساعة`;
+    if (diffDays === 1) return 'أمس';
+    return `منذ ${diffDays} يوم`;
+}
+
+async function markNotificationAsRead(notificationId) {
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'markNotificationAsRead', notificationId: notificationId }),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+        
+        if (result.success) {
+            // Remove from local data
+            notificationsData = notificationsData.filter(n => n.id !== notificationId);
+            updateNotificationBadge();
+            renderNotificationsList();
+        }
+    } catch (e) {
+        console.error('Error marking notification as read:', e);
+    }
+}
+
+async function markAllNotificationsAsRead() {
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'markAllNotificationsAsRead', userRole: 'hr' }),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+        
+        if (result.success) {
+            notificationsData = [];
+            updateNotificationBadge();
+            renderNotificationsList();
+        }
+    } catch (e) {
+        console.error('Error marking all notifications as read:', e);
+    }
+}
+
+// Close notifications dropdown when clicking outside
+document.addEventListener('click', (e) => {
+    const container = document.getElementById('notificationContainer');
+    const dropdown = document.getElementById('notificationDropdown');
+    if (container && dropdown && !container.contains(e.target)) {
+        dropdown.classList.add('hidden');
+    }
+});

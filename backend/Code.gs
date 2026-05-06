@@ -69,6 +69,92 @@ var SITE_REQUEST_COL = {
   AUTO_META: 17
 };
 
+var LEAVE_REQUEST_HEADERS = [
+  "id",
+  "employeeId",
+  "employeeName",
+  "leaveDate",
+  "reason",
+  "status",
+  "createdAt",
+  "approvedAt",
+  "approvedBy",
+  "rejectionReason"
+];
+
+var LEAVE_REQUEST_COL = {
+  ID: 0,
+  EMPLOYEE_ID: 1,
+  EMPLOYEE_NAME: 2,
+  LEAVE_DATE: 3,
+  REASON: 4,
+  STATUS: 5,
+  CREATED_AT: 6,
+  APPROVED_AT: 7,
+  APPROVED_BY: 8,
+  REJECTION_REASON: 9
+};
+
+var ALLOWANCE_REQUEST_HEADERS = [
+  "id",
+  "employeeId",
+  "employeeName",
+  "attendanceId",
+  "siteId",
+  "siteName",
+  "requestDate",
+  "amount",
+  "note",
+  "status",
+  "createdAt",
+  "approvedAt",
+  "approvedBy",
+  "rejectionReason"
+];
+
+var ALLOWANCE_REQUEST_COL = {
+  ID: 0,
+  EMPLOYEE_ID: 1,
+  EMPLOYEE_NAME: 2,
+  ATTENDANCE_ID: 3,
+  SITE_ID: 4,
+  SITE_NAME: 5,
+  REQUEST_DATE: 6,
+  AMOUNT: 7,
+  NOTE: 8,
+  STATUS: 9,
+  CREATED_AT: 10,
+  APPROVED_AT: 11,
+  APPROVED_BY: 12,
+  REJECTION_REASON: 13
+};
+
+var NOTIFICATION_HEADERS = [
+  "id",
+  "userId",
+  "userRole",
+  "title",
+  "message",
+  "type",
+  "relatedId",
+  "isRead",
+  "createdAt",
+  "readAt"
+];
+
+var NOTIFICATION_COL = {
+  ID: 0,
+  USER_ID: 1,
+  USER_ROLE: 2,
+  TITLE: 3,
+  MESSAGE: 4,
+  TYPE: 5,
+  RELATED_ID: 6,
+  IS_READ: 7,
+  CREATED_AT: 8,
+  READ_AT: 9
+};
+
 function ensureSheetHeaders(sheet, headers) {
   if (!sheet || !headers || !headers.length) return;
 
@@ -99,6 +185,24 @@ function ensureSheetHeaders(sheet, headers) {
 function getSiteRequestsSheet() {
   var sheet = getOrCreateSheet("siteRequests", SITE_REQUEST_HEADERS);
   ensureSheetHeaders(sheet, SITE_REQUEST_HEADERS);
+  return sheet;
+}
+
+function getLeaveRequestsSheet() {
+  var sheet = getOrCreateSheet("leaveRequests", LEAVE_REQUEST_HEADERS);
+  ensureSheetHeaders(sheet, LEAVE_REQUEST_HEADERS);
+  return sheet;
+}
+
+function getNotificationsSheet() {
+  var sheet = getOrCreateSheet("notifications", NOTIFICATION_HEADERS);
+  ensureSheetHeaders(sheet, NOTIFICATION_HEADERS);
+  return sheet;
+}
+
+function getAllowanceRequestsSheet() {
+  var sheet = getOrCreateSheet("allowanceRequests", ALLOWANCE_REQUEST_HEADERS);
+  ensureSheetHeaders(sheet, ALLOWANCE_REQUEST_HEADERS);
   return sheet;
 }
 
@@ -642,6 +746,113 @@ function syncAttendanceTransportForRequest(requestId, requestTransport) {
 }
 
 /////////////////////////////
+// 🔥 NOTIFICATIONS
+/////////////////////////////
+function createNotification(userId, userRole, title, message, type, relatedId) {
+  var sheet = getNotificationsSheet();
+  var notificationId = "NOTIF" + Math.floor(10000 + Math.random() * 90000);
+  
+  sheet.appendRow([
+    notificationId,
+    userId || "",
+    userRole || "",
+    title,
+    message,
+    type,
+    relatedId || "",
+    false,
+    new Date().toISOString(),
+    ""
+  ]);
+  
+  return notificationId;
+}
+
+function getUnreadNotificationsForUser(userId, userRole) {
+  var sheet = getNotificationsSheet();
+  var rows = sheet.getDataRange().getValues();
+  var notifications = [];
+  
+  for (var i = rows.length - 1; i >= 1; i--) {
+    var row = rows[i];
+    var notifUserId = String(row[NOTIFICATION_COL.USER_ID] || "");
+    var notifUserRole = String(row[NOTIFICATION_COL.USER_ROLE] || "");
+    var isRead = row[NOTIFICATION_COL.IS_READ] === true || String(row[NOTIFICATION_COL.IS_READ]).toLowerCase() === "true";
+    
+    // Match by userId or userRole
+    if (!isRead && (notifUserId === String(userId || "") || (userRole && notifUserRole === userRole))) {
+      notifications.push({
+        id: row[NOTIFICATION_COL.ID],
+        userId: notifUserId,
+        userRole: notifUserRole,
+        title: row[NOTIFICATION_COL.TITLE],
+        message: row[NOTIFICATION_COL.MESSAGE],
+        type: row[NOTIFICATION_COL.TYPE],
+        relatedId: row[NOTIFICATION_COL.RELATED_ID],
+        isRead: isRead,
+        createdAt: row[NOTIFICATION_COL.CREATED_AT]
+      });
+    }
+  }
+  
+  return notifications;
+}
+
+function markNotificationAsRead(notificationId) {
+  var sheet = getNotificationsSheet();
+  var rows = sheet.getDataRange().getValues();
+  
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][NOTIFICATION_COL.ID]) === String(notificationId)) {
+      sheet.getRange(i + 1, NOTIFICATION_COL.IS_READ + 1).setValue(true);
+      sheet.getRange(i + 1, NOTIFICATION_COL.READ_AT + 1).setValue(new Date().toISOString());
+      return true;
+    }
+  }
+  return false;
+}
+
+function markAllNotificationsAsReadForUser(userId, userRole) {
+  var sheet = getNotificationsSheet();
+  var rows = sheet.getDataRange().getValues();
+  var updatedCount = 0;
+  
+  for (var i = 1; i < rows.length; i++) {
+    var notifUserId = String(rows[i][NOTIFICATION_COL.USER_ID] || "");
+    var notifUserRole = String(rows[i][NOTIFICATION_COL.USER_ROLE] || "");
+    var isRead = rows[i][NOTIFICATION_COL.IS_READ] === true || String(rows[i][NOTIFICATION_COL.IS_READ]).toLowerCase() === "true";
+    
+    if (!isRead && (notifUserId === String(userId || "") || (userRole && notifUserRole === userRole))) {
+      sheet.getRange(i + 1, NOTIFICATION_COL.IS_READ + 1).setValue(true);
+      sheet.getRange(i + 1, NOTIFICATION_COL.READ_AT + 1).setValue(new Date().toISOString());
+      updatedCount++;
+    }
+  }
+  
+  return updatedCount;
+}
+
+function clearOldNotifications(daysOld) {
+  var sheet = getNotificationsSheet();
+  var rows = sheet.getDataRange().getValues();
+  var cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - (daysOld || 30));
+  var deletedCount = 0;
+  
+  for (var i = rows.length - 1; i >= 1; i--) {
+    var createdAt = new Date(rows[i][NOTIFICATION_COL.CREATED_AT]);
+    var isRead = rows[i][NOTIFICATION_COL.IS_READ] === true || String(rows[i][NOTIFICATION_COL.IS_READ]).toLowerCase() === "true";
+    
+    if (isRead && createdAt < cutoffDate) {
+      sheet.deleteRow(i + 1);
+      deletedCount++;
+    }
+  }
+  
+  return deletedCount;
+}
+
+/////////////////////////////
 // 🔥 VALIDATION
 /////////////////////////////
 function validateAll(ss, data) {
@@ -794,7 +1005,9 @@ function doGet(e) {
         attendance: _getAttendanceData(ss),
         settings: _getSettingsData(ss),
         siteRequests: _getSiteRequestsData(ss),
-        siteAllowances: _getSiteAllowancesData(ss)
+        siteAllowances: _getSiteAllowancesData(ss),
+        leaveRequests: _getLeaveRequestsData(ss),
+        allowanceRequests: _getAllowanceRequestsData(ss)
       });
     }
 
@@ -807,6 +1020,26 @@ function doGet(e) {
         sites: _getSitesData(ss, empId),
         attendance: _getAttendanceData(ss, empId)
       });
+    }
+
+    if (action === "getNotifications") {
+      var userId = e.parameter.userId;
+      var userRole = e.parameter.userRole;
+      var notifications = getUnreadNotificationsForUser(userId, userRole);
+      return json({
+        success: true,
+        notifications: notifications,
+        count: notifications.length
+      });
+    }
+
+    if (action === "getAllowanceRequests") {
+      var ss = getSpreadsheet();
+      var data = _getAllowanceRequestsData(ss);
+      if (e.parameter.employeeId) {
+        data = data.filter(function(r) { return String(r.employeeId) === String(e.parameter.employeeId); });
+      }
+      return json({ success: true, data: data });
     }
 
     if (action === "getEmployees") {
@@ -1305,6 +1538,8 @@ function doPost(e) {
         ""
       ]);
       var submitMessage = "تم إرسال طلب تسجيل الموقع بنجاح للمراجعة. في حال عدم الرد من الإدارة خلال دقيقتين، سيتم تفعيل موافقة تلقائية مؤقتة طالما كنت متواجداً في نفس المكان.";
+      // Notify HR about new site request
+      createNotification("", "hr", "طلب موقع جديد", "قام الموظف " + data.employeeName + " بطلب تسجيل موقع: " + data.suggestedName, "site_request", requestId);
       return json({ success: true, message: submitMessage, attachmentSaved: false });
     }
 
@@ -1343,6 +1578,11 @@ function doPost(e) {
           reqSheet.getRange(i + 1, SITE_REQUEST_COL.TRANSPORT_PRICE + 1).setValue(approvedRequestTransport);
           reqSheet.getRange(i + 1, SITE_REQUEST_COL.APPROVED_AT + 1).setValue(approvedAt);
           syncAttendanceTransportForRequest(row[SITE_REQUEST_COL.ID], approvedRequestTransport);
+          // Notify employee about approval
+          var employeeId = row[SITE_REQUEST_COL.EMPLOYEE_ID];
+          var siteName = row[SITE_REQUEST_COL.SUGGESTED_NAME];
+          var approvalType = data.mode === "always" ? "بشكل دائم" : "لليوم فقط";
+          createNotification(employeeId, "", "تمت الموافقة على موقعك", "تمت الموافقة على طلب تسجيل الموقع: " + siteName + " " + approvalType, "site_approved", data.id);
           return json({ success: true, message: "تمت الموافقة على الموقع بنجاح." });
         }
       }
@@ -1363,6 +1603,11 @@ function doPost(e) {
 
           s.getRange(i + 1, SITE_REQUEST_COL.STATUS + 1).setValue("rejected");
           s.getRange(i + 1, SITE_REQUEST_COL.TEMP_RADIUS + 1).setValue("");
+
+          // Notify employee about rejection
+          var employeeId = rows[i][SITE_REQUEST_COL.EMPLOYEE_ID];
+          var siteName = rows[i][SITE_REQUEST_COL.SUGGESTED_NAME];
+          createNotification(employeeId, "", "تم رفض طلب موقعك", "تم رفض طلب تسجيل الموقع: " + siteName, "site_rejected", data.id);
 
           var rejectionMessage = "تم رفض الطلب.";
           if (currentStatus === "approved_today") {
@@ -1465,6 +1710,183 @@ function doPost(e) {
       }
 
       throw new Error("لا يوجد عملية حضور مفتوحة لنسجل الانصراف");
+    }
+
+    // LEAVE REQUESTS
+    if (data.action === "addLeaveRequest") {
+      var s = getLeaveRequestsSheet();
+      var requestId = "LEAVE" + Math.floor(10000 + Math.random() * 90000);
+      var leaveDate = String(data.leaveDate || "").trim();
+      var reason = String(data.reason || "").trim();
+      
+      if (!leaveDate) throw new Error("تاريخ الإجازة مطلوب");
+      if (!reason) throw new Error("سبب الإجازة مطلوب");
+      
+      // Check if employee already has a pending/approved leave for this date
+      var existingRows = s.getDataRange().getValues();
+      for (var i = 1; i < existingRows.length; i++) {
+        if (String(existingRows[i][LEAVE_REQUEST_COL.EMPLOYEE_ID]) === String(data.employeeId) &&
+            String(existingRows[i][LEAVE_REQUEST_COL.LEAVE_DATE]) === leaveDate &&
+            (String(existingRows[i][LEAVE_REQUEST_COL.STATUS]) === "pending" || 
+             String(existingRows[i][LEAVE_REQUEST_COL.STATUS]) === "approved")) {
+          throw new Error("لديك طلب إجازة موجود بالفعل لهذا التاريخ");
+        }
+      }
+      
+      s.appendRow([
+        requestId,
+        data.employeeId,
+        data.employeeName,
+        leaveDate,
+        reason,
+        "pending",
+        new Date().toISOString(),
+        "",
+        "",
+        ""
+      ]);
+      // Notify HR about new leave request
+      createNotification("", "hr", "طلب إجازة جديد", "قام الموظف " + data.employeeName + " بطلب إجازة بتاريخ " + leaveDate, "leave_request", requestId);
+      return json({ success: true, message: "تم إرسال طلب الإجازة بنجاح للمراجعة" });
+    }
+    
+    if (data.action === "approveLeaveRequest") {
+      var s = getLeaveRequestsSheet();
+      var rows = s.getDataRange().getValues();
+      var approvedAt = new Date().toISOString();
+      
+      for (var i = 1; i < rows.length; i++) {
+        if (String(rows[i][LEAVE_REQUEST_COL.ID]) === String(data.id)) {
+          var employeeId = rows[i][LEAVE_REQUEST_COL.EMPLOYEE_ID];
+          var leaveDate = rows[i][LEAVE_REQUEST_COL.LEAVE_DATE];
+          s.getRange(i + 1, LEAVE_REQUEST_COL.STATUS + 1).setValue("approved");
+          s.getRange(i + 1, LEAVE_REQUEST_COL.APPROVED_AT + 1).setValue(approvedAt);
+          s.getRange(i + 1, LEAVE_REQUEST_COL.APPROVED_BY + 1).setValue(data.approvedBy || "HR");
+          // Notify employee about approval
+          createNotification(employeeId, "", "تمت الموافقة على إجازتك", "تمت الموافقة على طلب إجازتك بتاريخ " + leaveDate, "leave_approved", data.id);
+          return json({ success: true, message: "تمت الموافقة على طلب الإجازة بنجاح" });
+        }
+      }
+      throw new Error("الطلب غير موجود");
+    }
+    
+    if (data.action === "rejectLeaveRequest") {
+      var s = getLeaveRequestsSheet();
+      var rows = s.getDataRange().getValues();
+      
+      for (var i = 1; i < rows.length; i++) {
+        if (String(rows[i][LEAVE_REQUEST_COL.ID]) === String(data.id)) {
+          var employeeId = rows[i][LEAVE_REQUEST_COL.EMPLOYEE_ID];
+          var leaveDate = rows[i][LEAVE_REQUEST_COL.LEAVE_DATE];
+          s.getRange(i + 1, LEAVE_REQUEST_COL.STATUS + 1).setValue("rejected");
+          s.getRange(i + 1, LEAVE_REQUEST_COL.REJECTION_REASON + 1).setValue(data.rejectionReason || "");
+          // Notify employee about rejection
+          createNotification(employeeId, "", "تم رفض طلب إجازتك", "تم رفض طلب إجازتك بتاريخ " + leaveDate + (data.rejectionReason ? ". السبب: " + data.rejectionReason : ""), "leave_rejected", data.id);
+          return json({ success: true, message: "تم رفض طلب الإجازة" });
+        }
+      }
+      throw new Error("الطلب غير موجود");
+    }
+    
+    if (action === "clearProcessedLeaveRequests") {
+      var s = getLeaveRequestsSheet();
+      var rows = s.getDataRange().getValues();
+      var deletedCount = 0;
+      
+      for (var i = rows.length - 1; i >= 1; i--) {
+        var status = String(rows[i][LEAVE_REQUEST_COL.STATUS] || "");
+        if (status === "approved" || status === "rejected") {
+          s.deleteRow(i + 1);
+          deletedCount++;
+        }
+      }
+      return json({ success: true, message: "تم مسح " + deletedCount + " طلب إجازة تمت معالجته بنجاح." });
+    }
+
+    // NOTIFICATIONS
+    if (data.action === "markNotificationAsRead") {
+      var result = markNotificationAsRead(data.notificationId);
+      return json({ success: result, message: result ? "تم تحديث الإشعار" : "الإشعار غير موجود" });
+    }
+
+    if (data.action === "markAllNotificationsAsRead") {
+      var updatedCount = markAllNotificationsAsReadForUser(data.userId, data.userRole);
+      return json({ success: true, message: "تم تحديث " + updatedCount + " إشعار" });
+    }
+
+    // ALLOWANCE REQUESTS
+    if (data.action === "addAllowanceRequest") {
+      var s = getAllowanceRequestsSheet();
+      var requestId = "ALLOW" + Math.floor(10000 + Math.random() * 90000);
+      
+      s.appendRow([
+        requestId,
+        data.employeeId,
+        data.employeeName,
+        data.attendanceId || "",
+        data.siteId || "",
+        data.siteName || "",
+        data.requestDate || "",
+        toNumberSafe(data.amount, 0),
+        data.note || "",
+        "pending",
+        new Date().toISOString(),
+        "",
+        "",
+        ""
+      ]);
+      // Notify HR about new allowance request
+      createNotification("", "hr", "طلب زيادة بدلات جديد", "قام الموظف " + data.employeeName + " بطلب زيادة بدلات بمبلغ " + data.amount + " ج.م", "allowance_request", requestId);
+      return json({ success: true, message: "تم إرسال طلب زيادة البدلات بنجاح" });
+    }
+
+    if (data.action === "handleAllowanceRequest") {
+      var s = getAllowanceRequestsSheet();
+      var rows = s.getDataRange().getValues();
+      
+      for (var i = 1; i < rows.length; i++) {
+        if (String(rows[i][ALLOWANCE_REQUEST_COL.ID]) === String(data.requestId)) {
+          var employeeId = rows[i][ALLOWANCE_REQUEST_COL.EMPLOYEE_ID];
+          var amount = rows[i][ALLOWANCE_REQUEST_COL.AMOUNT];
+          var note = rows[i][ALLOWANCE_REQUEST_COL.NOTE];
+          
+          if (data.status === "approved") {
+            s.getRange(i + 1, ALLOWANCE_REQUEST_COL.STATUS + 1).setValue("approved");
+            s.getRange(i + 1, ALLOWANCE_REQUEST_COL.APPROVED_AT + 1).setValue(new Date().toISOString());
+            s.getRange(i + 1, ALLOWANCE_REQUEST_COL.APPROVED_BY + 1).setValue(data.adminName || "HR");
+            // Notify employee about approval
+            createNotification(employeeId, "", "تمت الموافقة على طلب زيادة البدلات", "تمت الموافقة على طلب زيادة البدلات بمبلغ " + amount + " ج.م", "allowance_approved", data.requestId);
+            return json({ success: true, message: "تمت الموافقة على الطلب بنجاح" });
+          } else {
+            s.getRange(i + 1, ALLOWANCE_REQUEST_COL.STATUS + 1).setValue("rejected");
+            s.getRange(i + 1, ALLOWANCE_REQUEST_COL.REJECTION_REASON + 1).setValue(data.rejectionReason || "");
+            // Notify employee about rejection
+            createNotification(employeeId, "", "تم رفض طلب زيادة البدلات", "تم رفض طلب زيادة البدلات بمبلغ " + amount + " ج.م" + (data.rejectionReason ? ". السبب: " + data.rejectionReason : ""), "allowance_rejected", data.requestId);
+            return json({ success: true, message: "تم رفض الطلب" });
+          }
+        }
+      }
+      throw new Error("الطلب غير موجود");
+    }
+
+    if (action === "clearProcessedAllowances") {
+      var s = getAllowanceRequestsSheet();
+      var rows = s.getDataRange().getValues();
+      var deletedCount = 0;
+      
+      for (var i = rows.length - 1; i >= 1; i--) {
+        var status = String(rows[i][ALLOWANCE_REQUEST_COL.STATUS] || "");
+        if (status === "approved" || status === "rejected") {
+          s.deleteRow(i + 1);
+          deletedCount++;
+        }
+      }
+      return json({ success: true, message: "تم مسح " + deletedCount + " طلب بدلات تمت معالجته بنجاح." });
+    }
+
+    if (data.action === "clearOldNotifications") {
+      var deletedCount = clearOldNotifications(data.daysOld);
+      return json({ success: true, message: "تم مسح " + deletedCount + " إشعار قديم" });
     }
 
   } catch(e){
@@ -2178,6 +2600,50 @@ function _getSiteAllowancesData(ss) {
       employeeId: String(r[0]),
       siteId: String(r[1]),
       transportPrice: toNumberSafe(r[2], 0)
+    };
+  });
+}
+
+function _getLeaveRequestsData(ss) {
+  var s = getLeaveRequestsSheet();
+  var d = s.getDataRange().getValues();
+  d.shift();
+  return d.map(function(r) {
+    return {
+      id: r[LEAVE_REQUEST_COL.ID],
+      employeeId: r[LEAVE_REQUEST_COL.EMPLOYEE_ID],
+      employeeName: r[LEAVE_REQUEST_COL.EMPLOYEE_NAME],
+      leaveDate: r[LEAVE_REQUEST_COL.LEAVE_DATE],
+      reason: r[LEAVE_REQUEST_COL.REASON],
+      status: r[LEAVE_REQUEST_COL.STATUS],
+      createdAt: r[LEAVE_REQUEST_COL.CREATED_AT],
+      approvedAt: r[LEAVE_REQUEST_COL.APPROVED_AT] || "",
+      approvedBy: r[LEAVE_REQUEST_COL.APPROVED_BY] || "",
+      rejectionReason: r[LEAVE_REQUEST_COL.REJECTION_REASON] || ""
+    };
+  });
+}
+
+function _getAllowanceRequestsData(ss) {
+  var s = getAllowanceRequestsSheet();
+  var d = s.getDataRange().getValues();
+  d.shift();
+  return d.map(function(r) {
+    return {
+      id: r[ALLOWANCE_REQUEST_COL.ID],
+      employeeId: r[ALLOWANCE_REQUEST_COL.EMPLOYEE_ID],
+      employeeName: r[ALLOWANCE_REQUEST_COL.EMPLOYEE_NAME],
+      attendanceId: r[ALLOWANCE_REQUEST_COL.ATTENDANCE_ID] || "",
+      siteId: r[ALLOWANCE_REQUEST_COL.SITE_ID] || "",
+      siteName: r[ALLOWANCE_REQUEST_COL.SITE_NAME] || "",
+      requestDate: r[ALLOWANCE_REQUEST_COL.REQUEST_DATE] || "",
+      amount: toNumberSafe(r[ALLOWANCE_REQUEST_COL.AMOUNT], 0),
+      note: r[ALLOWANCE_REQUEST_COL.NOTE] || "",
+      status: r[ALLOWANCE_REQUEST_COL.STATUS],
+      createdAt: r[ALLOWANCE_REQUEST_COL.CREATED_AT],
+      approvedAt: r[ALLOWANCE_REQUEST_COL.APPROVED_AT] || "",
+      approvedBy: r[ALLOWANCE_REQUEST_COL.APPROVED_BY] || "",
+      rejectionReason: r[ALLOWANCE_REQUEST_COL.REJECTION_REASON] || ""
     };
   });
 }

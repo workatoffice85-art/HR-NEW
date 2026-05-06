@@ -454,6 +454,9 @@ async function initSystem() {
             // Process initial status
             processAttendanceStatus(allAttendanceData);
 
+            // Initialize notifications
+            initNotifications();
+
             setStatus(`📡 تم تحميل ${sitesData.length} موقع. النظام جاهز...`, 'text-muted');
         } else {
             console.error("Data load failed", dataResult);
@@ -1599,6 +1602,74 @@ async function submitAllowanceRequest() {
     document.getElementById('loader').classList.add('hidden');
 }
 
+// ------ LEAVE REQUEST LOGIC ------ //
+function openLeaveModal() {
+    try {
+        const modal = document.getElementById('leaveRequestModal');
+        const dateInput = document.getElementById('leaveDate');
+        if (modal) {
+            modal.classList.remove('hidden');
+            modal.style.display = 'flex';
+        }
+        if (dateInput) {
+            // Set default to tomorrow
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            dateInput.value = tomorrow.toISOString().split('T')[0];
+        }
+        // Clear reason
+        const reasonInput = document.getElementById('leaveReason');
+        if (reasonInput) reasonInput.value = '';
+    } catch (e) {
+        console.error("Error opening leave modal", e);
+        alert("حدث خطأ أثناء فتح النافذة");
+    }
+}
+
+function closeLeaveModal() {
+    const modal = document.getElementById('leaveRequestModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.style.display = 'none';
+    }
+}
+
+async function submitLeaveRequest() {
+    const leaveDate = document.getElementById('leaveDate').value;
+    const reason = document.getElementById('leaveReason').value.trim();
+
+    if (!leaveDate) return alert("يجب اختيار تاريخ الإجازة");
+    if (!reason) return alert("يجب كتابة سبب الإجازة");
+
+    const payload = {
+        action: 'addLeaveRequest',
+        employeeId: currentUser.id,
+        employeeName: currentUser.name,
+        leaveDate: leaveDate,
+        reason: reason
+    };
+
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+        if (result.success) {
+            alert(result.message);
+            closeLeaveModal();
+        } else {
+            alert("خطأ: " + result.message);
+        }
+    } catch (e) {
+        console.error(e);
+        alert("فشل الاتصال بالسيرفر");
+    }
+    document.getElementById('loader').classList.add('hidden');
+}
+
 // ------ MY REPORTS SYSTEM ------ //
 function showMyReports() {
     showSection('myReportsSection');
@@ -2107,5 +2178,174 @@ window.addEventListener('beforeunload', () => {
     // Stop biometric update video if active
     if (bioUpdateVideoStream) {
         bioUpdateVideoStream.getTracks().forEach(track => track.stop());
+    }
+});
+
+// ------ NOTIFICATIONS SYSTEM ------ //
+let notificationsData = [];
+let notificationsInterval = null;
+
+function initNotifications() {
+    // Fetch notifications immediately
+    fetchNotifications();
+    
+    // Set up periodic fetching every 2 minutes
+    if (notificationsInterval) clearInterval(notificationsInterval);
+    notificationsInterval = setInterval(fetchNotifications, 2 * 60 * 1000);
+}
+
+async function fetchNotifications() {
+    if (!currentUser || !currentUser.id) return;
+    
+    try {
+        const res = await fetch(`${API_URL}?action=getNotifications&userId=${currentUser.id}&userRole=employee`);
+        const result = await res.json();
+        
+        if (result.success) {
+            notificationsData = result.notifications || [];
+            updateNotificationBadge();
+        }
+    } catch (e) {
+        console.error('Error fetching notifications:', e);
+    }
+}
+
+function updateNotificationBadge() {
+    const badge = document.getElementById('notificationBadge');
+    if (!badge) return;
+    
+    const count = notificationsData.length;
+    if (count > 0) {
+        badge.innerText = count > 99 ? '99+' : count;
+        badge.classList.remove('hidden');
+    } else {
+        badge.classList.add('hidden');
+    }
+}
+
+function toggleNotifications() {
+    const dropdown = document.getElementById('notificationDropdown');
+    if (!dropdown) return;
+    
+    const isHidden = dropdown.classList.contains('hidden');
+    
+    if (isHidden) {
+        renderNotificationsList();
+        dropdown.classList.remove('hidden');
+    } else {
+        dropdown.classList.add('hidden');
+    }
+}
+
+function renderNotificationsList() {
+    const list = document.getElementById('notificationList');
+    if (!list) return;
+    
+    if (notificationsData.length === 0) {
+        list.innerHTML = '<p style="text-align:center; color:var(--text-muted); padding:20px;">لا توجد إشعارات جديدة</p>';
+        return;
+    }
+    
+    list.innerHTML = '';
+    notificationsData.forEach(notif => {
+        const item = document.createElement('div');
+        item.style.cssText = 'padding:12px; border-bottom:1px solid var(--card-border); cursor:pointer; transition:background 0.2s;';
+        item.onmouseover = () => item.style.background = 'rgba(255,255,255,0.05)';
+        item.onmouseout = () => item.style.background = 'transparent';
+        item.onclick = () => markNotificationAsRead(notif.id);
+        
+        const timeAgo = formatTimeAgo(notif.createdAt);
+        const icon = getNotificationIcon(notif.type);
+        
+        item.innerHTML = `
+            <div style="display:flex; align-items:flex-start; gap:10px;">
+                <span style="font-size:20px;">${icon}</span>
+                <div style="flex:1;">
+                    <div style="font-weight:bold; margin-bottom:4px;">${notif.title}</div>
+                    <div style="font-size:13px; color:var(--text-muted); margin-bottom:4px;">${notif.message}</div>
+                    <div style="font-size:11px; color:var(--secondary);">${timeAgo}</div>
+                </div>
+                <span style="width:8px; height:8px; background:var(--secondary); border-radius:50%; flex-shrink:0;"></span>
+            </div>
+        `;
+        list.appendChild(item);
+    });
+}
+
+function getNotificationIcon(type) {
+    const icons = {
+        'leave_approved': '✅',
+        'leave_rejected': '❌',
+        'site_approved': '📍',
+        'site_rejected': '📍',
+        'allowance_approved': '💰',
+        'allowance_rejected': '💰',
+        'default': '📢'
+    };
+    return icons[type] || icons['default'];
+}
+
+function formatTimeAgo(dateString) {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    
+    if (diffMins < 1) return 'الآن';
+    if (diffMins < 60) return `منذ ${diffMins} دقيقة`;
+    if (diffHours < 24) return `منذ ${diffHours} ساعة`;
+    if (diffDays === 1) return 'أمس';
+    return `منذ ${diffDays} يوم`;
+}
+
+async function markNotificationAsRead(notificationId) {
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'markNotificationAsRead', notificationId: notificationId }),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+        
+        if (result.success) {
+            // Remove from local data
+            notificationsData = notificationsData.filter(n => n.id !== notificationId);
+            updateNotificationBadge();
+            renderNotificationsList();
+        }
+    } catch (e) {
+        console.error('Error marking notification as read:', e);
+    }
+}
+
+async function markAllNotificationsAsRead() {
+    if (!currentUser || !currentUser.id) return;
+    
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'markAllNotificationsAsRead', userId: currentUser.id }),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+        
+        if (result.success) {
+            notificationsData = [];
+            updateNotificationBadge();
+            renderNotificationsList();
+        }
+    } catch (e) {
+        console.error('Error marking all notifications as read:', e);
+    }
+}
+
+// Close notifications dropdown when clicking outside
+document.addEventListener('click', (e) => {
+    const container = document.getElementById('notificationContainer');
+    const dropdown = document.getElementById('notificationDropdown');
+    if (container && dropdown && !container.contains(e.target)) {
+        dropdown.classList.add('hidden');
     }
 });
