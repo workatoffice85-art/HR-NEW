@@ -121,6 +121,7 @@ function showTab(tabName) {
     if (tabName === 'employeeDetails') initEmployeeDetailedTab();
     if (tabName === 'settings') fetchSettings();
     if (tabName === 'officialHolidays') fetchOfficialHolidays();
+    if (tabName === 'leaveRequests') fetchLeaveRequests();
     if (tabName === 'deviceManagement') {
         // Non-blocking fetch to improve INP
         setTimeout(() => {
@@ -246,6 +247,10 @@ function formatCairoDate(isoString) {
     
     // Return in Egyptian format: 26/4/2026
     return `${day}/${parseInt(month, 10)}/${year}`;
+}
+
+function formatDate(isoString) {
+    return formatCairoDate(isoString);
 }
 
 function renderAttendanceTable(data) {
@@ -593,7 +598,7 @@ async function generateEmployeeDetailedReport() {
         `الموظف: ${employeeName} | الفترة: ${startDateStr} - ${endDateStr} | عدد العمليات: ${sortedRecords.length}`;
 
     const tbody = document.getElementById('employeeDetailTableBody');
-    if (sortedRecords.length === 0) {
+    if (sortedRecords.length === 0 && daysAbsent === 0 && leaveRequestsCount === 0) {
         tbody.innerHTML = `
             <tr>
                 <td colspan="7" class="employee-report-empty">لا توجد عمليات لهذا الموظف خلال الفترة المحددة.</td>
@@ -602,33 +607,106 @@ async function generateEmployeeDetailedReport() {
         return;
     }
 
-    tbody.innerHTML = '';
+    // Map attendance records by date for easy lookup
+    const attendanceByDate = {};
     sortedRecords.forEach(record => {
-        const dateText = formatCairoDate(record.checkIn);
-        const checkInText = formatCairoTime(record.checkIn);
-
-        let checkOutText = 'لم ينصرف بعد';
-        if (record.status === 'no_checkout') {
-            checkOutText = 'لم يتم الانصراف';
-        } else if (record.checkOut) {
-            checkOutText = formatCairoTime(record.checkOut);
+        const dateKey = record.checkIn ? record.checkIn.slice(0, 10) : '';
+        if (dateKey) {
+            if (!attendanceByDate[dateKey]) attendanceByDate[dateKey] = [];
+            attendanceByDate[dateKey].push(record);
         }
-
-        const statusMeta = getStatusMeta(record.status);
-        const currentTransport = getCurrentTransportPrice(record);
-        const transportText = `${currentTransport.toFixed(2)} ج.م`;
-
-        tbody.innerHTML += `
-            <tr>
-                <td data-label="التاريخ">${dateText}</td>
-                <td data-label="الموقع">${record.siteName || '-'}</td>
-                <td data-label="وقت الحضور" dir="ltr">${checkInText}</td>
-                <td data-label="وقت الانصراف" dir="ltr">${checkOutText}</td>
-                <td data-label="الحالة"><span style="color:${statusMeta.color}">${statusMeta.text}</span></td>
-                <td data-label="البدل">${transportText}</td>
-            </tr>
-        `;
     });
+
+    // Map approved leave requests by date
+    const approvedLeavesByDate = {};
+    allLeaveRequests.filter(req => 
+        String(req.employeeId) === String(employeeId) && 
+        req.status === 'approved'
+    ).forEach(req => {
+        approvedLeavesByDate[req.leaveDate] = req;
+    });
+
+    const weekendDays = getWeekendDaysFromSettings();
+    const holidayDates = new Set();
+    allOfficialHolidays.forEach(h => {
+        if (h.holidayDate) {
+            const d = new Date(h.holidayDate);
+            if (!isNaN(d)) holidayDates.add(d.toISOString().split('T')[0]);
+        }
+    });
+
+    tbody.innerHTML = '';
+    
+    // Iterate from End Date back to Start Date
+    let currentLoopDate = new Date(endDate);
+    currentLoopDate.setHours(0, 0, 0, 0);
+    const stopLoopDate = new Date(startDate);
+    stopLoopDate.setHours(0, 0, 0, 0);
+
+    while (currentLoopDate >= stopLoopDate) {
+        const dateKey = currentLoopDate.toISOString().split('T')[0];
+        const displayDate = formatCairoDate(dateKey);
+        
+        if (attendanceByDate[dateKey]) {
+            // Show attendance records (present, late, overtime, etc.)
+            attendanceByDate[dateKey].forEach(record => {
+                const checkInText = formatCairoTime(record.checkIn);
+                let checkOutText = 'لم ينصرف بعد';
+                if (record.status === 'no_checkout') {
+                    checkOutText = 'لم يتم الانصراف';
+                } else if (record.checkOut) {
+                    checkOutText = formatCairoTime(record.checkOut);
+                }
+                const statusMeta = getStatusMeta(record.status);
+                const currentTransport = getCurrentTransportPrice(record);
+                
+                tbody.innerHTML += `
+                    <tr>
+                        <td data-label="التاريخ">${displayDate}</td>
+                        <td data-label="الموقع">${record.siteName || '-'}</td>
+                        <td data-label="وقت الحضور" dir="ltr">${checkInText}</td>
+                        <td data-label="وقت الانصراف" dir="ltr">${checkOutText}</td>
+                        <td data-label="الحالة"><span style="color:${statusMeta.color}">${statusMeta.text}</span></td>
+                        <td data-label="البدل">${currentTransport.toFixed(2)} ج.م</td>
+                    </tr>
+                `;
+            });
+        } else {
+            // No attendance record for this day
+            const isWeekend = weekendDays.includes(currentLoopDate.getDay());
+            const isHoliday = holidayDates.has(dateKey);
+            const leaveReq = approvedLeavesByDate[dateKey];
+
+            if (leaveReq) {
+                // Approved Leave
+                tbody.innerHTML += `
+                    <tr style="background:rgba(16,185,129,0.05);">
+                        <td data-label="التاريخ">${displayDate}</td>
+                        <td data-label="الموقع">-</td>
+                        <td data-label="وقت الحضور">-</td>
+                        <td data-label="وقت الانصراف">-</td>
+                        <td data-label="الحالة"><span style="color:#10b981; font-weight:bold;">إجازة معتمدة</span></td>
+                        <td data-label="البدل">0.00 ج.م</td>
+                    </tr>
+                `;
+            } else if (!isWeekend && !isHoliday) {
+                // Working day with no attendance and no leave -> Absent
+                tbody.innerHTML += `
+                    <tr style="background:rgba(239,68,68,0.05);">
+                        <td data-label="التاريخ">${displayDate}</td>
+                        <td data-label="الموقع">-</td>
+                        <td data-label="وقت الحضور">-</td>
+                        <td data-label="وقت الانصراف">-</td>
+                        <td data-label="الحالة"><span style="color:var(--danger); font-weight:bold;">غائب</span></td>
+                        <td data-label="البدل">0.00 ج.م</td>
+                    </tr>
+                `;
+            }
+            // Weekends and Holidays without attendance are not shown to keep the table clean
+        }
+        
+        currentLoopDate.setDate(currentLoopDate.getDate() - 1);
+    }
 
     // Render leave requests table
     const leaveTbody = document.getElementById('employeeLeaveRequestsTableBody');
@@ -2438,6 +2516,25 @@ async function clearProcessedAllowances() {
 // ============================================
 // LEAVE REQUESTS SYSTEM
 // ============================================
+
+async function fetchLeaveRequests(force = false) {
+    if (!force && typeof allLeaveRequests !== 'undefined' && allLeaveRequests.length > 0) {
+        renderLeaveRequestsTable(allLeaveRequests);
+        return;
+    }
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(`${API_URL}?action=getLeaveRequests`);
+        const result = await res.json();
+        if (result.success) {
+            allLeaveRequests = result.data || [];
+            renderLeaveRequestsTable(allLeaveRequests);
+        }
+    } catch (e) {
+        console.error("Fetch Leave Requests error:", e);
+    }
+    document.getElementById('loader').classList.add('hidden');
+}
 
 function renderLeaveRequestsTable(data) {
     const tbody = document.getElementById('leaveRequestsTableBody');
