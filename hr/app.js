@@ -33,7 +33,9 @@ document.addEventListener('DOMContentLoaded', () => {
 function checkSession() {
     const userJson = localStorage.getItem('hrSession');
     if (userJson) {
-        hrSession = JSON.parse(userJson);
+        const session = JSON.parse(userJson);
+        hrSession = session;
+        document.getElementById('hrNameDisplay').innerText = session.name || 'مدير النظام';
         document.getElementById('hrLoginSection').classList.add('hidden');
         document.getElementById('dashboardSection').classList.remove('hidden');
         initDashboard();

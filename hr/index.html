@@ -73,26 +73,7 @@
     <!-- Dashboard Layout -->
     <div id="dashboardSection" class="dashboard-layout hidden fade-in">
         <div class="sidebar">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
-                <h2>لوحة التحكم</h2>
-                <!-- Notification Bell -->
-                <div id="notificationContainer" style="position:relative;">
-                    <button id="notificationBell" class="btn-primary" style="width:auto; padding:10px 15px; background:transparent; border:1px solid var(--card-border); position:relative;" onclick="toggleNotifications()">
-                        🔔
-                        <span id="notificationBadge" class="hidden" style="position:absolute; top:-5px; right:-5px; background:var(--danger); color:#fff; border-radius:50%; width:20px; height:20px; font-size:12px; display:flex; align-items:center; justify-content:center;">0</span>
-                    </button>
-                    <!-- Notifications Dropdown -->
-                    <div id="notificationDropdown" class="hidden" style="position:absolute; top:100%; left:0; margin-top:10px; width:320px; max-height:400px; overflow-y:auto; background:var(--card-bg); border:1px solid var(--card-border); border-radius:12px; z-index:1000; box-shadow:0 10px 40px rgba(0,0,0,0.5);">
-                        <div style="padding:15px; border-bottom:1px solid var(--card-border); display:flex; justify-content:space-between; align-items:center;">
-                            <strong>الإشعارات</strong>
-                            <button style="background:none; border:none; color:var(--secondary); cursor:pointer; font-size:12px;" onclick="markAllNotificationsAsRead()">تحديد الكل كمقروء</button>
-                        </div>
-                        <div id="notificationList" style="padding:10px;">
-                            <p style="text-align:center; color:var(--text-muted); padding:20px;">لا توجد إشعارات جديدة</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <h2 style="margin-bottom: 30px; font-size: 1.5rem; text-align: center; color: var(--secondary);">لوحة التحكم</h2>
             <a class="nav-link active" onclick="showTab('attendance')">مراقبة الحضور اليومي</a>
             <a class="nav-link" onclick="showTab('reports')">التقارير الشهرية</a>
             <a class="nav-link" onclick="showTab('employeeDetails')">التقرير التفصيلي لكل موظف</a>
@@ -107,6 +88,34 @@
             <a class="nav-link" onclick="logout()" style="color:var(--danger); margin-top:50px;">تسجيل خروج</a>
         </div>
         <div class="main-content">
+            <!-- Top Header -->
+            <div class="top-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:30px; background:var(--card-bg); padding:15px 25px; border-radius:16px; border:1px solid var(--card-border); backdrop-filter:blur(10px);">
+                <div style="display:flex; align-items:center; gap:15px;">
+                    <div id="notificationContainer" style="position:relative;">
+                        <button id="notificationBell" style="background:rgba(255,255,255,0.05); border:1px solid var(--card-border); color:#fff; padding:10px; border-radius:12px; cursor:pointer; position:relative; transition:all 0.3s;">
+                            <span style="font-size:1.2rem;">🔔</span>
+                            <span id="notificationBadge" class="hidden" style="position:absolute; top:-5px; right:-5px; background:var(--danger); color:#fff; border-radius:50%; width:20px; height:20px; font-size:11px; display:flex; align-items:center; justify-content:center; border:2px solid #1e293b;">0</span>
+                        </button>
+                        <!-- Notifications Dropdown -->
+                        <div id="notificationDropdown" class="hidden" style="position:absolute; top:100%; right:0; margin-top:10px; width:350px; max-height:450px; overflow-y:auto; background:#1e293b; border:1px solid var(--card-border); border-radius:16px; z-index:1000; box-shadow:0 20px 50px rgba(0,0,0,0.6); animation: fadeIn 0.3s ease;">
+                            <div style="padding:15px 20px; border-bottom:1px solid var(--card-border); display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02);">
+                                <strong style="font-size:1.1rem;">الإشعارات</strong>
+                                <button style="background:none; border:none; color:var(--secondary); cursor:pointer; font-size:13px; font-weight:bold;" onclick="markAllNotificationsAsRead()">تحديد الكل كمقروء</button>
+                            </div>
+                            <div id="notificationList">
+                                <p style="text-align:center; color:var(--text-muted); padding:40px;">لا توجد إشعارات جديدة</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div style="display:flex; align-items:center; gap:15px;">
+                    <div style="text-align:left;">
+                        <div id="hrNameDisplay" style="font-weight:bold; color:var(--text-main);">مدير النظام</div>
+                        <div style="font-size:0.75rem; color:var(--secondary);">متصل الآن</div>
+                    </div>
+                    <div style="width:40px; height:40px; background:linear-gradient(45deg, var(--primary), var(--secondary)); border-radius:10px; display:flex; align-items:center; justify-content:center; font-weight:bold; color:#fff;">HR</div>
+                </div>
+            </div>
             
             <div id="loader" class="loader hidden"></div>
 
