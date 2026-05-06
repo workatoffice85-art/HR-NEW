@@ -439,15 +439,13 @@ body {
 
 /* Dashboard Layout Fixes */
 .dashboard-layout {
-    display: flex;
+    display: block;
     min-height: 100vh;
     position: relative;
 }
 
 .main-content {
-    flex: 1;
     padding: 30px;
-    overflow-y: auto;
     position: relative;
 }
 
