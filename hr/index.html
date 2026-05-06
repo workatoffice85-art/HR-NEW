@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,43 +12,136 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
     <style>
         /* Sidebar Styles (HR-specific) */
-        .sidebar { width: 250px; background: rgba(15, 23, 42, 0.9); padding: 20px; border-left: 1px solid var(--card-border); }
-        .sidebar h2 { color: var(--secondary); margin-bottom: 30px; font-size: 1.5rem; text-align: center; }
-        .nav-link { display: block; padding: 12px 15px; color: var(--text-muted); text-decoration: none; border-radius: 8px; margin-bottom: 10px; transition: all 0.3s; cursor: pointer; }
-        .nav-link:hover, .nav-link.active { background: rgba(79, 70, 229, 0.2); color: var(--primary); }
+        .sidebar {
+            width: 250px;
+            background: rgba(15, 23, 42, 0.9);
+            padding: 20px;
+            border-left: 1px solid var(--card-border);
+        }
+
+        .sidebar h2 {
+            color: var(--secondary);
+            margin-bottom: 30px;
+            font-size: 1.5rem;
+            text-align: center;
+        }
+
+        .nav-link {
+            display: block;
+            padding: 12px 15px;
+            color: var(--text-muted);
+            text-decoration: none;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .nav-link:hover,
+        .nav-link.active {
+            background: rgba(79, 70, 229, 0.2);
+            color: var(--primary);
+        }
 
         /* Table Styles */
-        table { width: 100%; border-collapse: collapse; background: var(--card-bg); border-radius: 12px; overflow: hidden; }
-        th, td { padding: 15px; text-align: right; border-bottom: 1px solid var(--card-border); }
-        th { background: rgba(0,0,0,0.2); color: var(--text-muted); }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--card-bg);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        th,
+        td {
+            padding: 15px;
+            text-align: right;
+            border-bottom: 1px solid var(--card-border);
+        }
+
+        th {
+            background: rgba(0, 0, 0, 0.2);
+            color: var(--text-muted);
+        }
 
         /* Modal Styles */
-        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-        .modal-content { background: #1e293b; padding: 30px; border-radius: 16px; width: 90%; max-width: 500px; max-height:90vh; overflow-y:auto; }
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: #1e293b;
+            padding: 30px;
+            border-radius: 16px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
 
         /* Responsive Utilities */
-@media (min-width: 769px) {
-    .mobile-only { display: none !important; }
-    .pc-only { display: flex !important; }
-    .dashboard-layout { display: block; }
-}
-@media (max-width: 768px) {
-    .pc-only { display: none !important; }
-    .mobile-only { display: block !important; }
-    .dashboard-layout { display: flex; }
-}
+        @media (min-width: 769px) {
+            .mobile-only {
+                display: none !important;
+            }
 
-.badge-dot {
-    position: absolute; top: 0; right: 0; 
-    background: var(--danger); width: 8px; height: 8px; border-radius: 50%;
-}
-.badge-count {
-    position: absolute; top: -5px; right: -5px; 
-    background: var(--danger); color: #fff; border-radius: 50%; 
-    width: 18px; height: 18px; font-size: 10px; 
-    display: flex; align-items: center; justify-content: center; 
-    border: 2px solid #1e293b;
-}
+            .pc-only {
+                display: flex !important;
+            }
+
+            .dashboard-layout {
+                display: block;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .pc-only {
+                display: none !important;
+            }
+
+            .mobile-only {
+                display: block !important;
+            }
+
+            .dashboard-layout {
+                display: flex;
+            }
+        }
+
+        .badge-dot {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background: var(--danger);
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .badge-count {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background: var(--danger);
+            color: #fff;
+            border-radius: 50%;
+            width: 18px;
+            height: 18px;
+            font-size: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid #1e293b;
+        }
 
         /* Dashboard Layout Fixes */
         .dashboard-layout {
@@ -64,30 +158,116 @@
         }
 
         /* Camera Box */
-        .camera-box { width: 100%; background: #000; height: 250px; border-radius: 8px; margin-bottom: 15px; position:relative; display:flex; justify-content:center; overflow:hidden; }
-        #regVideo { width:100%; height:100%; object-fit:cover; }
-        #regCanvas { position:absolute; top:0; left:0; width:100%; height:100%; }
+        .camera-box {
+            width: 100%;
+            background: #000;
+            height: 250px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        #regVideo {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        #regCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
 
         /* Filter Bar */
-        .filter-bar { display: flex; gap: 15px; margin-bottom: 20px; align-items: center; flex-wrap: wrap; }
-        .filter-bar input, .filter-bar select { padding: 8px; border-radius: 6px; border: 1px solid var(--card-border); background: rgba(0,0,0,0.2); color: #fff; font-family: inherit;}
+        .filter-bar {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .filter-bar input,
+        .filter-bar select {
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid var(--card-border);
+            background: rgba(0, 0, 0, 0.2);
+            color: #fff;
+            font-family: inherit;
+        }
 
         /* Employee Report Styles */
-        .employee-report-meta { color: var(--text-muted); margin-bottom: 12px; font-size: 0.95rem; }
-        .employee-report-empty { text-align: center; color: var(--text-muted); padding: 16px; }
+        .employee-report-meta {
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            font-size: 0.95rem;
+        }
+
+        .employee-report-empty {
+            text-align: center;
+            color: var(--text-muted);
+            padding: 16px;
+        }
 
         /* Dashboard Charts & KPI */
-        .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
-        .kpi-card { background: rgba(30, 41, 59, 0.8); border: 1px solid var(--card-border); padding: 20px; border-radius: 12px; text-align: center; }
-        .kpi-card h3 { color: var(--text-muted); font-size: 1rem; margin-bottom: 10px; }
-        .kpi-value { color: var(--primary); font-size: 2rem; font-weight: bold; }
-        .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
-        .chart-card { background: rgba(30, 41, 59, 0.8); border: 1px solid var(--card-border); padding: 20px; border-radius: 12px; }
-        @media (max-width: 768px) { .charts-grid { grid-template-columns: 1fr; } }
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .kpi-card {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid var(--card-border);
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .kpi-card h3 {
+            color: var(--text-muted);
+            font-size: 1rem;
+            margin-bottom: 10px;
+        }
+
+        .kpi-value {
+            color: var(--primary);
+            font-size: 2rem;
+            font-weight: bold;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .chart-card {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid var(--card-border);
+            padding: 20px;
+            border-radius: 12px;
+        }
+
+        @media (max-width: 768px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
+
 <body>
-    
+
     <button class="mobile-toggle" id="mobileToggle" onclick="toggleSidebar()">☰</button>
     <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
 
@@ -104,7 +284,8 @@
                 <input type="password" id="hrPass" placeholder="******">
             </div>
             <button class="btn-primary" onclick="loginHR()">دخول</button>
-            <div id="loginError" class="error-text hidden" style="margin-top:15px; padding:10px; text-align:center;"></div>
+            <div id="loginError" class="error-text hidden" style="margin-top:15px; padding:10px; text-align:center;">
+            </div>
         </div>
     </div>
 
@@ -116,14 +297,19 @@
                 <h2 style="margin:0; font-size:1.5rem; color:var(--secondary);">لوحة التحكم</h2>
                 <!-- Mobile Notification Bell -->
                 <div id="notificationContainerMobile" style="position:relative;">
-                    <button id="notificationBellMobile" onclick="toggleNotifications('mobile')" style="background:transparent; border:1px solid var(--card-border); color:#fff; padding:8px; border-radius:10px; cursor:pointer; position:relative;">
+                    <button id="notificationBellMobile" onclick="toggleNotifications('mobile')"
+                        style="background:transparent; border:1px solid var(--card-border); color:#fff; padding:8px; border-radius:10px; cursor:pointer; position:relative;">
                         🔔 <span id="notificationBadgeMobile" class="hidden badge-dot"></span>
                     </button>
                     <!-- Mobile Dropdown -->
-                    <div id="notificationDropdownMobile" class="hidden" style="position:absolute; top:100%; right:0; margin-top:10px; width:280px; max-height:350px; overflow-y:auto; background:#1e293b; border:1px solid var(--card-border); border-radius:12px; z-index:1100; box-shadow:0 15px 40px rgba(0,0,0,0.6);">
-                        <div style="padding:10px 15px; border-bottom:1px solid var(--card-border); display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02);">
+                    <div id="notificationDropdownMobile" class="hidden"
+                        style="position:absolute; top:100%; right:0; margin-top:10px; width:280px; max-height:350px; overflow-y:auto; background:#1e293b; border:1px solid var(--card-border); border-radius:12px; z-index:1100; box-shadow:0 15px 40px rgba(0,0,0,0.6);">
+                        <div
+                            style="padding:10px 15px; border-bottom:1px solid var(--card-border); display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02);">
                             <strong style="font-size:0.9rem;">الإشعارات</strong>
-                            <button style="background:none; border:none; color:var(--secondary); cursor:pointer; font-size:11px;" onclick="markAllNotificationsAsRead()">مسح</button>
+                            <button
+                                style="background:none; border:none; color:var(--secondary); cursor:pointer; font-size:11px;"
+                                onclick="markAllNotificationsAsRead()">مسح</button>
                         </div>
                         <div id="notificationListMobile"></div>
                     </div>
@@ -145,19 +331,25 @@
 
         <div class="main-content">
             <!-- Top Header (PC Only) -->
-            <div class="top-header pc-only" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; background:var(--card-bg); padding:12px 25px; border-radius:16px; border:1px solid var(--card-border); backdrop-filter:blur(10px); position:sticky; top:10px; z-index:1001; box-shadow:0 10px 30px rgba(0,0,0,0.3);">
+            <div class="top-header pc-only"
+                style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; background:var(--card-bg); padding:12px 25px; border-radius:16px; border:1px solid var(--card-border); backdrop-filter:blur(10px); position:sticky; top:10px; z-index:1001; box-shadow:0 10px 30px rgba(0,0,0,0.3);">
                 <div style="display:flex; align-items:center; gap:20px;">
                     <h2 style="margin:0; font-size:1.3rem; color:var(--secondary);">HR Portal</h2>
                     <div id="notificationContainerPC" style="position:relative;">
-                        <button id="notificationBellPC" onclick="toggleNotifications('pc')" style="background:rgba(255,255,255,0.05); border:1px solid var(--card-border); color:#fff; padding:10px; border-radius:12px; cursor:pointer; position:relative;">
+                        <button id="notificationBellPC" onclick="toggleNotifications('pc')"
+                            style="background:rgba(255,255,255,0.05); border:1px solid var(--card-border); color:#fff; padding:10px; border-radius:12px; cursor:pointer; position:relative;">
                             <span style="font-size:1.1rem;">🔔</span>
                             <span id="notificationBadgePC" class="hidden badge-count">0</span>
                         </button>
                         <!-- PC Dropdown -->
-                        <div id="notificationDropdownPC" class="hidden" style="position:absolute; top:100%; left:0; margin-top:10px; width:350px; max-height:450px; overflow-y:auto; background:#1e293b; border:1px solid var(--card-border); border-radius:16px; z-index:1002; box-shadow:0 20px 50px rgba(0,0,0,0.6); animation: fadeIn 0.3s ease;">
-                            <div style="padding:15px 20px; border-bottom:1px solid var(--card-border); display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02);">
+                        <div id="notificationDropdownPC" class="hidden"
+                            style="position:absolute; top:100%; left:0; margin-top:10px; width:350px; max-height:450px; overflow-y:auto; background:#1e293b; border:1px solid var(--card-border); border-radius:16px; z-index:1002; box-shadow:0 20px 50px rgba(0,0,0,0.6); animation: fadeIn 0.3s ease;">
+                            <div
+                                style="padding:15px 20px; border-bottom:1px solid var(--card-border); display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02);">
                                 <strong style="font-size:1.1rem;">الإشعارات</strong>
-                                <button style="background:none; border:none; color:var(--secondary); cursor:pointer; font-size:13px; font-weight:bold;" onclick="markAllNotificationsAsRead()">تحديد الكل كمقروء</button>
+                                <button
+                                    style="background:none; border:none; color:var(--secondary); cursor:pointer; font-size:13px; font-weight:bold;"
+                                    onclick="markAllNotificationsAsRead()">تحديد الكل كمقروء</button>
                             </div>
                             <div id="notificationListPC"></div>
                         </div>
@@ -165,26 +357,39 @@
                 </div>
 
                 <!-- Horizontal Navigation (PC Only) -->
-                <nav class="top-nav" style="display:flex; gap:8px; flex-wrap:wrap; justify-content:center; flex:1; margin:0 15px;">
-                    <a class="nav-link active" onclick="showTab('attendance')" style="padding:6px 10px; font-size:0.85rem;">الحضور</a>
-                    <a class="nav-link" onclick="showTab('reports')" style="padding:6px 10px; font-size:0.85rem;">التقارير</a>
-                    <a class="nav-link" onclick="showTab('employeeDetails')" style="padding:6px 10px; font-size:0.85rem;">التفصيلي</a>
-                    <a class="nav-link" onclick="showTab('employees')" style="padding:6px 10px; font-size:0.85rem;">الموظفين</a>
-                    <a class="nav-link" onclick="showTab('sites')" style="padding:6px 10px; font-size:0.85rem;">المواقع</a>
-                    <a class="nav-link" onclick="showTab('allowanceRequests')" style="padding:6px 10px; font-size:0.85rem;">البدلات</a>
-                    <a class="nav-link" onclick="showTab('leaveRequests')" style="padding:6px 10px; font-size:0.85rem;">الإجازات</a>
-                    <a class="nav-link" onclick="showTab('settings')" style="padding:6px 10px; font-size:0.85rem;">⚙️</a>
+                <nav class="top-nav"
+                    style="display:flex; gap:8px; flex-wrap:wrap; justify-content:center; flex:1; margin:0 15px;">
+                    <a class="nav-link active" onclick="showTab('attendance')"
+                        style="padding:6px 10px; font-size:0.85rem;">الحضور</a>
+                    <a class="nav-link" onclick="showTab('reports')"
+                        style="padding:6px 10px; font-size:0.85rem;">التقارير الشهري</a>
+                    <a class="nav-link" onclick="showTab('employeeDetails')"
+                        style="padding:6px 10px; font-size:0.85rem;">التقرير التفصيلي للموظف</a>
+                    <a class="nav-link" onclick="showTab('employees')"
+                        style="padding:6px 10px; font-size:0.85rem;">ادارة الموظفين</a>
+                    <a class="nav-link" onclick="showTab('sites')"
+                        style="padding:6px 10px; font-size:0.85rem;">المواقع</a>
+                    <a class="nav-link" onclick="showTab('allowanceRequests')"
+                        style="padding:6px 10px; font-size:0.85rem;">طلبات البدلات</a>
+                    <a class="nav-link" onclick="showTab('leaveRequests')"
+                        style="padding:6px 10px; font-size:0.85rem;">طلبات الإجازات</a>
+                    <a class="nav-link" onclick="showTab('settings')"
+                        style="padding:6px 10px; font-size:0.85rem;">⚙️</a>
                 </nav>
 
                 <div style="display:flex; align-items:center; gap:12px;">
                     <div style="text-align:left;">
-                        <div id="hrNameDisplay" style="font-weight:bold; color:var(--text-main); font-size:0.85rem;">مدير النظام</div>
-                        <button onclick="logout()" style="background:none; border:none; color:var(--danger); cursor:pointer; font-size:0.7rem; padding:0; display:block; width:100%; text-align:left;">خروج</button>
+                        <div id="hrNameDisplay" style="font-weight:bold; color:var(--text-main); font-size:0.85rem;">
+                            مدير النظام</div>
+                        <button onclick="logout()"
+                            style="background:none; border:none; color:var(--danger); cursor:pointer; font-size:0.7rem; padding:0; display:block; width:100%; text-align:left;">خروج</button>
                     </div>
-                    <div style="width:32px; height:32px; background:linear-gradient(45deg, var(--primary), var(--secondary)); border-radius:8px; display:flex; align-items:center; justify-content:center; font-weight:bold; color:#fff; font-size:0.75rem;">HR</div>
+                    <div
+                        style="width:32px; height:32px; background:linear-gradient(45deg, var(--primary), var(--secondary)); border-radius:8px; display:flex; align-items:center; justify-content:center; font-weight:bold; color:#fff; font-size:0.75rem;">
+                        HR</div>
                 </div>
             </div>
-            
+
             <div id="loader" class="loader hidden"></div>
 
             <!-- Attendance Tab -->
@@ -192,16 +397,22 @@
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                     <h2>سجلات العمليات الشاملة</h2>
                     <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-                        <div id="attendanceStats" style="display:flex; gap:15px; align-items:center; background:rgba(30,41,59,0.8); padding:8px 15px; border-radius:8px; border:1px solid var(--card-border);">
-                            <span style="color:var(--text-muted);">الحاضرين: <b id="statPresent" style="color:var(--secondary);">0</b></span>
+                        <div id="attendanceStats"
+                            style="display:flex; gap:15px; align-items:center; background:rgba(30,41,59,0.8); padding:8px 15px; border-radius:8px; border:1px solid var(--card-border);">
+                            <span style="color:var(--text-muted);">الحاضرين: <b id="statPresent"
+                                    style="color:var(--secondary);">0</b></span>
                             <span style="color:var(--card-border);">|</span>
-                            <span style="color:var(--text-muted);">الغائبين: <b id="statAbsent" style="color:var(--danger);">0</b></span>
+                            <span style="color:var(--text-muted);">الغائبين: <b id="statAbsent"
+                                    style="color:var(--danger);">0</b></span>
                         </div>
                         <label>تاريخ اليوم:</label>
-                        <input type="date" id="attendanceDateFilter" onchange="renderAttendanceTable(allAttendanceData)">
-                        <button id="viewToggleBtn" class="btn-primary" style="width:auto; background:var(--danger);" onclick="toggleAttendanceView()">👁️ عرض الغائبين</button>
+                        <input type="date" id="attendanceDateFilter"
+                            onchange="renderAttendanceTable(allAttendanceData)">
+                        <button id="viewToggleBtn" class="btn-primary" style="width:auto; background:var(--danger);"
+                            onclick="toggleAttendanceView()">👁️ عرض الغائبين</button>
                         <button class="btn-primary" style="width:auto;" onclick="refreshData()">تحديث مجمع 🔄</button>
-                        <button class="btn-primary" style="width:auto; padding:8px 15px; background:#217346;" onclick="exportAttendanceToExcel()">📥 Excel</button>
+                        <button class="btn-primary" style="width:auto; padding:8px 15px; background:#217346;"
+                            onclick="exportAttendanceToExcel()">📥 Excel</button>
                     </div>
                 </div>
                 <div class="table-container">
@@ -221,17 +432,20 @@
                 </div>
             </div>
 
-             <!-- Reports Tab -->
-              <div id="tab-reports" class="tab-content hidden">
+            <!-- Reports Tab -->
+            <div id="tab-reports" class="tab-content hidden">
                 <h2>تقرير الساعات والبدلات المخصص</h2>
                 <div class="filter-bar">
                     <label>من:</label>
                     <input type="date" id="reportStartDate">
                     <label>إلى:</label>
                     <input type="date" id="reportEndDate">
-                    <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="generateReport()">توليد التقرير</button>
-                    <button class="btn-primary" style="width:auto; padding:8px 15px; background:#10b981;" onclick="sendCustomReport()">إرسال للإيميل 📧</button>
-                    <button class="btn-primary" style="width:auto; padding:8px 15px; background:#217346;" onclick="exportReportToExcel()">📥 تحميل Excel</button>
+                    <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="generateReport()">توليد
+                        التقرير</button>
+                    <button class="btn-primary" style="width:auto; padding:8px 15px; background:#10b981;"
+                        onclick="sendCustomReport()">إرسال للإيميل 📧</button>
+                    <button class="btn-primary" style="width:auto; padding:8px 15px; background:#217346;"
+                        onclick="exportReportToExcel()">📥 تحميل Excel</button>
                 </div>
 
                 <div class="kpi-grid">
@@ -283,12 +497,17 @@
                     <input type="date" id="employeeReportStartDate">
                     <label>إلى:</label>
                     <input type="date" id="employeeReportEndDate">
-                    <input type="email" id="employeeReportEmail" placeholder="بريد مخصص (اختياري)" style="min-width:220px;">
-                    <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="generateEmployeeDetailedReport()">عرض التقرير</button>
-                    <button class="btn-primary" style="width:auto; padding:8px 15px; background:#10b981;" onclick="sendEmployeeDetailedReport()">إرسال للإيميل 📧</button>
-                    <button class="btn-primary" style="width:auto; padding:8px 15px; background:#217346;" onclick="exportEmployeeDetailedToExcel()">📥 Excel</button>
+                    <input type="email" id="employeeReportEmail" placeholder="بريد مخصص (اختياري)"
+                        style="min-width:220px;">
+                    <button class="btn-primary" style="width:auto; padding:8px 15px;"
+                        onclick="generateEmployeeDetailedReport()">عرض التقرير</button>
+                    <button class="btn-primary" style="width:auto; padding:8px 15px; background:#10b981;"
+                        onclick="sendEmployeeDetailedReport()">إرسال للإيميل 📧</button>
+                    <button class="btn-primary" style="width:auto; padding:8px 15px; background:#217346;"
+                        onclick="exportEmployeeDetailedToExcel()">📥 Excel</button>
                 </div>
-                <div id="employeeDetailMeta" class="employee-report-meta">اختر موظفًا وحدد الفترة الزمنية ثم اضغط "عرض التقرير".</div>
+                <div id="employeeDetailMeta" class="employee-report-meta">اختر موظفًا وحدد الفترة الزمنية ثم اضغط "عرض
+                    التقرير".</div>
 
                 <div class="kpi-grid">
                     <div class="kpi-card">
@@ -361,7 +580,8 @@
                             </thead>
                             <tbody id="employeeLeaveRequestsTableBody">
                                 <tr>
-                                    <td colspan="5" style="text-align:center; color:var(--text-muted);">لا توجد طلبات إجازة</td>
+                                    <td colspan="5" style="text-align:center; color:var(--text-muted);">لا توجد طلبات
+                                        إجازة</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -373,8 +593,10 @@
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                     <h2>قائمة الموظفين</h2>
                     <div style="display:flex; gap:10px;">
-                        <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="refreshData()">تحديث مجمع 🔄</button>
-                        <button class="btn-primary" style="width:auto; background:var(--secondary);" onclick="openEmployeeModal()">+ إضافة موظف</button>
+                        <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="refreshData()">تحديث
+                            مجمع 🔄</button>
+                        <button class="btn-primary" style="width:auto; background:var(--secondary);"
+                            onclick="openEmployeeModal()">+ إضافة موظف</button>
                     </div>
                 </div>
                 <div class="table-container">
@@ -397,11 +619,13 @@
 
             <!-- Sites Tab -->
             <div id="tab-sites" class="tab-content hidden">
-                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                     <h2>مواقع العمل</h2>
                     <div style="display:flex; gap:10px;">
-                        <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="refreshData()">تحديث مجمع 🔄</button>
-                        <button class="btn-primary" style="width:auto; background:var(--secondary);" onclick="openSiteModal()">+ إضافة موقع (سجل بشيت جوجل)</button>
+                        <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="refreshData()">تحديث
+                            مجمع 🔄</button>
+                        <button class="btn-primary" style="width:auto; background:var(--secondary);"
+                            onclick="openSiteModal()">+ إضافة موقع (سجل بشيت جوجل)</button>
                     </div>
                 </div>
                 <div class="table-container">
@@ -426,8 +650,10 @@
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                     <h2>طلبات تسجيل المواقع الجديدة</h2>
                     <div style="display:flex; gap:10px;">
-                        <button class="btn-primary" style="width:auto; padding:8px 15px; background:var(--danger);" onclick="clearProcessedRequests()">مسح الطلبات المنتهية 🗑️</button>
-                        <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="refreshData()">تحديث مجمع 🔄</button>
+                        <button class="btn-primary" style="width:auto; padding:8px 15px; background:var(--danger);"
+                            onclick="clearProcessedRequests()">مسح الطلبات المنتهية 🗑️</button>
+                        <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="refreshData()">تحديث
+                            مجمع 🔄</button>
                     </div>
                 </div>
                 <div class="table-container">
@@ -455,8 +681,10 @@
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                     <h2>طلبات زيادة البدلات 💰</h2>
                     <div style="display:flex; gap:10px;">
-                        <button class="btn-primary" style="width:auto; padding:8px 15px; background:var(--danger);" onclick="clearProcessedAllowances()">مسح الطلبات المنتهية 🗑️</button>
-                        <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="refreshData()">تحديث 🔄</button>
+                        <button class="btn-primary" style="width:auto; padding:8px 15px; background:var(--danger);"
+                            onclick="clearProcessedAllowances()">مسح الطلبات المنتهية 🗑️</button>
+                        <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="refreshData()">تحديث
+                            🔄</button>
                     </div>
                 </div>
                 <div class="table-container">
@@ -483,8 +711,10 @@
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                     <h2>طلبات الإجازات 📅</h2>
                     <div style="display:flex; gap:10px;">
-                        <button class="btn-primary" style="width:auto; padding:8px 15px; background:var(--danger);" onclick="clearProcessedLeaveRequests()">مسح الطلبات المنتهية 🗑️</button>
-                        <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="refreshData()">تحديث 🔄</button>
+                        <button class="btn-primary" style="width:auto; padding:8px 15px; background:var(--danger);"
+                            onclick="clearProcessedLeaveRequests()">مسح الطلبات المنتهية 🗑️</button>
+                        <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="refreshData()">تحديث
+                            🔄</button>
                     </div>
                 </div>
                 <div class="table-container">
@@ -509,7 +739,8 @@
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                     <h2>الإجازات الرسمية 📅</h2>
                     <div style="display:flex; gap:10px;">
-                        <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="refreshData()">تحديث 🔄</button>
+                        <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="refreshData()">تحديث
+                            🔄</button>
                     </div>
                 </div>
                 <div class="glass-card" style="padding:20px; margin-bottom:20px;">
@@ -538,7 +769,8 @@
                         </thead>
                         <tbody id="officialHolidaysTableBody">
                             <tr>
-                                <td colspan="4" style="text-align:center; color:var(--text-muted);">جاري تحميل البيانات...</td>
+                                <td colspan="4" style="text-align:center; color:var(--text-muted);">جاري تحميل
+                                    البيانات...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -548,20 +780,23 @@
             <!-- Device Management Tab -->
             <div id="tab-deviceManagement" class="tab-content hidden">
                 <h2>إدارة الأجهزة 📱</h2>
-                
+
                 <!-- Device Change Requests Section -->
                 <div class="glass-card" style="padding:20px; margin-bottom:20px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                         <h3 style="color:var(--secondary); margin:0;">طلبات تغيير الجهاز</h3>
                         <div style="display:flex; gap:10px;">
-                            <select id="deviceRequestFilter" onchange="fetchDeviceChangeRequests()" style="padding:8px; border-radius:6px; background:rgba(0,0,0,0.2); color:#fff; border:1px solid var(--card-border);">
+                            <select id="deviceRequestFilter" onchange="fetchDeviceChangeRequests()"
+                                style="padding:8px; border-radius:6px; background:rgba(0,0,0,0.2); color:#fff; border:1px solid var(--card-border);">
                                 <option value="">الكل</option>
                                 <option value="pending">قيد الانتظار</option>
                                 <option value="approved">مقبول</option>
                                 <option value="rejected">مرفوض</option>
                             </select>
-                            <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="fetchDeviceChangeRequests()">تحديث 🔄</button>
-                            <button class="btn-danger" style="width:auto; padding:8px 15px; font-size:0.8rem;" onclick="clearProcessedDeviceRequests()">🗑️ مسح المنتهية</button>
+                            <button class="btn-primary" style="width:auto; padding:8px 15px;"
+                                onclick="fetchDeviceChangeRequests()">تحديث 🔄</button>
+                            <button class="btn-danger" style="width:auto; padding:8px 15px; font-size:0.8rem;"
+                                onclick="clearProcessedDeviceRequests()">🗑️ مسح المنتهية</button>
                         </div>
                     </div>
                     <div class="table-container">
@@ -579,7 +814,8 @@
                             </thead>
                             <tbody id="deviceRequestsTableBody">
                                 <tr>
-                                    <td colspan="7" style="text-align:center; color:var(--text-muted);">جاري تحميل البيانات...</td>
+                                    <td colspan="7" style="text-align:center; color:var(--text-muted);">جاري تحميل
+                                        البيانات...</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -590,7 +826,8 @@
                 <div class="glass-card" style="padding:20px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
                         <h3 style="color:var(--secondary); margin:0;">الأجهزة المسجلة</h3>
-                        <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="fetchAllDevices()">تحديث 🔄</button>
+                        <button class="btn-primary" style="width:auto; padding:8px 15px;"
+                            onclick="fetchAllDevices()">تحديث 🔄</button>
                     </div>
                     <div class="table-container">
                         <table>
@@ -607,7 +844,8 @@
                             </thead>
                             <tbody id="devicesTableBody">
                                 <tr>
-                                    <td colspan="7" style="text-align:center; color:var(--text-muted);">جاري تحميل البيانات...</td>
+                                    <td colspan="7" style="text-align:center; color:var(--text-muted);">جاري تحميل
+                                        البيانات...</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -624,7 +862,8 @@
                         <div class="input-group">
                             <label>وقت بدء العمل (الحضور)</label>
                             <input type="time" id="setWorkStartTime">
-                            <small style="color:var(--text-muted);">الموظف الذي يسجل بعد هذا الوقت سيظهر "متأخر".</small>
+                            <small style="color:var(--text-muted);">الموظف الذي يسجل بعد هذا الوقت سيظهر
+                                "متأخر".</small>
                         </div>
                         <div class="input-group">
                             <label>وقت انتهاء العمل (الانصراف)</label>
@@ -633,21 +872,29 @@
                         <div class="input-group">
                             <label>أيام الإجازة في الأسبوع</label>
                             <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                                <label style="display:flex; align-items:center; gap:5px;"><input type="checkbox" id="weekendFri" checked> الجمعة</label>
-                                <label style="display:flex; align-items:center; gap:5px;"><input type="checkbox" id="weekendSat" checked> السبت</label>
-                                <label style="display:flex; align-items:center; gap:5px;"><input type="checkbox" id="weekendSun"> الأحد</label>
-                                <label style="display:flex; align-items:center; gap:5px;"><input type="checkbox" id="weekendMon"> الإثنين</label>
-                                <label style="display:flex; align-items:center; gap:5px;"><input type="checkbox" id="weekendTue"> الثلاثاء</label>
-                                <label style="display:flex; align-items:center; gap:5px;"><input type="checkbox" id="weekendWed"> الأربعاء</label>
-                                <label style="display:flex; align-items:center; gap:5px;"><input type="checkbox" id="weekendThu"> الخميس</label>
+                                <label style="display:flex; align-items:center; gap:5px;"><input type="checkbox"
+                                        id="weekendFri" checked> الجمعة</label>
+                                <label style="display:flex; align-items:center; gap:5px;"><input type="checkbox"
+                                        id="weekendSat" checked> السبت</label>
+                                <label style="display:flex; align-items:center; gap:5px;"><input type="checkbox"
+                                        id="weekendSun"> الأحد</label>
+                                <label style="display:flex; align-items:center; gap:5px;"><input type="checkbox"
+                                        id="weekendMon"> الإثنين</label>
+                                <label style="display:flex; align-items:center; gap:5px;"><input type="checkbox"
+                                        id="weekendTue"> الثلاثاء</label>
+                                <label style="display:flex; align-items:center; gap:5px;"><input type="checkbox"
+                                        id="weekendWed"> الأربعاء</label>
+                                <label style="display:flex; align-items:center; gap:5px;"><input type="checkbox"
+                                        id="weekendThu"> الخميس</label>
                             </div>
                             <small style="color:var(--text-muted);">أيام العمل الإضافي تُحسب في هذه الأيام فقط.</small>
                         </div>
                         <button class="btn-primary" onclick="saveSettings()">حفظ الإعدادات</button>
                     </div>
-                    
+
                     <div class="glass-card" style="padding:25px;">
-                        <h3 style="margin-bottom:20px; color:var(--secondary);">إعدادات التقارير التلقائية والمزامنة</h3>
+                        <h3 style="margin-bottom:20px; color:var(--secondary);">إعدادات التقارير التلقائية والمزامنة
+                        </h3>
                         <div class="input-group">
                             <label>إيميلات استلام التقارير (مفصولة بفاصلة)</label>
                             <input type="text" id="setReportEmails" placeholder="example@mail.com, boss@mail.com">
@@ -662,8 +909,10 @@
                         </div>
                         <button class="btn-primary" onclick="saveSettings()">حفظ إعدادات التقارير</button>
                         <hr style="border-color: rgba(255,255,255,0.1); margin: 20px 0;">
-                        <button class="btn-primary" style="background:#f59e0b; color:#000;" id="btnSyncDB" onclick="triggerSmartSync()">مزامنة ذكية لقواعد البيانات 🔄</button>
-                        <small style="color:var(--text-muted); display:block; margin-top:10px;">يقوم بالبحث عن أي بيانات أُدخلت يدوياً في شيت جوجل ولم تُسجل في Supabase لنسخها وتأمينها.</small>
+                        <button class="btn-primary" style="background:#f59e0b; color:#000;" id="btnSyncDB"
+                            onclick="triggerSmartSync()">مزامنة ذكية لقواعد البيانات 🔄</button>
+                        <small style="color:var(--text-muted); display:block; margin-top:10px;">يقوم بالبحث عن أي بيانات
+                            أُدخلت يدوياً في شيت جوجل ولم تُسجل في Supabase لنسخها وتأمينها.</small>
                     </div>
                 </div>
             </div>
@@ -693,18 +942,22 @@
             </div>
             <div class="input-group">
                 <label>تحديد المواقع والبدلات المخصصة</label>
-                <div id="empSitesContainer" style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; max-height: 200px; overflow-y: auto; border: 1px solid var(--card-border);">
-                    <div style="color: var(--text-muted); font-size: 0.85rem; text-align: center;">جاري تحميل المواقع...</div>
+                <div id="empSitesContainer"
+                    style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; max-height: 200px; overflow-y: auto; border: 1px solid var(--card-border);">
+                    <div style="color: var(--text-muted); font-size: 0.85rem; text-align: center;">جاري تحميل المواقع...
+                    </div>
                 </div>
                 <input type="hidden" id="empSites">
             </div>
 
             <div style="margin: 15px 0;">
-                <button type="button" class="btn-primary" style="background:transparent; border:1px solid var(--card-border); color:var(--text-muted); font-size:0.8rem; width:auto; padding:5px 10px;" onclick="toggleAdvancedEmpOptions()">خيارات إضافية +</button>
+                <button type="button" class="btn-primary"
+                    style="background:transparent; border:1px solid var(--card-border); color:var(--text-muted); font-size:0.8rem; width:auto; padding:5px 10px;"
+                    onclick="toggleAdvancedEmpOptions()">خيارات إضافية +</button>
             </div>
 
             <div id="advancedEmpOptions" class="hidden">
-                 <div class="input-group">
+                <div class="input-group">
                     <label>الصلاحية</label>
                     <select id="empRole">
                         <option value="employee">موظف (Employee)</option>
@@ -714,18 +967,21 @@
                 <div class="input-group">
                     <label>المرتب الأساسي (ج.م)</label>
                     <input type="number" id="empSalary" value="0">
-                    <small style="color: var(--text-muted);">يُستخدم لحساب قيمة العمل الإضافي (المرتب ÷ 30 × أيام العمل الإضافي).</small>
+                    <small style="color: var(--text-muted);">يُستخدم لحساب قيمة العمل الإضافي (المرتب ÷ 30 × أيام العمل
+                        الإضافي).</small>
                 </div>
                 <div class="input-group">
                     <label>سعر الانتقال الافتراضي (ج.م)</label>
                     <input type="number" id="empTransportPrice" value="0">
-                    <small style="color: var(--text-muted);">يستخدم كخيار احتياطي فقط في حال عدم تحديد سعر للموقع أعلاه.</small>
+                    <small style="color: var(--text-muted);">يستخدم كخيار احتياطي فقط في حال عدم تحديد سعر للموقع
+                        أعلاه.</small>
                 </div>
             </div>
-            
+
             <div style="display:flex; gap:10px;">
                 <button class="btn-primary" onclick="saveEmployee()">حفظ</button>
-                <button class="btn-danger" style="background:transparent; border:1px solid var(--danger);" onclick="closeEmployeeModal()">إلغاء</button>
+                <button class="btn-danger" style="background:transparent; border:1px solid var(--danger);"
+                    onclick="closeEmployeeModal()">إلغاء</button>
             </div>
         </div>
     </div>
@@ -748,9 +1004,12 @@
             </div>
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
                 <button class="btn-primary" onclick="confirmApproval('always')">موافقة دائمة (حفظ)</button>
-                <button class="btn-primary" style="background:#22c55e;" onclick="confirmApproval('today')">موافقة لليوم فقط</button>
+                <button class="btn-primary" style="background:#22c55e;" onclick="confirmApproval('today')">موافقة لليوم
+                    فقط</button>
             </div>
-            <button class="btn-danger" style="background:transparent; border:1px solid var(--danger); width:100%; margin-top:10px;" onclick="closeApproveModal()">إلغاء</button>
+            <button class="btn-danger"
+                style="background:transparent; border:1px solid var(--danger); width:100%; margin-top:10px;"
+                onclick="closeApproveModal()">إلغاء</button>
         </div>
     </div>
 
@@ -765,7 +1024,8 @@
             <div class="input-group">
                 <label>رابط خرائط جوجل (Google Maps Link)</label>
                 <input type="text" id="siteMapLink" placeholder="انسخ الرابط هنا..." oninput="parseMapLink()">
-                <small style="color:var(--text-muted); font-size:0.8rem;">سوف نحاول استخراج الإحداثيات من هذا الرابط تلقائياً.</small>
+                <small style="color:var(--text-muted); font-size:0.8rem;">سوف نحاول استخراج الإحداثيات من هذا الرابط
+                    تلقائياً.</small>
             </div>
             <div style="display:flex; gap:10px;">
                 <div class="input-group" style="flex:1;">
@@ -781,14 +1041,16 @@
                 <label>نطاق الحضور المسموح (الـ Radius بالمتر)</label>
                 <input type="number" id="siteRadius" value="20">
             </div>
-            
+
             <div style="display:flex; gap:10px; margin-top:10px;">
                 <button class="btn-primary" onclick="saveSite()">حفظ الموقع</button>
-                <button class="btn-danger" style="background:transparent; border:1px solid var(--danger);" onclick="closeSiteModal()">إلغاء</button>
+                <button class="btn-danger" style="background:transparent; border:1px solid var(--danger);"
+                    onclick="closeSiteModal()">إلغاء</button>
             </div>
         </div>
     </div>
 
     <script src="app.js?v=1.5"></script>
 </body>
+
 </html>
