@@ -317,32 +317,28 @@
 
         <!-- 5. Dashboard Section -->
         <div id="dashboardSection" class="glass-card hidden">
-            <!-- Fixed Notifications Panel -->
-            <div id="fixedNotifications" style="position:fixed; left:20px; top:120px; width:320px; z-index:999;">
-                <!-- Notification Bell -->
-                <div id="notificationContainer" style="position:relative;">
-                    <button id="notificationBell" class="btn-primary" style="width:100%; padding:12px 15px; background:var(--card-bg); border:1px solid var(--card-border); border-radius:12px; position:relative; margin-bottom:10px;" onclick="toggleNotifications()">
-                        🔔 الإشعارات
-                        <span id="notificationBadge" class="hidden" style="position:absolute; top:-5px; right:-5px; background:var(--danger); color:#fff; border-radius:50%; width:20px; height:20px; font-size:12px; display:flex; align-items:center; justify-content:center;">0</span>
-                    </button>
-                    <!-- Notifications Dropdown -->
-                    <div id="notificationDropdown" class="hidden" style="position:relative; width:100%; max-height:400px; overflow-y:auto; background:var(--card-bg); border:1px solid var(--card-border); border-radius:12px; box-shadow:0 10px 40px rgba(0,0,0,0.5);">
-                        <div style="padding:15px; border-bottom:1px solid var(--card-border); display:flex; justify-content:space-between; align-items:center;">
-                            <strong>الإشعارات</strong>
-                            <button style="background:none; border:none; color:var(--secondary); cursor:pointer; font-size:12px;" onclick="markAllNotificationsAsRead()">تحديد الكل كمقروء</button>
-                        </div>
-                        <div id="notificationList" style="padding:10px;">
-                            <p style="text-align:center; color:var(--text-muted); padding:20px;">لا توجد إشعارات جديدة</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="header" style="padding-left:360px;">
+            <div class="header">
                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
                     <div>
                         <h2 id="welcomeText">مرحباً</h2>
                         <p id="siteText" style="color:var(--text-muted); font-size:0.9rem;"></p>
+                    </div>
+                    <!-- Notification Bell -->
+                    <div id="notificationContainer" style="position:relative;">
+                        <button id="notificationBell" class="btn-primary" style="width:auto; padding:10px 15px; background:transparent; border:1px solid var(--card-border); position:relative;" onclick="toggleNotifications()">
+                            🔔
+                            <span id="notificationBadge" class="hidden" style="position:absolute; top:-5px; right:-5px; background:var(--danger); color:#fff; border-radius:50%; width:20px; height:20px; font-size:12px; display:flex; align-items:center; justify-content:center;">0</span>
+                        </button>
+                        <!-- Notifications Dropdown -->
+                        <div id="notificationDropdown" class="hidden" style="position:absolute; top:100%; left:0; margin-top:10px; width:320px; max-height:400px; overflow-y:auto; background:var(--card-bg); border:1px solid var(--card-border); border-radius:12px; z-index:1000; box-shadow:0 10px 40px rgba(0,0,0,0.5);">
+                            <div style="padding:15px; border-bottom:1px solid var(--card-border); display:flex; justify-content:space-between; align-items:center;">
+                                <strong>الإشعارات</strong>
+                                <button style="background:none; border:none; color:var(--secondary); cursor:pointer; font-size:12px;" onclick="markAllNotificationsAsRead()">تحديد الكل كمقروء</button>
+                            </div>
+                            <div id="notificationList" style="padding:10px;">
+                                <p style="text-align:center; color:var(--text-muted); padding:20px;">لا توجد إشعارات جديدة</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div id="currentBioDisplay" style="font-size:0.8rem; color:var(--secondary); margin-top:8px; background:rgba(16,185,129,0.1); padding:6px 12px; border-radius:20px; display:inline-block;">

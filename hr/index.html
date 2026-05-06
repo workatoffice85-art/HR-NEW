@@ -72,30 +72,26 @@
 
     <!-- Dashboard Layout -->
     <div id="dashboardSection" class="dashboard-layout hidden fade-in">
-        <!-- Fixed Notifications Panel -->
-        <div id="fixedNotifications" style="position:fixed; left:20px; top:120px; width:320px; z-index:999;">
-            <!-- Notification Bell -->
-            <div id="notificationContainer" style="position:relative;">
-                <button id="notificationBell" class="btn-primary" style="width:100%; padding:12px 15px; background:var(--card-bg); border:1px solid var(--card-border); border-radius:12px; position:relative; margin-bottom:10px;" onclick="toggleNotifications()">
-                    🔔 الإشعارات
-                    <span id="notificationBadge" class="hidden" style="position:absolute; top:-5px; right:-5px; background:var(--danger); color:#fff; border-radius:50%; width:20px; height:20px; font-size:12px; display:flex; align-items:center; justify-content:center;">0</span>
-                </button>
-                <!-- Notifications Dropdown -->
-                <div id="notificationDropdown" class="hidden" style="position:relative; width:100%; max-height:400px; overflow-y:auto; background:var(--card-bg); border:1px solid var(--card-border); border-radius:12px; box-shadow:0 10px 40px rgba(0,0,0,0.5);">
-                    <div style="padding:15px; border-bottom:1px solid var(--card-border); display:flex; justify-content:space-between; align-items:center;">
-                        <strong>الإشعارات</strong>
-                        <button style="background:none; border:none; color:var(--secondary); cursor:pointer; font-size:12px;" onclick="markAllNotificationsAsRead()">تحديد الكل كمقروء</button>
-                    </div>
-                    <div id="notificationList" style="padding:10px;">
-                        <p style="text-align:center; color:var(--text-muted); padding:20px;">لا توجد إشعارات جديدة</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
         <div class="sidebar">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
                 <h2>لوحة التحكم</h2>
+                <!-- Notification Bell -->
+                <div id="notificationContainer" style="position:relative;">
+                    <button id="notificationBell" class="btn-primary" style="width:auto; padding:10px 15px; background:transparent; border:1px solid var(--card-border); position:relative;" onclick="toggleNotifications()">
+                        🔔
+                        <span id="notificationBadge" class="hidden" style="position:absolute; top:-5px; right:-5px; background:var(--danger); color:#fff; border-radius:50%; width:20px; height:20px; font-size:12px; display:flex; align-items:center; justify-content:center;">0</span>
+                    </button>
+                    <!-- Notifications Dropdown -->
+                    <div id="notificationDropdown" class="hidden" style="position:absolute; top:100%; left:0; margin-top:10px; width:320px; max-height:400px; overflow-y:auto; background:var(--card-bg); border:1px solid var(--card-border); border-radius:12px; z-index:1000; box-shadow:0 10px 40px rgba(0,0,0,0.5);">
+                        <div style="padding:15px; border-bottom:1px solid var(--card-border); display:flex; justify-content:space-between; align-items:center;">
+                            <strong>الإشعارات</strong>
+                            <button style="background:none; border:none; color:var(--secondary); cursor:pointer; font-size:12px;" onclick="markAllNotificationsAsRead()">تحديد الكل كمقروء</button>
+                        </div>
+                        <div id="notificationList" style="padding:10px;">
+                            <p style="text-align:center; color:var(--text-muted); padding:20px;">لا توجد إشعارات جديدة</p>
+                        </div>
+                    </div>
+                </div>
             </div>
             <a class="nav-link active" onclick="showTab('attendance')">مراقبة الحضور اليومي</a>
             <a class="nav-link" onclick="showTab('reports')">التقارير الشهرية</a>
@@ -110,7 +106,7 @@
             <a class="nav-link" onclick="showTab('settings')">الإعدادات ⚙️</a>
             <a class="nav-link" onclick="logout()" style="color:var(--danger); margin-top:50px;">تسجيل خروج</a>
         </div>
-        <div class="main-content" style="margin-right:360px;">
+        <div class="main-content">
             
             <div id="loader" class="loader hidden"></div>
 
