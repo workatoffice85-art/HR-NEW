@@ -240,17 +240,18 @@ function formatCairoDate(isoString) {
     if (!isoString) return '-';
     const match = isoString.match(/^(\d{4})-(\d{2})-(\d{2})/);
     if (!match) return isoString;
-    
-    const year = match[1];
-    const month = match[2];
-    const day = match[3];
-    
-    // Return in Egyptian format: 26/4/2026
-    return `${day}/${parseInt(month, 10)}/${year}`;
+    return `${parseInt(match[3], 10)}/${parseInt(match[2], 10)}/${match[1]}`;
 }
 
 function formatDate(isoString) {
     return formatCairoDate(isoString);
+}
+
+function getLocalDateKey(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
 }
 
 function renderAttendanceTable(data) {
@@ -380,17 +381,16 @@ function getWorkingDaysCount(startDate, endDate) {
     const holidayDates = new Set();
     allOfficialHolidays.forEach(h => {
         if (h.holidayDate) {
-            // Normalize date string to YYYY-MM-DD format
             const d = new Date(h.holidayDate);
             if (!isNaN(d)) {
-                const dateKey = d.toISOString().split('T')[0];
+                const dateKey = getLocalDateKey(d);
                 holidayDates.add(dateKey);
             }
         }
     });
 
     while (tempDate <= finalDate) {
-        const currentDateKey = tempDate.toISOString().split('T')[0];
+        const currentDateKey = getLocalDateKey(tempDate);
         const isWeekend = weekendDays.includes(tempDate.getDay());
         const isHoliday = holidayDates.has(currentDateKey);
 
@@ -631,7 +631,7 @@ async function generateEmployeeDetailedReport() {
     allOfficialHolidays.forEach(h => {
         if (h.holidayDate) {
             const d = new Date(h.holidayDate);
-            if (!isNaN(d)) holidayDates.add(d.toISOString().split('T')[0]);
+            if (!isNaN(d)) holidayDates.add(getLocalDateKey(d));
         }
     });
 
@@ -644,7 +644,7 @@ async function generateEmployeeDetailedReport() {
     stopLoopDate.setHours(0, 0, 0, 0);
 
     while (currentLoopDate >= stopLoopDate) {
-        const dateKey = currentLoopDate.toISOString().split('T')[0];
+        const dateKey = getLocalDateKey(currentLoopDate);
         const displayDate = formatCairoDate(dateKey);
         
         if (attendanceByDate[dateKey]) {
