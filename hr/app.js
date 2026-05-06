@@ -2568,11 +2568,21 @@ function renderLeaveRequestsTable(data) {
         } else if (req.status === 'approved') {
             statusText = 'تمت الموافقة';
             statusColor = '#10b981';
-            actions = `<span style="color:var(--text-muted);">تمت الموافقة بتاريخ ${formatDate(req.approvedAt)}</span>`;
+            actions = `
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="color:var(--text-muted); font-size:0.85rem;">تمت الموافقة بتاريخ ${formatDate(req.approvedAt)}</span>
+                    <button class="btn-danger" style="width:auto; padding:2px 8px; font-size:0.75rem; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" onclick="deleteLeaveRequest('${req.id}', '${req.employeeName}')">حذف 🗑️</button>
+                </div>
+            `;
         } else if (req.status === 'rejected') {
             statusText = 'مرفوض';
             statusColor = '#ef4444';
-            actions = `<span style="color:var(--text-muted);">تم الرفض</span>`;
+            actions = `
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="color:var(--text-muted); font-size:0.85rem;">تم الرفض</span>
+                    <button class="btn-danger" style="width:auto; padding:2px 8px; font-size:0.75rem; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" onclick="deleteLeaveRequest('${req.id}', '${req.employeeName}')">حذف 🗑️</button>
+                </div>
+            `;
         }
 
         const tr = document.createElement('tr');
@@ -2586,6 +2596,31 @@ function renderLeaveRequestsTable(data) {
         `;
         tbody.appendChild(tr);
     });
+}
+
+async function deleteLeaveRequest(id, employeeName) {
+    if (!confirm(`هل أنت متأكد من حذف طلب إجازة الموظف "${employeeName}"؟\nهذا الإجراء سيقوم بمسح الطلب نهائياً من النظام.`)) return;
+
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'deleteLeaveRequest', id: id }),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+        if (result.success) {
+            alert(result.message);
+            await fetchLeaveRequests(true); // Refresh table
+            await initDashboard(true);      // Sync dashboard data
+        } else {
+            alert('خطأ: ' + result.message);
+        }
+    } catch (e) {
+        console.error(e);
+        alert('خطأ في الاتصال');
+    }
+    document.getElementById('loader').classList.add('hidden');
 }
 
 async function approveLeaveRequest(id) {

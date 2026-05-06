@@ -1590,6 +1590,13 @@ if (action === "updateEmployee") {
             return res.status(200).json({ success: true, message: "تم رفض طلب الإجازة" });
         }
 
+        if (action === "deleteLeaveRequest") {
+            const { id } = data;
+            const { error } = await supabase.from('leaveRequests').delete().eq('id', id);
+            if (error) throw error;
+            return res.status(200).json({ success: true, message: "تم حذف طلب الإجازة بنجاح" });
+        }
+
         if (action === "clearProcessedLeaveRequests") {
             const { data: deletedData, error } = await supabase
                 .from('leaveRequests')
