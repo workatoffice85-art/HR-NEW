@@ -92,7 +92,7 @@
             <div class="top-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:30px; background:var(--card-bg); padding:15px 25px; border-radius:16px; border:1px solid var(--card-border); backdrop-filter:blur(10px);">
                 <div style="display:flex; align-items:center; gap:15px;">
                     <div id="notificationContainer" style="position:relative;">
-                        <button id="notificationBell" style="background:rgba(255,255,255,0.05); border:1px solid var(--card-border); color:#fff; padding:10px; border-radius:12px; cursor:pointer; position:relative; transition:all 0.3s;">
+                        <button id="notificationBell" onclick="toggleNotifications()" style="background:rgba(255,255,255,0.05); border:1px solid var(--card-border); color:#fff; padding:10px; border-radius:12px; cursor:pointer; position:relative; transition:all 0.3s;">
                             <span style="font-size:1.2rem;">🔔</span>
                             <span id="notificationBadge" class="hidden" style="position:absolute; top:-5px; right:-5px; background:var(--danger); color:#fff; border-radius:50%; width:20px; height:20px; font-size:11px; display:flex; align-items:center; justify-content:center; border:2px solid #1e293b;">0</span>
                         </button>
