@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import crypto from 'crypto';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -97,6 +98,103 @@ function validatePassword(password) {
     if (!password) return false;
     // At least 8 characters, containing at least one letter and one number
     return password.length >= 8 && /[a-zA-Z]/.test(password) && /\d/.test(password);
+}
+
+// --- EMAIL APPROVAL HELPERS ---
+
+async function createActionTokens(requestType, requestId) {
+    const approveToken = crypto.randomUUID();
+    const rejectToken = crypto.randomUUID();
+
+    const tokens = [
+        {
+            token: approveToken,
+            requestType,
+            requestId,
+            action: 'approve'
+        },
+        {
+            token: rejectToken,
+            requestType,
+            requestId,
+            action: 'reject'
+        }
+    ];
+
+    const { error } = await supabase.from('action_tokens').insert(tokens);
+    if (error) throw error;
+
+    return { approveToken, rejectToken };
+}
+
+function renderResponsePage(type, message) {
+    const colors = {
+        success: '#10b981',
+        error: '#ef4444',
+        warning: '#f59e0b'
+    };
+    const titles = {
+        success: 'تمت العملية بنجاح',
+        error: 'حدث خطأ',
+        warning: 'تنبيه'
+    };
+    const icons = {
+        success: '✅',
+        error: '❌',
+        warning: '⚠️'
+    };
+
+    return `
+    <!DOCTYPE html>
+    <html dir="rtl" lang="ar">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${titles[type]}</title>
+        <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
+        <style>
+            body { font-family: 'Tajawal', sans-serif; background: #f8fafc; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+            .card { background: white; padding: 2.5rem; border-radius: 1.5rem; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1); text-align: center; max-width: 400px; width: 90%; }
+            .icon { font-size: 4rem; margin-bottom: 1.5rem; }
+            h1 { color: #1e293b; margin-bottom: 1rem; font-size: 1.5rem; }
+            p { color: #64748b; font-size: 1.1rem; line-height: 1.6; margin-bottom: 2rem; }
+            .btn { display: inline-block; padding: 0.8rem 2rem; background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); color: white; text-decoration: none; border-radius: 0.8rem; font-weight: bold; transition: opacity 0.2s; }
+            .btn:hover { opacity: 0.9; }
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <div class="icon" style="color: ${colors[type]}">${icons[type]}</div>
+            <h1>${titles[type]}</h1>
+            <p>${message}</p>
+            <a href="#" class="btn" onclick="window.close(); return false;">إغلاق هذه النافذة</a>
+        </div>
+    </body>
+    </html>
+    `;
+}
+
+async function triggerHRApprovalEmail(req, requestType, requestDetails) {
+    try {
+        const protocol = req.headers['x-forwarded-proto'] || 'http';
+        const host = req.headers.host;
+        const baseUrl = `${protocol}://${host}`;
+
+        const { approveToken, rejectToken } = await createActionTokens(requestType, requestDetails.id);
+        
+        const approveLink = `${baseUrl}/api/exec?action=handleEmailAction&token=${approveToken}`;
+        const rejectLink = `${baseUrl}/api/exec?action=handleEmailAction&token=${rejectToken}`;
+
+        await syncToGoogleSheet({
+            action: 'sendHRApprovalEmail',
+            requestType,
+            requestDetails,
+            approveLink,
+            rejectLink
+        });
+    } catch (e) {
+        console.error("Failed to trigger HR email:", e);
+    }
 }
 
 function validateName(name) {
@@ -249,9 +347,11 @@ async function createDeviceChangeRequest(supabase, userId, userName, oldDeviceId
             return { success: false, message: 'لديك طلب تغيير جهاز قيد المراجعة بالفعل' };
         }
         
+        const requestId = crypto.randomUUID();
         const { error } = await supabase
             .from('device_change_requests')
             .insert([{
+                id: requestId,
                 user_id: userId,
                 user_name: userName,
                 old_device_id: oldDeviceId,
@@ -269,7 +369,7 @@ async function createDeviceChangeRequest(supabase, userId, userName, oldDeviceId
             return { success: false, message: 'فشل إنشاء طلب تغيير الجهاز' };
         }
         
-        return { success: true, message: 'تم إرسال طلب تغيير الجهاز بنجاح' };
+        return { success: true, message: 'تم إرسال طلب تغيير الجهاز بنجاح', requestId: requestId };
     } catch (error) {
         console.error('Create device change request exception:', error);
         return { success: false, message: 'حدث خطأ أثناء إنشاء الطلب' };
@@ -450,6 +550,261 @@ export default async function handler(req, res) {
          }
  
          const action = data.action;
+
+        // --- NEW: EMAIL ACTIONS (PUBLIC) ---
+        if (action === "handleEmailAction") {
+            const { token } = data;
+            if (!token) return res.status(400).send('Missing token');
+
+            // 1. Verify token
+            const { data: tokenData, error: tokenError } = await supabase
+                .from('action_tokens')
+                .select('*')
+                .eq('token', token)
+                .single();
+
+            if (tokenError || !tokenData) {
+                return res.status(404).send(renderResponsePage('error', 'الرابط غير صالح أو منتهي الصلاحية.'));
+            }
+
+            if (tokenData.usedAt) {
+                return res.status(400).send(renderResponsePage('warning', 'تم استخدام هذا الرابط مسبقاً.'));
+            }
+
+            if (new Date() > new Date(tokenData.expiresAt)) {
+                return res.status(400).send(renderResponsePage('error', 'عفواً، صلاحية هذا الرابط انتهت.'));
+            }
+
+            // 2. Perform action
+            let responseMessage = '';
+            const { requestType, requestId, action: userAction } = tokenData;
+
+            try {
+                if (requestType === 'allowance') {
+                    // Fetch request data
+                    const { data: reqData, error: reqError } = await supabase
+                        .from('allowanceRequests')
+                        .select('*')
+                        .eq('id', requestId)
+                        .single();
+
+                    if (reqError || !reqData) throw new Error('الطلب غير موجود');
+                    if (reqData.status !== 'pending') throw new Error('لقد تمت معالجة هذا الطلب بالفعل.');
+
+                    if (userAction === 'approve') {
+                        // Approve logic
+                        const { data: attData } = await supabase
+                            .from('attendance')
+                            .select('transportPrice')
+                            .eq('id', reqData.attendanceId)
+                            .single();
+                        
+                        if (attData) {
+                            const newPrice = parseFloat(attData.transportPrice || 0) + parseFloat(reqData.amount);
+                            await supabase.from('attendance').update({ transportPrice: newPrice }).eq('id', reqData.attendanceId);
+                        }
+
+                        await supabase.from('allowanceRequests').update({
+                            status: 'approved',
+                            approvedAt: getCairoISOString(),
+                            approvedBy: 'Email Action'
+                        }).eq('id', requestId);
+                        
+                        // Mark internal notifications as read
+                        await supabase.from('notifications').update({ isRead: true }).eq('relatedId', requestId);
+                        
+                        // Notify employee
+                        await supabase.from('notifications').insert([{
+                            id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
+                            userId: reqData.employeeId,
+                            title: 'تمت الموافقة على طلبك',
+                            message: `تمت الموافقة على طلب زيادة البدلات بمبلغ ${reqData.amount} ج.م`,
+                            type: 'allowance_approved',
+                            relatedId: requestId,
+                            isRead: false,
+                            createdAt: getCairoISOString()
+                        }]);
+
+                        responseMessage = 'تمت الموافقة على طلب البدلات وتحديثها بنجاح ✅';
+                    } else {
+                        // Reject logic
+                        await supabase.from('allowanceRequests').update({
+                            status: 'rejected',
+                            rejectionReason: 'تم الرفض عبر البريد الإلكتروني'
+                        }).eq('id', requestId);
+
+                        await supabase.from('notifications').update({ isRead: true }).eq('relatedId', requestId);
+
+                        await supabase.from('notifications').insert([{
+                            id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
+                            userId: reqData.employeeId,
+                            title: 'تم رفض طلبك',
+                            message: `تم رفض طلب زيادة البدلات بمبلغ ${reqData.amount} ج.م`,
+                            type: 'allowance_rejected',
+                            relatedId: requestId,
+                            isRead: false,
+                            createdAt: getCairoISOString()
+                        }]);
+                        
+                        responseMessage = 'تم رفض طلب البدلات ❌';
+                    }
+                } else if (requestType === 'leave') {
+                    // Fetch request data
+                    const { data: reqData, error: reqError } = await supabase
+                        .from('leaveRequests')
+                        .select('*')
+                        .eq('id', requestId)
+                        .single();
+
+                    if (reqError || !reqData) throw new Error('الطلب غير موجود');
+                    if (reqData.status !== 'pending') throw new Error('لقد تمت معالجة هذا الطلب بالفعل.');
+
+                    if (userAction === 'approve') {
+                        await supabase.from('leaveRequests').update({
+                            status: 'approved',
+                            approvedAt: getCairoISOString(),
+                            approvedBy: 'Email Action'
+                        }).eq('id', requestId);
+                        
+                        await supabase.from('notifications').update({ isRead: true }).eq('relatedId', requestId);
+                        
+                        await supabase.from('notifications').insert([{
+                            id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
+                            userId: reqData.employeeId,
+                            title: 'تمت الموافقة على إجازتك',
+                            message: `تمت الموافقة على طلب إجازتك بتاريخ ${reqData.leaveDate}`,
+                            type: 'leave_approved',
+                            relatedId: requestId,
+                            isRead: false,
+                            createdAt: getCairoISOString()
+                        }]);
+
+                        responseMessage = 'تمت الموافقة على طلب الإجازة بنجاح ✅';
+                    } else {
+                        await supabase.from('leaveRequests').update({
+                            status: 'rejected',
+                            rejectionReason: 'تم الرفض عبر البريد الإلكتروني'
+                        }).eq('id', requestId);
+
+                        await supabase.from('notifications').update({ isRead: true }).eq('relatedId', requestId);
+
+                        await supabase.from('notifications').insert([{
+                            id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
+                            userId: reqData.employeeId,
+                            title: 'تم رفض طلب الإجازة',
+                            message: `تم رفض طلب إجازتك بتاريخ ${reqData.leaveDate}`,
+                            type: 'leave_rejected',
+                            relatedId: requestId,
+                            isRead: false,
+                            createdAt: getCairoISOString()
+                        }]);
+                        
+                        responseMessage = 'تم رفض طلب الإجازة ❌';
+                    }
+                } else if (requestType === 'site') {
+                    // Fetch request data
+                    const { data: reqData, error: reqError } = await supabase
+                        .from('siteRequests')
+                        .select('*')
+                        .eq('id', requestId)
+                        .single();
+
+                    if (reqError || !reqData) throw new Error('الطلب غير موجود');
+                    if (reqData.status !== 'pending') throw new Error('لقد تمت معالجة هذا الطلب بالفعل.');
+
+                    if (userAction === 'approve') {
+                        // Approve for today only by default from email
+                        await supabase.from('siteRequests').update({
+                            status: 'approved_today',
+                            approvedAt: getCairoISOString(),
+                            tempRadius: 100,
+                            transportPrice: 120
+                        }).eq('id', requestId);
+                        
+                        await supabase.from('notifications').update({ isRead: true }).eq('relatedId', requestId);
+                        
+                        await supabase.from('notifications').insert([{
+                            id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
+                            userId: reqData.employeeId,
+                            title: 'تمت الموافقة على موقعك',
+                            message: `تمت الموافقة على طلب تسجيل الموقع: ${reqData.suggestedName} (لليوم فقط)`,
+                            type: 'site_approved',
+                            relatedId: requestId,
+                            isRead: false,
+                            createdAt: getCairoISOString()
+                        }]);
+
+                        responseMessage = 'تمت الموافقة على الموقع (لليوم فقط) بنجاح ✅';
+                    } else {
+                        await supabase.from('siteRequests').update({
+                            status: 'rejected'
+                        }).eq('id', requestId);
+
+                        await supabase.from('notifications').update({ isRead: true }).eq('relatedId', requestId);
+
+                        await supabase.from('notifications').insert([{
+                            id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
+                            userId: reqData.employeeId,
+                            title: 'تم رفض طلب الموقع',
+                            message: `تم رفض طلب تسجيل الموقع: ${reqData.suggestedName}`,
+                            type: 'site_rejected',
+                            relatedId: requestId,
+                            isRead: false,
+                            createdAt: getCairoISOString()
+                        }]);
+                        
+                        responseMessage = 'تم رفض طلب الموقع ❌';
+                    }
+                } else if (requestType === 'device_change') {
+                    const { data: reqData, error: errFetch } = await supabase.from('device_change_requests').select('*').eq('id', requestId).single();
+                    if (errFetch || !reqData) throw new Error("طلب تغيير الجهاز غير موجود");
+                    if (reqData.status !== 'pending') throw new Error("تمت معالجة هذا الطلب مسبقاً");
+
+                    if (userAction === 'approve') {
+                        // Logic copied from approveDeviceChangeRequest handler
+                        if (reqData.old_device_id) {
+                            await supabase.from('devices').update({ is_active: false, updated_at: getCairoISOString() })
+                                .eq('user_id', reqData.user_id).eq('device_id', reqData.old_device_id);
+                        }
+                        await supabase.from('devices').update({ is_active: false, updated_at: getCairoISOString() })
+                            .eq('user_id', reqData.user_id).eq('is_active', true);
+                        
+                        await supabase.from('devices').upsert({
+                            user_id: reqData.user_id,
+                            device_id: reqData.new_device_id,
+                            device_model: reqData.new_device_model || 'Unknown',
+                            os_type: reqData.new_os_type || 'Unknown',
+                            browser_info: reqData.new_browser_info || 'Unknown',
+                            is_active: true,
+                            updated_at: getCairoISOString()
+                        }, { onConflict: 'user_id,device_id' });
+
+                        await supabase.from('device_change_requests').update({
+                            status: 'approved',
+                            processed_at: getCairoISOString(),
+                            processed_by: 'email_approval'
+                        }).eq('id', requestId);
+
+                        responseMessage = 'تمت الموافقة على تغيير الجهاز بنجاح ✅';
+                    } else {
+                        await supabase.from('device_change_requests').update({
+                            status: 'rejected',
+                            processed_at: getCairoISOString(),
+                            processed_by: 'email_approval'
+                        }).eq('id', requestId);
+
+                        responseMessage = 'تم رفض طلب تغيير الجهاز ❌';
+                    }
+                }
+                
+                // 3. Mark token as used
+                await supabase.from('action_tokens').update({ "usedAt": getCairoISOString() }).eq('token', token);
+                
+                return res.status(200).send(renderResponsePage('success', responseMessage));
+            } catch (err) {
+                return res.status(500).send(renderResponsePage('error', err.message));
+            }
+        }
 
         // DUAL WRITING / BACKUP SYNC:
         // For writing actions, we asynchronously broadcast the exact request to your existing Google Apps Script
@@ -1262,6 +1617,9 @@ if (action === "updateEmployee") {
                 createdAt: new Date().toISOString()
             }]);
             
+            // 🚀 TRIGGER EMAIL APPROVAL
+            await triggerHRApprovalEmail(req, 'site', payload);
+
             return res.status(200).json({ 
                 success: true, 
                 message: "تم إرسال طلب الموقع بنجاح. سيتم تفعيل الموافقة التلقائية خلال دقيقتين إذا كنت في الموقع." 
@@ -1368,7 +1726,9 @@ if (action === "updateEmployee") {
         }
 
         if (action === "addAllowanceRequest") {
+            const requestId = "ALLOW" + Math.floor(10000 + Math.random() * 90000);
             const payload = {
+                id: requestId,
                 employeeId: data.employeeId,
                 employeeName: data.employeeName,
                 attendanceId: data.attendanceId,
@@ -1390,11 +1750,14 @@ if (action === "updateEmployee") {
                 title: 'طلب زيادة بدلات جديد',
                 message: `قام الموظف ${data.employeeName} بطلب زيادة بدلات بمبلغ ${data.amount} ج.م`,
                 type: 'allowance_request',
-                relatedId: payload.id || data.id,
+                relatedId: requestId,
                 isRead: false,
                 createdAt: new Date().toISOString()
             }]);
             
+            // 🚀 TRIGGER EMAIL APPROVAL
+            await triggerHRApprovalEmail(req, 'allowance', payload);
+
             return res.status(200).json({ success: true, message: "تم إرسال طلب زيادة البدلات بنجاح" });
         }
 
@@ -1498,6 +1861,7 @@ if (action === "updateEmployee") {
 
         // --- LEAVE REQUESTS ---
         if (action === "addLeaveRequest") {
+            const requestId = "LEAVE" + Math.floor(10000 + Math.random() * 90000);
             const { employeeId, employeeName, leaveDate, reason } = data;
             
             if (!leaveDate) return res.status(200).json({ success: false, message: "تاريخ الإجازة مطلوب" });
@@ -1521,7 +1885,7 @@ if (action === "updateEmployee") {
             }
             
             const payload = {
-                id: "LEAVE" + Math.floor(10000 + Math.random() * 90000),
+                id: requestId,
                 employeeId,
                 employeeName,
                 leaveDate,
@@ -1540,11 +1904,14 @@ if (action === "updateEmployee") {
                 title: 'طلب إجازة جديد',
                 message: `قام الموظف ${employeeName} بطلب إجازة بتاريخ ${leaveDate}`,
                 type: 'leave_request',
-                relatedId: payload.id,
+                relatedId: requestId,
                 isRead: false,
                 createdAt: new Date().toISOString()
             }]);
             
+            // 🚀 TRIGGER EMAIL APPROVAL
+            await triggerHRApprovalEmail(req, 'leave', payload);
+
             return res.status(200).json({ success: true, message: "تم إرسال طلب الإجازة بنجاح للمراجعة" });
         }
 
@@ -1806,8 +2173,12 @@ if (action === "updateEmployee") {
                 return supabase.from('settings').upsert({ key, value }, { onConflict: 'key' });
             });
             await Promise.all(promises);
+            
+            // Sync to Google Sheets so Code.gs can see the new emails immediately
+            await syncToGoogleSheet(data);
+            
             invalidateCache('settings');
-            return res.status(200).json({ success: true, message: "تم تحديث الإعدادات بنجاح" });
+            return res.status(200).json({ success: true, message: "تم تحديث الإعدادات بنجاح ومزامنتها" });
         }
 
         // --- DATABASE MONITORING ---
@@ -1872,6 +2243,18 @@ if (action === "updateEmployee") {
                 newDeviceInfo, 
                 reason
             );
+
+            if (result.success && result.requestId) {
+                // 🚀 TRIGGER EMAIL APPROVAL
+                await triggerHRApprovalEmail(req, 'device_change', {
+                    id: result.requestId,
+                    employeeId,
+                    employeeName,
+                    oldDeviceId: currentDeviceId,
+                    newDeviceModel: newDeviceInfo.deviceModel,
+                    reason
+                });
+            }
             
             return res.status(200).json(result);
         }

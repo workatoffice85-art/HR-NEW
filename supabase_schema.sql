@@ -146,10 +146,24 @@ CREATE TABLE IF NOT EXISTS "notifications" (
     "readAt" TEXT                                  -- When marked as read
 );
 
+-- Table: action_tokens
+CREATE TABLE IF NOT EXISTS action_tokens (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    token TEXT UNIQUE NOT NULL,
+    "requestType" TEXT NOT NULL,
+    "requestId" TEXT NOT NULL,
+    action TEXT NOT NULL,
+    "expiresAt" TIMESTAMP WITH TIME ZONE DEFAULT (NOW() + INTERVAL '48 hours'),
+    "usedAt" TIMESTAMP WITH TIME ZONE
+);
+
 -- ============================================
 -- PERFORMANCE INDEXES
 -- ============================================
 -- These indexes speed up common queries and reduce database load
+
+-- Action tokens indexes
+CREATE INDEX IF NOT EXISTS idx_action_tokens_token ON action_tokens(token);
 
 -- Attendance indexes (most queried table)
 CREATE INDEX IF NOT EXISTS idx_attendance_employeeId ON attendance("employeeId");
