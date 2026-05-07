@@ -174,6 +174,53 @@ function renderResponsePage(type, message) {
     `;
 }
 
+function renderConfirmPage(token, requestType, userAction, details) {
+    const actionText = userAction === 'approve' ? 'موافقة' : 'رفض';
+    const actionColor = userAction === 'approve' ? '#10b981' : '#ef4444';
+    const requestTypeText = {
+        'allowance': 'طلب زيادة بدلات',
+        'leave': 'طلب إجازة',
+        'site': 'طلب تسجيل موقع',
+        'device_change': 'طلب تغيير جهاز'
+    }[requestType] || 'طلب جديد';
+
+    return `
+    <!DOCTYPE html>
+    <html dir="rtl" lang="ar">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>تأكيد الإجراء</title>
+        <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
+        <style>
+            body { font-family: 'Tajawal', sans-serif; background: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+            .card { background: white; padding: 2.5rem; border-radius: 1.5rem; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1); text-align: center; max-width: 450px; width: 90%; }
+            h1 { color: #1e293b; margin-bottom: 1.5rem; font-size: 1.5rem; }
+            p { color: #64748b; font-size: 1.1rem; line-height: 1.6; margin-bottom: 2rem; }
+            .details { background: #f1f5f9; padding: 1rem; border-radius: 1rem; margin-bottom: 2rem; text-align: right; }
+            .details-row { display: flex; justify-content: space-between; margin-bottom: 0.5rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem; }
+            .btn { display: block; padding: 1rem; color: white; text-decoration: none; border-radius: 0.8rem; font-weight: bold; transition: opacity 0.2s; font-size: 1.2rem; }
+            .btn:hover { opacity: 0.9; }
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <h1>تأكيد الإجراء</h1>
+            <p>هل أنت متأكد من رغبتك في <strong>${actionText}</strong> على هذا الطلب؟</p>
+            
+            <div class="details">
+                <div class="details-row"><span>نوع الطلب:</span><strong>${requestTypeText}</strong></div>
+                <div class="details-row"><span>الموظف:</span><strong>${details.employeeName || 'غير معروف'}</strong></div>
+            </div>
+
+            <a href="/api/exec?action=handleEmailAction&token=${token}&confirm=true" class="btn" style="background: ${actionColor}">تأكيد ال${actionText}</a>
+            <p style="margin-top: 1.5rem; font-size: 0.9rem;">هذه الخطوة الإضافية لمنع تفعيل الروابط تلقائياً من برامج الحماية.</p>
+        </div>
+    </body>
+    </html>
+    `;
+}
+
 async function triggerHRApprovalEmail(req, requestType, requestDetails) {
     try {
         const protocol = req.headers['x-forwarded-proto'] || 'http';
@@ -575,9 +622,24 @@ export default async function handler(req, res) {
                 return res.status(400).send(renderResponsePage('error', 'عفواً، صلاحية هذا الرابط انتهت.'));
             }
 
+            const { requestType, requestId, action: userAction } = tokenData;
+            const { confirm } = data;
+
+            // NEW: Landing page to prevent bot pre-fetching
+            if (confirm !== 'true') {
+                // We need basic details for the confirm page
+                let details = { employeeName: '...' };
+                try {
+                    const tableMap = { 'allowance': 'allowanceRequests', 'leave': 'leaveRequests', 'site': 'siteRequests', 'device_change': 'device_change_requests' };
+                    const { data: d } = await supabase.from(tableMap[requestType]).select('employeeName, user_name').eq('id', requestId).single();
+                    if (d) details.employeeName = d.employeeName || d.user_name;
+                } catch(e) {}
+                
+                return res.status(200).send(renderConfirmPage(token, requestType, userAction, details));
+            }
+
             // 2. Perform action
             let responseMessage = '';
-            const { requestType, requestId, action: userAction } = tokenData;
 
             try {
                 if (requestType === 'allowance') {
@@ -606,11 +668,22 @@ export default async function handler(req, res) {
                             await supabase.from('attendance').update({ transportPrice: newPrice }).eq('id', reqData.attendanceId);
                         }
 
-                        await supabase.from('allowanceRequests').update({
+                        const { error: updErr } = await supabase.from('allowanceRequests').update({
                             status: 'approved',
                             approvedAt: getCairoISOString(),
                             approvedBy: 'Email Action'
                         }).eq('id', requestId);
+                        if (updErr) throw updErr;
+
+                        // Add Log
+                        await supabase.from('approvalLogs').insert([{
+                            id: "LOG" + Math.floor(10000 + Math.random() * 90000),
+                            requestId: requestId,
+                            adminName: 'Email Action',
+                            action: 'approved',
+                            details: 'تمت الموافقة عبر البريد الإلكتروني',
+                            timestamp: getCairoISOString()
+                        }]);
                         
                         // Mark internal notifications as read
                         await supabase.from('notifications').update({ isRead: true }).eq('relatedId', requestId);
@@ -630,10 +703,21 @@ export default async function handler(req, res) {
                         responseMessage = 'تمت الموافقة على طلب البدلات وتحديثها بنجاح ✅';
                     } else {
                         // Reject logic
-                        await supabase.from('allowanceRequests').update({
+                        const { error: updErr } = await supabase.from('allowanceRequests').update({
                             status: 'rejected',
                             rejectionReason: 'تم الرفض عبر البريد الإلكتروني'
                         }).eq('id', requestId);
+                        if (updErr) throw updErr;
+
+                        // Add Log
+                        await supabase.from('approvalLogs').insert([{
+                            id: "LOG" + Math.floor(10000 + Math.random() * 90000),
+                            requestId: requestId,
+                            adminName: 'Email Action',
+                            action: 'rejected',
+                            details: 'تم الرفض عبر البريد الإلكتروني',
+                            timestamp: getCairoISOString()
+                        }]);
 
                         await supabase.from('notifications').update({ isRead: true }).eq('relatedId', requestId);
 
@@ -664,11 +748,12 @@ export default async function handler(req, res) {
                     }
 
                     if (userAction === 'approve') {
-                        await supabase.from('leaveRequests').update({
+                        const { error: updErr } = await supabase.from('leaveRequests').update({
                             status: 'approved',
                             approvedAt: getCairoISOString(),
                             approvedBy: 'Email Action'
                         }).eq('id', requestId);
+                        if (updErr) throw updErr;
                         
                         await supabase.from('notifications').update({ isRead: true }).eq('relatedId', requestId);
                         
@@ -685,10 +770,11 @@ export default async function handler(req, res) {
 
                         responseMessage = 'تمت الموافقة على طلب الإجازة بنجاح ✅';
                     } else {
-                        await supabase.from('leaveRequests').update({
+                        const { error: updErr } = await supabase.from('leaveRequests').update({
                             status: 'rejected',
                             rejectionReason: 'تم الرفض عبر البريد الإلكتروني'
                         }).eq('id', requestId);
+                        if (updErr) throw updErr;
 
                         await supabase.from('notifications').update({ isRead: true }).eq('relatedId', requestId);
 
@@ -718,12 +804,13 @@ export default async function handler(req, res) {
 
                     if (userAction === 'approve') {
                         // Approve for today only by default from email
-                        await supabase.from('siteRequests').update({
+                        const { error: updErr } = await supabase.from('siteRequests').update({
                             status: 'approved_today',
                             approvedAt: getCairoISOString(),
                             tempRadius: 100,
                             transportPrice: 120
                         }).eq('id', requestId);
+                        if (updErr) throw updErr;
                         
                         await supabase.from('notifications').update({ isRead: true }).eq('relatedId', requestId);
                         

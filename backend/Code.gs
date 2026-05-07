@@ -2072,12 +2072,16 @@ function generateApprovalEmailHTML(type, details, approveLink, rejectLink) {
   return `
     <div dir="rtl" style="font-family:'Tajawal',sans-serif;background:#f1f5f9;padding:30px;color:#1e293b;text-align:right;">
       <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);">
-        <div style="background:linear-gradient(135deg,#4f46e5,#7c3aed);padding:40px 20px;text-align:center;color:#fff;">
+        <div style="background:#4f46e5;background:linear-gradient(135deg,#4f46e5,#7c3aed);padding:40px 20px;text-align:center;color:#fff;">
           <h1 style="margin:0;font-size:24px;">${title}</h1>
           <p style="margin:10px 0 0 0;opacity:0.9;">مقدم من الموظف: ${details.employeeName}</p>
         </div>
         
         <div style="padding:30px;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:15px;border-bottom:1px solid #e2e8f0;padding-bottom:10px;">
+            <span style="color:#64748b;">نوع الطلب:</span>
+            <span style="font-weight:bold;color:#4f46e5;">${title}</span>
+          </div>
           <div style="background:#f8fafc;padding:20px;border-radius:12px;margin-bottom:30px;border:1px solid #e2e8f0;">
             <div style="display:flex;justify-content:space-between;margin-bottom:15px;border-bottom:1px solid #e2e8f0;padding-bottom:10px;">
               <span style="color:#64748b;">الموظف:</span>
