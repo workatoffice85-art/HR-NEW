@@ -1,5 +1,4 @@
 import { createClient } from '@supabase/supabase-js';
-import crypto from 'crypto';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -98,161 +97,6 @@ function validatePassword(password) {
     if (!password) return false;
     // At least 8 characters, containing at least one letter and one number
     return password.length >= 8 && /[a-zA-Z]/.test(password) && /\d/.test(password);
-}
-
-// --- EMAIL APPROVAL HELPERS ---
-
-async function createActionTokens(requestType, requestId) {
-    const approveToken = crypto.randomUUID();
-    const rejectToken = crypto.randomUUID();
-
-    const tokens = [
-        {
-            token: approveToken,
-            requestType,
-            requestId,
-            action: 'approve'
-        },
-        {
-            token: rejectToken,
-            requestType,
-            requestId,
-            action: 'reject'
-        }
-    ];
-
-    const { error } = await supabase.from('action_tokens').insert(tokens);
-    if (error) throw error;
-
-    return { approveToken, rejectToken };
-}
-
-function renderResponsePage(type, message) {
-    const colors = {
-        success: '#10b981',
-        error: '#ef4444',
-        warning: '#f59e0b'
-    };
-    const titles = {
-        success: 'تمت العملية بنجاح',
-        error: 'حدث خطأ',
-        warning: 'تنبيه'
-    };
-    const icons = {
-        success: '✅',
-        error: '❌',
-        warning: '⚠️'
-    };
-
-    return `
-    <!DOCTYPE html>
-    <html dir="rtl" lang="ar">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>${titles[type]}</title>
-        <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
-        <style>
-            body { font-family: 'Tajawal', sans-serif; background: #f8fafc; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-            .card { background: white; padding: 2.5rem; border-radius: 1.5rem; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1); text-align: center; max-width: 400px; width: 90%; }
-            .icon { font-size: 4rem; margin-bottom: 1.5rem; }
-            h1 { color: #1e293b; margin-bottom: 1rem; font-size: 1.5rem; }
-            p { color: #64748b; font-size: 1.1rem; line-height: 1.6; margin-bottom: 2rem; }
-            .btn { display: inline-block; padding: 0.8rem 2rem; background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); color: white; text-decoration: none; border-radius: 0.8rem; font-weight: bold; transition: opacity 0.2s; }
-            .btn:hover { opacity: 0.9; }
-        </style>
-    </head>
-    <body>
-        <div class="card">
-            <div class="icon" style="color: ${colors[type]}">${icons[type]}</div>
-            <h1>${titles[type]}</h1>
-            <p>${message}</p>
-            <a href="#" class="btn" onclick="window.close(); return false;">إغلاق هذه النافذة</a>
-        </div>
-    </body>
-    </html>
-    `;
-}
-
-function renderConfirmPage(token, requestType, userAction, details) {
-    const actionText = userAction === 'approve' ? 'موافقة' : 'رفض';
-    const actionColor = userAction === 'approve' ? '#10b981' : '#ef4444';
-    const requestTypeText = {
-        'allowance': 'طلب زيادة بدلات',
-        'leave': 'طلب إجازة',
-        'site': 'طلب تسجيل موقع',
-        'device_change': 'طلب تغيير جهاز'
-    }[requestType] || 'طلب جديد';
-
-    return `
-    <!DOCTYPE html>
-    <html dir="rtl" lang="ar">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>تأكيد الإجراء</title>
-        <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
-        <style>
-            body { font-family: 'Tajawal', sans-serif; background: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
-            .card { background: white; padding: 2.5rem; border-radius: 1.5rem; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1); text-align: center; max-width: 450px; width: 90%; }
-            h1 { color: #1e293b; margin-bottom: 1.5rem; font-size: 1.5rem; }
-            p { color: #64748b; font-size: 1.1rem; line-height: 1.6; margin-bottom: 2rem; }
-            .details { background: #f1f5f9; padding: 1rem; border-radius: 1rem; margin-bottom: 2rem; text-align: right; }
-            .details-row { display: flex; justify-content: space-between; margin-bottom: 0.5rem; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem; }
-            .btn { display: block; padding: 1rem; color: white; text-decoration: none; border-radius: 0.8rem; font-weight: bold; transition: opacity 0.2s; font-size: 1.2rem; }
-            .btn:hover { opacity: 0.9; }
-        </style>
-    </head>
-    <body>
-        <div class="card">
-            <h1>تأكيد الإجراء</h1>
-            <p>هل أنت متأكد من رغبتك في <strong>${actionText}</strong> على هذا الطلب؟</p>
-            
-            <div class="details">
-                <div class="details-row"><span>نوع الطلب:</span><strong>${requestTypeText}</strong></div>
-                ${Object.entries(details).map(([key, value]) => {
-                    if (!value || key === 'employeeName') return '';
-                    const labels = {
-                        'amount': 'المبلغ',
-                        'date': 'التاريخ',
-                        'reason': 'السبب',
-                        'site': 'الموقع المقترح',
-                        'device': 'الجهاز الجديد'
-                    };
-                    return `<div class="details-row"><span>${labels[key] || key}:</span><strong>${value}</strong></div>`;
-                }).join('')}
-                <div class="details-row"><span>الموظف:</span><strong>${details.employeeName || 'غير معروف'}</strong></div>
-            </div>
-
-            <a href="/api/exec?action=handleEmailAction&token=${token}&confirm=true" class="btn" style="background: ${actionColor}">تأكيد ال${actionText}</a>
-            <p style="margin-top: 1.5rem; font-size: 0.9rem;">هذه الخطوة الإضافية لمنع تفعيل الروابط تلقائياً من برامج الحماية.</p>
-        </div>
-    </body>
-    </html>
-    `;
-}
-
-async function triggerHRApprovalEmail(req, requestType, requestDetails) {
-    try {
-        const protocol = req.headers['x-forwarded-proto'] || 'http';
-        const host = req.headers.host;
-        const baseUrl = `${protocol}://${host}`;
-
-        const { approveToken, rejectToken } = await createActionTokens(requestType, requestDetails.id);
-        
-        const approveLink = `${baseUrl}/api/exec?action=handleEmailAction&token=${approveToken}`;
-        const rejectLink = `${baseUrl}/api/exec?action=handleEmailAction&token=${rejectToken}`;
-
-        await syncToGoogleSheet({
-            action: 'sendHRApprovalEmail',
-            requestType,
-            requestDetails,
-            approveLink,
-            rejectLink
-        });
-    } catch (e) {
-        console.error("Failed to trigger HR email:", e);
-    }
 }
 
 function validateName(name) {
@@ -405,11 +249,9 @@ async function createDeviceChangeRequest(supabase, userId, userName, oldDeviceId
             return { success: false, message: 'لديك طلب تغيير جهاز قيد المراجعة بالفعل' };
         }
         
-        const requestId = crypto.randomUUID();
         const { error } = await supabase
             .from('device_change_requests')
             .insert([{
-                id: requestId,
                 user_id: userId,
                 user_name: userName,
                 old_device_id: oldDeviceId,
@@ -427,7 +269,7 @@ async function createDeviceChangeRequest(supabase, userId, userName, oldDeviceId
             return { success: false, message: 'فشل إنشاء طلب تغيير الجهاز' };
         }
         
-        return { success: true, message: 'تم إرسال طلب تغيير الجهاز بنجاح', requestId: requestId };
+        return { success: true, message: 'تم إرسال طلب تغيير الجهاز بنجاح' };
     } catch (error) {
         console.error('Create device change request exception:', error);
         return { success: false, message: 'حدث خطأ أثناء إنشاء الطلب' };
@@ -608,316 +450,6 @@ export default async function handler(req, res) {
          }
  
          const action = data.action;
-
-        // --- NEW: EMAIL ACTIONS (PUBLIC) ---
-        if (action === "handleEmailAction") {
-            const { token } = data;
-            if (!token) return res.status(400).send('Missing token');
-
-            // 1. Verify token
-            const { data: tokenData, error: tokenError } = await supabase
-                .from('action_tokens')
-                .select('*')
-                .eq('token', token)
-                .single();
-
-            if (tokenError || !tokenData) {
-                return res.status(404).send(renderResponsePage('error', 'الرابط غير صالح أو منتهي الصلاحية.'));
-            }
-
-            if (tokenData.usedAt) {
-                return res.status(200).send(renderResponsePage('success', 'تمت معالجة هذا الطلب بنجاح مسبقاً ✅'));
-            }
-
-            if (new Date() > new Date(tokenData.expiresAt)) {
-                return res.status(400).send(renderResponsePage('error', 'عفواً، صلاحية هذا الرابط انتهت.'));
-            }
-
-            const { requestType, requestId, action: userAction } = tokenData;
-            const { confirm } = data;
-
-            // NEW: Landing page to prevent bot pre-fetching
-            if (confirm !== 'true') {
-                // Fetch full details for the confirm page
-                let details = { employeeName: '...' };
-                try {
-                    if (requestType === 'allowance') {
-                        const { data: d } = await supabase.from('allowanceRequests').select('employeeName, amount, requestDate').eq('id', requestId).single();
-                        if (d) details = { employeeName: d.employeeName, amount: d.amount + ' ج.م', date: d.requestDate };
-                    } else if (requestType === 'leave') {
-                        const { data: d } = await supabase.from('leaveRequests').select('employeeName, leaveDate, reason').eq('id', requestId).single();
-                        if (d) details = { employeeName: d.employeeName, date: d.leaveDate, reason: d.reason };
-                    } else if (requestType === 'site') {
-                        const { data: d } = await supabase.from('siteRequests').select('employeeName, suggestedName').eq('id', requestId).single();
-                        if (d) details = { employeeName: d.employeeName, site: d.suggestedName };
-                    } else if (requestType === 'device_change') {
-                        const { data: d } = await supabase.from('device_change_requests').select('user_name, newDeviceModel').eq('id', requestId).single();
-                        if (d) details = { employeeName: d.user_name, device: d.newDeviceModel };
-                    }
-                } catch(e) { console.error("Confirm Page Fetch Error:", e); }
-                
-                return res.status(200).send(renderConfirmPage(token, requestType, userAction, details));
-            }
-
-            // 2. Perform action
-            let responseMessage = '';
-
-            try {
-                if (requestType === 'allowance') {
-                    // Fetch request data
-                    const { data: reqData, error: reqError } = await supabase
-                        .from('allowanceRequests')
-                        .select('*')
-                        .eq('id', requestId)
-                        .single();
-
-                    if (reqError || !reqData) throw new Error('الطلب غير موجود');
-                    if (reqData.status !== 'pending') {
-                        return res.status(200).send(renderResponsePage('success', 'تمت معالجة هذا الطلب بنجاح مسبقاً ✅'));
-                    }
-
-                    if (userAction === 'approve') {
-                        // Approve logic
-                        const { data: attData } = await supabase
-                            .from('attendance')
-                            .select('transportPrice')
-                            .eq('id', reqData.attendanceId)
-                            .single();
-                        
-                        if (attData) {
-                            const newPrice = parseFloat(attData.transportPrice || 0) + parseFloat(reqData.amount);
-                            await supabase.from('attendance').update({ transportPrice: newPrice }).eq('id', reqData.attendanceId);
-                        }
-
-                        const { error: updErr } = await supabase.from('allowanceRequests').update({
-                            status: 'approved',
-                            approvedAt: getCairoISOString(),
-                            approvedBy: 'Email Action'
-                        }).eq('id', requestId);
-                        if (updErr) throw updErr;
-
-                        // Add Log
-                        await supabase.from('approvalLogs').insert([{
-                            id: "LOG" + Math.floor(10000 + Math.random() * 90000),
-                            requestId: requestId,
-                            adminName: 'Email Action',
-                            action: 'approved',
-                            details: 'تمت الموافقة عبر البريد الإلكتروني',
-                            timestamp: getCairoISOString()
-                        }]);
-                        
-                        // Mark internal notifications as read
-                        await supabase.from('notifications').update({ isRead: true }).eq('relatedId', requestId);
-                        
-                        // Notify employee
-                        await supabase.from('notifications').insert([{
-                            id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
-                            userId: reqData.employeeId,
-                            title: 'تمت الموافقة على طلبك',
-                            message: `تمت الموافقة على طلب زيادة البدلات بمبلغ ${reqData.amount} ج.م`,
-                            type: 'allowance_approved',
-                            relatedId: requestId,
-                            isRead: false,
-                            createdAt: getCairoISOString()
-                        }]);
-
-                        responseMessage = 'تمت الموافقة على طلب البدلات وتحديثها بنجاح ✅';
-                    } else {
-                        // Reject logic
-                        const { error: updErr } = await supabase.from('allowanceRequests').update({
-                            status: 'rejected'
-                        }).eq('id', requestId);
-                        if (updErr) throw updErr;
-
-                        // Add Log
-                        await supabase.from('approvalLogs').insert([{
-                            id: "LOG" + Math.floor(10000 + Math.random() * 90000),
-                            requestId: requestId,
-                            adminName: 'Email Action',
-                            action: 'rejected',
-                            details: 'تم الرفض عبر البريد الإلكتروني',
-                            timestamp: getCairoISOString()
-                        }]);
-
-                        await supabase.from('notifications').update({ isRead: true }).eq('relatedId', requestId);
-
-                        await supabase.from('notifications').insert([{
-                            id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
-                            userId: reqData.employeeId,
-                            title: 'تم رفض طلبك',
-                            message: `تم رفض طلب زيادة البدلات بمبلغ ${reqData.amount} ج.م`,
-                            type: 'allowance_rejected',
-                            relatedId: requestId,
-                            isRead: false,
-                            createdAt: getCairoISOString()
-                        }]);
-                        
-                        responseMessage = 'تم رفض طلب البدلات ❌';
-                    }
-                } else if (requestType === 'leave') {
-                    // Fetch request data
-                    const { data: reqData, error: reqError } = await supabase
-                        .from('leaveRequests')
-                        .select('*')
-                        .eq('id', requestId)
-                        .single();
-
-                    if (reqError || !reqData) throw new Error('الطلب غير موجود');
-                    if (reqData.status !== 'pending') {
-                        return res.status(200).send(renderResponsePage('success', 'تمت معالجة هذا الطلب بنجاح مسبقاً ✅'));
-                    }
-
-                    if (userAction === 'approve') {
-                        const { error: updErr } = await supabase.from('leaveRequests').update({
-                            status: 'approved',
-                            approvedAt: getCairoISOString(),
-                            approvedBy: 'Email Action'
-                        }).eq('id', requestId);
-                        if (updErr) throw updErr;
-                        
-                        await supabase.from('notifications').update({ isRead: true }).eq('relatedId', requestId);
-                        
-                        await supabase.from('notifications').insert([{
-                            id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
-                            userId: reqData.employeeId,
-                            title: 'تمت الموافقة على إجازتك',
-                            message: `تمت الموافقة على طلب إجازتك بتاريخ ${reqData.leaveDate}`,
-                            type: 'leave_approved',
-                            relatedId: requestId,
-                            isRead: false,
-                            createdAt: getCairoISOString()
-                        }]);
-
-                        responseMessage = 'تمت الموافقة على طلب الإجازة بنجاح ✅';
-                    } else {
-                        const { error: updErr } = await supabase.from('leaveRequests').update({
-                            status: 'rejected',
-                            rejectionReason: 'تم الرفض عبر البريد الإلكتروني'
-                        }).eq('id', requestId);
-                        if (updErr) throw updErr;
-
-                        await supabase.from('notifications').update({ isRead: true }).eq('relatedId', requestId);
-
-                        await supabase.from('notifications').insert([{
-                            id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
-                            userId: reqData.employeeId,
-                            title: 'تم رفض طلب الإجازة',
-                            message: `تم رفض طلب إجازتك بتاريخ ${reqData.leaveDate}`,
-                            type: 'leave_rejected',
-                            relatedId: requestId,
-                            isRead: false,
-                            createdAt: getCairoISOString()
-                        }]);
-                        
-                        responseMessage = 'تم رفض طلب الإجازة ❌';
-                    }
-                } else if (requestType === 'site') {
-                    // Fetch request data
-                    const { data: reqData, error: reqError } = await supabase
-                        .from('siteRequests')
-                        .select('*')
-                        .eq('id', requestId)
-                        .single();
-
-                    if (reqError || !reqData) throw new Error('الطلب غير موجود');
-                    if (reqData.status !== 'pending') throw new Error('لقد تمت معالجة هذا الطلب بالفعل.');
-
-                    if (userAction === 'approve') {
-                        // Approve for today only by default from email
-                        const { error: updErr } = await supabase.from('siteRequests').update({
-                            status: 'approved_today',
-                            approvedAt: getCairoISOString(),
-                            tempRadius: 100,
-                            transportPrice: 120
-                        }).eq('id', requestId);
-                        if (updErr) throw updErr;
-                        
-                        await supabase.from('notifications').update({ isRead: true }).eq('relatedId', requestId);
-                        
-                        await supabase.from('notifications').insert([{
-                            id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
-                            userId: reqData.employeeId,
-                            title: 'تمت الموافقة على موقعك',
-                            message: `تمت الموافقة على طلب تسجيل الموقع: ${reqData.suggestedName} (لليوم فقط)`,
-                            type: 'site_approved',
-                            relatedId: requestId,
-                            isRead: false,
-                            createdAt: getCairoISOString()
-                        }]);
-
-                        responseMessage = 'تمت الموافقة على الموقع (لليوم فقط) بنجاح ✅';
-                    } else {
-                        await supabase.from('siteRequests').update({
-                            status: 'rejected'
-                        }).eq('id', requestId);
-
-                        await supabase.from('notifications').update({ isRead: true }).eq('relatedId', requestId);
-
-                        await supabase.from('notifications').insert([{
-                            id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
-                            userId: reqData.employeeId,
-                            title: 'تم رفض طلب الموقع',
-                            message: `تم رفض طلب تسجيل الموقع: ${reqData.suggestedName}`,
-                            type: 'site_rejected',
-                            relatedId: requestId,
-                            isRead: false,
-                            createdAt: getCairoISOString()
-                        }]);
-                        
-                        responseMessage = 'تم رفض طلب الموقع ❌';
-                    }
-                } else if (requestType === 'device_change') {
-                    const { data: reqData, error: errFetch } = await supabase.from('device_change_requests').select('*').eq('id', requestId).single();
-                    if (errFetch || !reqData) throw new Error("طلب تغيير الجهاز غير موجود");
-                    if (reqData.status !== 'pending') {
-                        return res.status(200).send(renderResponsePage('success', 'تمت معالجة هذا الطلب بنجاح مسبقاً ✅'));
-                    }
-
-                    if (userAction === 'approve') {
-                        // Logic copied from approveDeviceChangeRequest handler
-                        if (reqData.old_device_id) {
-                            await supabase.from('devices').update({ is_active: false, updated_at: getCairoISOString() })
-                                .eq('user_id', reqData.user_id).eq('device_id', reqData.old_device_id);
-                        }
-                        await supabase.from('devices').update({ is_active: false, updated_at: getCairoISOString() })
-                            .eq('user_id', reqData.user_id).eq('is_active', true);
-                        
-                        await supabase.from('devices').upsert({
-                            user_id: reqData.user_id,
-                            device_id: reqData.new_device_id,
-                            device_model: reqData.new_device_model || 'Unknown',
-                            os_type: reqData.new_os_type || 'Unknown',
-                            browser_info: reqData.new_browser_info || 'Unknown',
-                            is_active: true,
-                            updated_at: getCairoISOString()
-                        }, { onConflict: 'user_id,device_id' });
-
-                        await supabase.from('device_change_requests').update({
-                            status: 'approved',
-                            processed_at: getCairoISOString(),
-                            processed_by: 'email_approval'
-                        }).eq('id', requestId);
-
-                        responseMessage = 'تمت الموافقة على تغيير الجهاز بنجاح ✅';
-                    } else {
-                        await supabase.from('device_change_requests').update({
-                            status: 'rejected',
-                            processed_at: getCairoISOString(),
-                            processed_by: 'email_approval'
-                        }).eq('id', requestId);
-
-                        responseMessage = 'تم رفض طلب تغيير الجهاز ❌';
-                    }
-                }
-                
-                // 3. Mark token as used
-                await supabase.from('action_tokens').update({ "usedAt": getCairoISOString() }).eq('token', token);
-                
-                return res.status(200).send(renderResponsePage('success', responseMessage));
-            } catch (err) {
-                return res.status(500).send(renderResponsePage('error', err.message));
-            }
-        }
 
         // DUAL WRITING / BACKUP SYNC:
         // For writing actions, we asynchronously broadcast the exact request to your existing Google Apps Script
@@ -1698,7 +1230,7 @@ if (action === "updateEmployee") {
             }
 
             const payload = {
-                id: data.id || crypto.randomUUID(),
+                id: data.id || "REQ" + Math.floor(10000 + Math.random() * 90000),
                 employeeId: data.employeeId,
                 employeeName: data.employeeName,
                 suggestedName: data.suggestedName,
@@ -1730,9 +1262,6 @@ if (action === "updateEmployee") {
                 createdAt: new Date().toISOString()
             }]);
             
-            // 🚀 TRIGGER EMAIL APPROVAL
-            await triggerHRApprovalEmail(req, 'site', payload);
-
             return res.status(200).json({ 
                 success: true, 
                 message: "تم إرسال طلب الموقع بنجاح. سيتم تفعيل الموافقة التلقائية خلال دقيقتين إذا كنت في الموقع." 
@@ -1839,9 +1368,7 @@ if (action === "updateEmployee") {
         }
 
         if (action === "addAllowanceRequest") {
-            const requestId = crypto.randomUUID();
             const payload = {
-                id: requestId,
                 employeeId: data.employeeId,
                 employeeName: data.employeeName,
                 attendanceId: data.attendanceId,
@@ -1863,14 +1390,11 @@ if (action === "updateEmployee") {
                 title: 'طلب زيادة بدلات جديد',
                 message: `قام الموظف ${data.employeeName} بطلب زيادة بدلات بمبلغ ${data.amount} ج.م`,
                 type: 'allowance_request',
-                relatedId: requestId,
+                relatedId: payload.id || data.id,
                 isRead: false,
                 createdAt: new Date().toISOString()
             }]);
             
-            // 🚀 TRIGGER EMAIL APPROVAL
-            await triggerHRApprovalEmail(req, 'allowance', payload);
-
             return res.status(200).json({ success: true, message: "تم إرسال طلب زيادة البدلات بنجاح" });
         }
 
@@ -1920,7 +1444,8 @@ if (action === "updateEmployee") {
             const { error: errUpdReq } = await supabase
                 .from('allowanceRequests')
                 .update({ 
-                    status: status
+                    status: status, 
+                    adminNote: adminNote || '' 
                 })
                 .eq('id', requestId);
             
@@ -1973,7 +1498,6 @@ if (action === "updateEmployee") {
 
         // --- LEAVE REQUESTS ---
         if (action === "addLeaveRequest") {
-            const requestId = crypto.randomUUID();
             const { employeeId, employeeName, leaveDate, reason } = data;
             
             if (!leaveDate) return res.status(200).json({ success: false, message: "تاريخ الإجازة مطلوب" });
@@ -1997,7 +1521,7 @@ if (action === "updateEmployee") {
             }
             
             const payload = {
-                id: requestId,
+                id: "LEAVE" + Math.floor(10000 + Math.random() * 90000),
                 employeeId,
                 employeeName,
                 leaveDate,
@@ -2016,14 +1540,11 @@ if (action === "updateEmployee") {
                 title: 'طلب إجازة جديد',
                 message: `قام الموظف ${employeeName} بطلب إجازة بتاريخ ${leaveDate}`,
                 type: 'leave_request',
-                relatedId: requestId,
+                relatedId: payload.id,
                 isRead: false,
                 createdAt: new Date().toISOString()
             }]);
             
-            // 🚀 TRIGGER EMAIL APPROVAL
-            await triggerHRApprovalEmail(req, 'leave', payload);
-
             return res.status(200).json({ success: true, message: "تم إرسال طلب الإجازة بنجاح للمراجعة" });
         }
 
@@ -2285,12 +1806,8 @@ if (action === "updateEmployee") {
                 return supabase.from('settings').upsert({ key, value }, { onConflict: 'key' });
             });
             await Promise.all(promises);
-            
-            // Sync to Google Sheets so Code.gs can see the new emails immediately
-            await syncToGoogleSheet(data);
-            
             invalidateCache('settings');
-            return res.status(200).json({ success: true, message: "تم تحديث الإعدادات بنجاح ومزامنتها" });
+            return res.status(200).json({ success: true, message: "تم تحديث الإعدادات بنجاح" });
         }
 
         // --- DATABASE MONITORING ---
@@ -2355,18 +1872,6 @@ if (action === "updateEmployee") {
                 newDeviceInfo, 
                 reason
             );
-
-            if (result.success && result.requestId) {
-                // 🚀 TRIGGER EMAIL APPROVAL
-                await triggerHRApprovalEmail(req, 'device_change', {
-                    id: result.requestId,
-                    employeeId,
-                    employeeName,
-                    oldDeviceId: currentDeviceId,
-                    newDeviceModel: newDeviceInfo.deviceModel,
-                    reason
-                });
-            }
             
             return res.status(200).json(result);
         }

@@ -1280,15 +1280,6 @@ function doPost(e) {
       }
     }
 
-    // 4. SEND HR APPROVAL EMAIL (Automated from API)
-    if (action === "sendHRApprovalEmail") {
-      try {
-        return sendHRApprovalEmail(data);
-      } catch(e) {
-        return json({success:false, message: "خطأ في إرسال بريد الموافقة: " + e.toString()});
-      }
-    }
-
     if (action === "clearProcessedRequests") {
       var s = getSiteRequestsSheet();
       var rows = s.getDataRange().getValues();
@@ -1400,29 +1391,6 @@ function doPost(e) {
       }
 
       return json({success:true, message: "تم حفظ بيانات الموظف بنجاح"});
-    }
-
-    // UPDATE SETTINGS (Sync from API)
-    if (action === "updateSettings") {
-      var s = getOrCreateSheet("settings", ["key", "value"]);
-      var rows = s.getDataRange().getValues();
-      var settings = data.settings;
-      
-      for (var key in settings) {
-        var value = settings[key];
-        var found = false;
-        for (var i = 1; i < rows.length; i++) {
-          if (rows[i][0] === key) {
-            s.getRange(i + 1, 2).setValue(value);
-            found = true;
-            break;
-          }
-        }
-        if (!found) {
-          s.appendRow([key, value]);
-        }
-      }
-      return json({ success: true, message: "تم تحديث الإعدادات في جوجل شيت" });
     }
 
     // UPDATE EMPLOYEE
@@ -2019,100 +1987,6 @@ function sendEmployeeDetailedReport(data) {
   });
 
   return json({ success: true, message: "تم إرسال التقرير التفصيلي بنجاح" });
-}
-
-function sendHRApprovalEmail(data) {
-  var settings = getSettingsObject();
-  var hrEmail = settings.reportEmails;
-  if (!hrEmail) throw new Error("يرجى إعداد إيميلات الاستلام في الإعدادات");
-
-  var type = data.requestType;
-  var details = data.requestDetails;
-  var approveLink = data.approveLink;
-  var rejectLink = data.rejectLink;
-
-  var subject = "طلب جديد بحاجة للموافقة: " + (type === 'allowance' ? 'زيادة بدلات' : type);
-  var htmlBody = generateApprovalEmailHTML(type, details, approveLink, rejectLink);
-
-  GmailApp.sendEmail(hrEmail, subject, 
-    "لديك طلب جديد بحاجة للمراجعة من الموظف " + details.employeeName, {
-    htmlBody: htmlBody,
-    name: "نظام الموارد البشرية (HR System)"
-  });
-
-  return json({success:true});
-}
-
-function generateApprovalEmailHTML(type, details, approveLink, rejectLink) {
-  var title = 'طلب جديد';
-  var amountRow = '';
-  var dateRow = '';
-  var extraRow = '';
-
-  if (type === 'allowance') {
-    title = 'طلب زيادة بدلات';
-    amountRow = '<div style="display:flex;justify-content:space-between;margin-bottom:15px;border-bottom:1px solid #e2e8f0;padding-bottom:10px;"><span style="color:#64748b;">المبلغ:</span><span style="font-weight:bold;color:#16a34a;font-size:1.2rem;">' + details.amount + ' ج.م</span></div>';
-    dateRow = details.requestDate;
-  } else if (type === 'leave') {
-    title = 'طلب إجازة';
-    dateRow = details.leaveDate;
-    extraRow = '<div style="display:flex;justify-content:space-between;margin-bottom:15px;border-bottom:1px solid #e2e8f0;padding-bottom:10px;"><span style="color:#64748b;">نوع الطلب:</span><span style="font-weight:bold;">إجازة</span></div>';
-  } else if (type === 'site') {
-    title = 'طلب تسجيل موقع';
-    dateRow = details.timestamp ? details.timestamp.split('T')[0] : '';
-    extraRow = '<div style="display:flex;justify-content:space-between;margin-bottom:15px;border-bottom:1px solid #e2e8f0;padding-bottom:10px;"><span style="color:#64748b;">الموقع المقترح:</span><span style="font-weight:bold;">' + details.suggestedName + '</span></div>' +
-               '<div style="margin-bottom:15px;border-bottom:1px solid #e2e8f0;padding-bottom:10px;"><a href="' + details.mapLink + '" style="color:#4f46e5;text-decoration:none;">📍 عرض الموقع على الخريطة</a></div>';
-  } else if (type === 'device_change') {
-    title = 'طلب تغيير جهاز';
-    dateRow = new Date().toLocaleDateString('ar-EG');
-    extraRow = '<div style="display:flex;justify-content:space-between;margin-bottom:15px;border-bottom:1px solid #e2e8f0;padding-bottom:10px;"><span style="color:#64748b;">الجهاز الجديد:</span><span style="font-weight:bold;">' + (details.newDeviceModel || 'غير معروف') + '</span></div>' +
-               '<div style="display:flex;justify-content:space-between;margin-bottom:15px;border-bottom:1px solid #e2e8f0;padding-bottom:10px;"><span style="color:#64748b;">معرف الجهاز القديم:</span><span style="font-size:0.8rem;color:#64748b;">' + (details.oldDeviceId || 'لا يوجد') + '</span></div>';
-  }
-
-  return `
-    <div dir="rtl" style="font-family:'Tajawal',sans-serif;background:#f1f5f9;padding:30px;color:#1e293b;text-align:right;">
-      <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);">
-        <div style="background:#4f46e5;background:linear-gradient(135deg,#4f46e5,#7c3aed);padding:40px 20px;text-align:center;color:#fff;">
-          <h1 style="margin:0;font-size:24px;">${title}</h1>
-          <p style="margin:10px 0 0 0;opacity:0.9;">مقدم من الموظف: ${details.employeeName}</p>
-        </div>
-        
-        <div style="padding:30px;">
-          <div style="display:flex;justify-content:space-between;margin-bottom:15px;border-bottom:1px solid #e2e8f0;padding-bottom:10px;">
-            <span style="color:#64748b;">نوع الطلب:</span>
-            <span style="font-weight:bold;color:#4f46e5;">${title}</span>
-          </div>
-          <div style="background:#f8fafc;padding:20px;border-radius:12px;margin-bottom:30px;border:1px solid #e2e8f0;">
-            <div style="display:flex;justify-content:space-between;margin-bottom:15px;border-bottom:1px solid #e2e8f0;padding-bottom:10px;">
-              <span style="color:#64748b;">الموظف:</span>
-              <span style="font-weight:bold;">${details.employeeName}</span>
-            </div>
-            <div style="display:flex;justify-content:space-between;margin-bottom:15px;border-bottom:1px solid #e2e8f0;padding-bottom:10px;">
-              <span style="color:#64748b;">التاريخ:</span>
-              <span style="font-weight:bold;">${dateRow || ''}</span>
-            </div>
-            ${amountRow}
-            ${extraRow}
-            <div style="margin-top:15px;">
-              <span style="color:#64748b;display:block;margin-bottom:5px;">الملاحظات/السبب:</span>
-              <p style="margin:0;font-style:italic;">"${details.note || details.reason || 'لا توجد تفاصيل إضافية'}"</p>
-            </div>
-          </div>
-
-          <div style="display:flex;gap:20px;justify-content:center;">
-            <a href="${approveLink}" style="background:#10b981;color:#fff;padding:15px 30px;border-radius:10px;text-decoration:none;font-weight:bold;flex:1;text-align:center;">موافقة (Approve)</a>
-            <a href="${rejectLink}" style="background:#ef4444;color:#fff;padding:15px 30px;border-radius:10px;text-decoration:none;font-weight:bold;flex:1;text-align:center;">رفض (Reject)</a>
-          </div>
-          
-          <p style="text-align:center;color:#64748b;font-size:0.85rem;margin-top:30px;">هذا الرابط مخصص للاستخدام مرة واحدة فقط.</p>
-        </div>
-        
-        <div style="background:#f1f5f9;padding:20px;text-align:center;font-size:0.8rem;color:#94a3b8;">
-          نظام الموارد البشرية والتقارير الذكية © 2026
-        </div>
-      </div>
-    </div>
-  `;
 }
 
 function getWorkingDaysCountInRange(startDate, endDate) {
