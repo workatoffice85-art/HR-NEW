@@ -636,9 +636,6 @@ export default async function handler(req, res) {
             const { requestType, requestId, action: userAction } = tokenData;
             const { confirm } = data;
 
-            // NEW: Mark token as used IMMEDIATELY to prevent double execution
-            await supabase.from('action_tokens').update({ "usedAt": getCairoISOString() }).eq('token', token);
-
             // NEW: Landing page to prevent bot pre-fetching
             if (confirm !== 'true') {
                 // Fetch full details for the confirm page
@@ -778,16 +775,6 @@ export default async function handler(req, res) {
                         }).eq('id', requestId);
                         if (updErr) throw updErr;
                         
-                        // Verify the update was successful and status is still approved
-                        const { data: verifyData } = await supabase.from('leaveRequests')
-                            .select('status')
-                            .eq('id', requestId)
-                            .single();
-                        
-                        if (!verifyData || verifyData.status !== 'approved') {
-                            return res.status(200).send(renderResponsePage('success', 'تمت معالجة هذا الطلب بنجاح مسبقاً ✅'));
-                        }
-                        
                         await supabase.from('notifications').update({ isRead: true }).eq('relatedId', requestId);
                         
                         await supabase.from('notifications').insert([{
@@ -808,16 +795,6 @@ export default async function handler(req, res) {
                             rejectionReason: 'تم الرفض عبر البريد الإلكتروني'
                         }).eq('id', requestId);
                         if (updErr) throw updErr;
-
-                        // Verify the update was successful and status is still rejected
-                        const { data: verifyData } = await supabase.from('leaveRequests')
-                            .select('status')
-                            .eq('id', requestId)
-                            .single();
-                        
-                        if (!verifyData || verifyData.status !== 'rejected') {
-                            return res.status(200).send(renderResponsePage('success', 'تمت معالجة هذا الطلب بنجاح مسبقاً ✅'));
-                        }
 
                         await supabase.from('notifications').update({ isRead: true }).eq('relatedId', requestId);
 
@@ -932,6 +909,9 @@ export default async function handler(req, res) {
                         responseMessage = 'تم رفض طلب تغيير الجهاز ❌';
                     }
                 }
+                
+                // 3. Mark token as used
+                await supabase.from('action_tokens').update({ "usedAt": getCairoISOString() }).eq('token', token);
                 
                 return res.status(200).send(renderResponsePage('success', responseMessage));
             } catch (err) {
