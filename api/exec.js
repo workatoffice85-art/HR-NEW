@@ -775,6 +775,16 @@ export default async function handler(req, res) {
                         }).eq('id', requestId);
                         if (updErr) throw updErr;
                         
+                        // Verify the update was successful and status is still approved
+                        const { data: verifyData } = await supabase.from('leaveRequests')
+                            .select('status')
+                            .eq('id', requestId)
+                            .single();
+                        
+                        if (!verifyData || verifyData.status !== 'approved') {
+                            return res.status(200).send(renderResponsePage('success', 'تمت معالجة هذا الطلب بنجاح مسبقاً ✅'));
+                        }
+                        
                         await supabase.from('notifications').update({ isRead: true }).eq('relatedId', requestId);
                         
                         await supabase.from('notifications').insert([{
@@ -795,6 +805,16 @@ export default async function handler(req, res) {
                             rejectionReason: 'تم الرفض عبر البريد الإلكتروني'
                         }).eq('id', requestId);
                         if (updErr) throw updErr;
+
+                        // Verify the update was successful and status is still rejected
+                        const { data: verifyData } = await supabase.from('leaveRequests')
+                            .select('status')
+                            .eq('id', requestId)
+                            .single();
+                        
+                        if (!verifyData || verifyData.status !== 'rejected') {
+                            return res.status(200).send(renderResponsePage('success', 'تمت معالجة هذا الطلب بنجاح مسبقاً ✅'));
+                        }
 
                         await supabase.from('notifications').update({ isRead: true }).eq('relatedId', requestId);
 
