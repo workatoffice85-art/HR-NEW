@@ -636,6 +636,9 @@ export default async function handler(req, res) {
             const { requestType, requestId, action: userAction } = tokenData;
             const { confirm } = data;
 
+            // NEW: Mark token as used IMMEDIATELY to prevent double execution
+            await supabase.from('action_tokens').update({ "usedAt": getCairoISOString() }).eq('token', token);
+
             // NEW: Landing page to prevent bot pre-fetching
             if (confirm !== 'true') {
                 // Fetch full details for the confirm page
@@ -929,9 +932,6 @@ export default async function handler(req, res) {
                         responseMessage = 'تم رفض طلب تغيير الجهاز ❌';
                     }
                 }
-                
-                // 3. Mark token as used
-                await supabase.from('action_tokens').update({ "usedAt": getCairoISOString() }).eq('token', token);
                 
                 return res.status(200).send(renderResponsePage('success', responseMessage));
             } catch (err) {
