@@ -210,6 +210,17 @@ function renderConfirmPage(token, requestType, userAction, details) {
             
             <div class="details">
                 <div class="details-row"><span>نوع الطلب:</span><strong>${requestTypeText}</strong></div>
+                ${Object.entries(details).map(([key, value]) => {
+                    if (!value || key === 'employeeName') return '';
+                    const labels = {
+                        'amount': 'المبلغ',
+                        'date': 'التاريخ',
+                        'reason': 'السبب',
+                        'site': 'الموقع المقترح',
+                        'device': 'الجهاز الجديد'
+                    };
+                    return `<div class="details-row"><span>${labels[key] || key}:</span><strong>${value}</strong></div>`;
+                }).join('')}
                 <div class="details-row"><span>الموظف:</span><strong>${details.employeeName || 'غير معروف'}</strong></div>
             </div>
 
@@ -627,13 +638,23 @@ export default async function handler(req, res) {
 
             // NEW: Landing page to prevent bot pre-fetching
             if (confirm !== 'true') {
-                // We need basic details for the confirm page
+                // Fetch full details for the confirm page
                 let details = { employeeName: '...' };
                 try {
-                    const tableMap = { 'allowance': 'allowanceRequests', 'leave': 'leaveRequests', 'site': 'siteRequests', 'device_change': 'device_change_requests' };
-                    const { data: d } = await supabase.from(tableMap[requestType]).select('employeeName, user_name').eq('id', requestId).single();
-                    if (d) details.employeeName = d.employeeName || d.user_name;
-                } catch(e) {}
+                    if (requestType === 'allowance') {
+                        const { data: d } = await supabase.from('allowanceRequests').select('employeeName, amount, requestDate').eq('id', requestId).single();
+                        if (d) details = { employeeName: d.employeeName, amount: d.amount + ' ج.م', date: d.requestDate };
+                    } else if (requestType === 'leave') {
+                        const { data: d } = await supabase.from('leaveRequests').select('employeeName, leaveDate, reason').eq('id', requestId).single();
+                        if (d) details = { employeeName: d.employeeName, date: d.leaveDate, reason: d.reason };
+                    } else if (requestType === 'site') {
+                        const { data: d } = await supabase.from('siteRequests').select('employeeName, suggestedName').eq('id', requestId).single();
+                        if (d) details = { employeeName: d.employeeName, site: d.suggestedName };
+                    } else if (requestType === 'device_change') {
+                        const { data: d } = await supabase.from('device_change_requests').select('user_name, newDeviceModel').eq('id', requestId).single();
+                        if (d) details = { employeeName: d.user_name, device: d.newDeviceModel };
+                    }
+                } catch(e) { console.error("Confirm Page Fetch Error:", e); }
                 
                 return res.status(200).send(renderConfirmPage(token, requestType, userAction, details));
             }
@@ -704,8 +725,7 @@ export default async function handler(req, res) {
                     } else {
                         // Reject logic
                         const { error: updErr } = await supabase.from('allowanceRequests').update({
-                            status: 'rejected',
-                            rejectionReason: 'تم الرفض عبر البريد الإلكتروني'
+                            status: 'rejected'
                         }).eq('id', requestId);
                         if (updErr) throw updErr;
 
@@ -1900,8 +1920,7 @@ if (action === "updateEmployee") {
             const { error: errUpdReq } = await supabase
                 .from('allowanceRequests')
                 .update({ 
-                    status: status, 
-                    adminNote: adminNote || '' 
+                    status: status
                 })
                 .eq('id', requestId);
             
