@@ -930,8 +930,8 @@ export default async function handler(req, res) {
                     }
                 }
                 
-                // 3. Mark token as used
-                await supabase.from('action_tokens').update({ "usedAt": getCairoISOString() }).eq('token', token);
+                // 3. Delete token to clean up database
+                await supabase.from('action_tokens').delete().eq('token', token);
                 
                 return res.status(200).send(renderResponsePage('success', responseMessage));
             } catch (err) {
