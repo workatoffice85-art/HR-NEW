@@ -390,14 +390,18 @@ function getCairoTimeString(date = new Date()) {
     });
 }
 
-// Helper: Get date string (YYYY-MM-DD) in Cairo timezone
 function getCairoDateString(date = new Date()) {
-    return date.toLocaleDateString('en-US', {
+    const formatter = new Intl.DateTimeFormat('en-US', {
         timeZone: 'Africa/Cairo',
         year: 'numeric',
         month: '2-digit',
         day: '2-digit'
-    }).split('/').reverse().join('-');
+    });
+    const parts = formatter.formatToParts(date);
+    const year = parts.find(p => p.type === 'year').value;
+    const month = parts.find(p => p.type === 'month').value;
+    const day = parts.find(p => p.type === 'day').value;
+    return `${year}-${month}-${day}`;
 }
 
 // Background sync to Google Sheets (Backup)
@@ -608,6 +612,25 @@ if (action === "login") {
                 assignedSites: emp.assignedSites ? String(emp.assignedSites).split(',').map(s => s.trim()).filter(Boolean) : [],
                 siteAllowances: (allRes.data || []).filter(a => String(a.employeeId) === String(emp.id))
             }));
+
+            // --- HOTFIX: Correct today's attendance status if it's a holiday ---
+            try {
+                const todayStr = getCairoDateString(new Date());
+                const { data: holidayToday } = await supabase.from('official_holidays').select('*').eq('holidayDate', todayStr).maybeSingle();
+                if (holidayToday) {
+                    // Today is a holiday! Update any 'present' or 'late' records for today to 'overtime'
+                    await supabase.from('attendance')
+                        .update({ status: 'overtime' })
+                        .in('status', ['present', 'late'])
+                        .filter('checkIn', 'gte', todayStr + 'T00:00:00');
+                    
+                    // Refresh attendance data for the response if needed (optional since frontend will reload)
+                    const { data: refreshedAtt } = await supabase.from('attendance').select('*');
+                    if (refreshedAtt) attRes.data = refreshedAtt;
+                }
+            } catch (hotfixErr) {
+                console.error("Hotfix failed:", hotfixErr);
+            }
 
             return res.status(200).json({
                 success: true,

@@ -323,20 +323,8 @@ function renderAttendanceTable(data) {
             checkOutTime = formatCairoTime(record.checkOut);
         }
         
-        let statusText = 'حاضر';
-        let statusColor = 'var(--secondary)';
+        const statusMeta = getStatusMeta(record.status, record.checkIn ? record.checkIn.slice(0, 10) : null);
         
-        if (record.status === 'late') {
-            statusText = 'متأخر';
-            statusColor = 'var(--danger)';
-        } else if (record.status === 'overtime') {
-            statusText = 'عمل إضافي';
-            statusColor = '#3b82f6';
-        } else if (record.status === 'no_checkout') {
-            statusText = 'لم يتم الانصراف';
-            statusColor = '#f59e0b';
-        }
-
         tbody.innerHTML += `
             <tr>
                 <td data-label="الموظف">${record.employeeName}</td>
@@ -344,7 +332,7 @@ function renderAttendanceTable(data) {
                 <td data-label="وقت الحضور" dir="ltr">${checkInDate} ${checkInTime}</td>
                 <td data-label="وقت الانصراف" dir="ltr">${checkOutTime}</td>
                 <td data-label="بدل الانتقال">${getCurrentTransportPrice(record) || 0} ج.م</td>
-                <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
+                <td data-label="الحالة"><span style="color:${statusMeta.color}">${statusMeta.text}</span></td>
             </tr>
         `;
     });
@@ -435,9 +423,24 @@ function calculateUniqueDailyTransport(records) {
     return Object.values(dailyTransport).reduce((sum, value) => sum + value, 0);
 }
 
-function getStatusMeta(status) {
+function getStatusMeta(status, dateKey) {
+    // Check if it's a holiday or weekend for effective status
+    let isHolidayOrWeekend = false;
+    if (dateKey) {
+        const dateObj = new Date(dateKey);
+        const dayOfWeek = dateObj.getDay();
+        const weekendDays = getWeekendDaysFromSettings();
+        const isWeekend = weekendDays.includes(dayOfWeek);
+        const isOfficialHoliday = allOfficialHolidays.some(h => {
+            if (!h.holidayDate) return false;
+            const holidayDate = new Date(h.holidayDate);
+            return holidayDate.toISOString().split('T')[0] === dateKey;
+        });
+        isHolidayOrWeekend = isWeekend || isOfficialHoliday;
+    }
+
+    if (status === 'overtime' || isHolidayOrWeekend) return { text: 'عمل إضافي', color: '#3b82f6' };
     if (status === 'late') return { text: 'متأخر', color: 'var(--danger)' };
-    if (status === 'overtime') return { text: 'عمل إضافي', color: '#3b82f6' };
     if (status === 'no_checkout') return { text: 'لم يتم الانصراف', color: '#f59e0b' };
     return { text: 'حاضر', color: 'var(--secondary)' };
 }
@@ -659,7 +662,7 @@ async function generateEmployeeDetailedReport() {
                 } else if (record.checkOut) {
                     checkOutText = formatCairoTime(record.checkOut);
                 }
-                const statusMeta = getStatusMeta(record.status);
+                const statusMeta = getStatusMeta(record.status, dateKey);
                 const currentTransport = getCurrentTransportPrice(record);
                 
                 tbody.innerHTML += `
