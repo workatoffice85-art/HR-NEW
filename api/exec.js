@@ -568,7 +568,7 @@ export default async function handler(req, res) {
             }
 
             if (tokenData.usedAt) {
-                return res.status(400).send(renderResponsePage('warning', 'تم استخدام هذا الرابط مسبقاً.'));
+                return res.status(200).send(renderResponsePage('success', 'تمت معالجة هذا الطلب بنجاح مسبقاً ✅'));
             }
 
             if (new Date() > new Date(tokenData.expiresAt)) {
@@ -589,7 +589,9 @@ export default async function handler(req, res) {
                         .single();
 
                     if (reqError || !reqData) throw new Error('الطلب غير موجود');
-                    if (reqData.status !== 'pending') throw new Error('لقد تمت معالجة هذا الطلب بالفعل.');
+                    if (reqData.status !== 'pending') {
+                        return res.status(200).send(renderResponsePage('success', 'تمت معالجة هذا الطلب بنجاح مسبقاً ✅'));
+                    }
 
                     if (userAction === 'approve') {
                         // Approve logic
@@ -657,7 +659,9 @@ export default async function handler(req, res) {
                         .single();
 
                     if (reqError || !reqData) throw new Error('الطلب غير موجود');
-                    if (reqData.status !== 'pending') throw new Error('لقد تمت معالجة هذا الطلب بالفعل.');
+                    if (reqData.status !== 'pending') {
+                        return res.status(200).send(renderResponsePage('success', 'تمت معالجة هذا الطلب بنجاح مسبقاً ✅'));
+                    }
 
                     if (userAction === 'approve') {
                         await supabase.from('leaveRequests').update({
@@ -758,7 +762,9 @@ export default async function handler(req, res) {
                 } else if (requestType === 'device_change') {
                     const { data: reqData, error: errFetch } = await supabase.from('device_change_requests').select('*').eq('id', requestId).single();
                     if (errFetch || !reqData) throw new Error("طلب تغيير الجهاز غير موجود");
-                    if (reqData.status !== 'pending') throw new Error("تمت معالجة هذا الطلب مسبقاً");
+                    if (reqData.status !== 'pending') {
+                        return res.status(200).send(renderResponsePage('success', 'تمت معالجة هذا الطلب بنجاح مسبقاً ✅'));
+                    }
 
                     if (userAction === 'approve') {
                         // Logic copied from approveDeviceChangeRequest handler
@@ -1585,7 +1591,7 @@ if (action === "updateEmployee") {
             }
 
             const payload = {
-                id: data.id || "REQ" + Math.floor(10000 + Math.random() * 90000),
+                id: data.id || crypto.randomUUID(),
                 employeeId: data.employeeId,
                 employeeName: data.employeeName,
                 suggestedName: data.suggestedName,
@@ -1726,7 +1732,7 @@ if (action === "updateEmployee") {
         }
 
         if (action === "addAllowanceRequest") {
-            const requestId = "ALLOW" + Math.floor(10000 + Math.random() * 90000);
+            const requestId = crypto.randomUUID();
             const payload = {
                 id: requestId,
                 employeeId: data.employeeId,
@@ -1861,7 +1867,7 @@ if (action === "updateEmployee") {
 
         // --- LEAVE REQUESTS ---
         if (action === "addLeaveRequest") {
-            const requestId = "LEAVE" + Math.floor(10000 + Math.random() * 90000);
+            const requestId = crypto.randomUUID();
             const { employeeId, employeeName, leaveDate, reason } = data;
             
             if (!leaveDate) return res.status(200).json({ success: false, message: "تاريخ الإجازة مطلوب" });
