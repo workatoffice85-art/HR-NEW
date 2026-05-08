@@ -1974,6 +1974,10 @@ function renderSettings(data) {
     document.getElementById('setDailyReport').checked = data.dailyReportEnabled === "true";
     document.getElementById('setMonthlyReport').checked = data.monthlyReportEnabled === "true";
 
+    // Notification settings
+    document.getElementById('setNotificationEmails').value = data.notificationEmails || "";
+    document.getElementById('setRequestNotificationsEnabled').checked = data.requestNotificationsEnabled === "true";
+
     // Weekend days (default: Friday=5, Saturday=6)
     const weekendDays = data.weekendDays || "5,6";
     const weekendArray = weekendDays.split(',').map(d => parseInt(d.trim()));
@@ -2004,6 +2008,8 @@ async function saveSettings() {
     const reportEmails = document.getElementById('setReportEmails').value;
     const dailyEnabled = document.getElementById('setDailyReport').checked;
     const monthlyEnabled = document.getElementById('setMonthlyReport').checked;
+    const notificationEmails = document.getElementById('setNotificationEmails').value;
+    const requestNotificationsEnabled = document.getElementById('setRequestNotificationsEnabled').checked;
     const weekendDays = getWeekendDaysFromUI();
 
     document.getElementById('loader').classList.remove('hidden');
@@ -2016,6 +2022,8 @@ async function saveSettings() {
                 reportEmails: reportEmails,
                 dailyReportEnabled: dailyEnabled ? "true" : "false",
                 monthlyReportEnabled: monthlyEnabled ? "true" : "false",
+                notificationEmails: notificationEmails,
+                requestNotificationsEnabled: requestNotificationsEnabled ? "true" : "false",
                 weekendDays: weekendDays
             }
         };

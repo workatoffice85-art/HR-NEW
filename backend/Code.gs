@@ -1365,6 +1365,61 @@ function doPost(e) {
        }
     }
 
+    // SEND NOTIFICATION EMAIL (for request notifications)
+    if (action === "sendNotificationEmail") {
+       var toEmails = data.to || [];
+       var subject = data.subject || "إشعار من نظام الموارد البشرية";
+       var body = data.body || "";
+       var htmlBody = data.htmlBody || "";
+       
+       if (!toEmails || toEmails.length === 0) {
+           return json({ success: false, message: "No recipients" });
+       }
+       
+       // Send to all recipients
+       for (var i = 0; i < toEmails.length; i++) {
+           if (htmlBody) {
+               GmailApp.sendEmail(toEmails[i], subject, body, {
+                   htmlBody: htmlBody,
+                   name: "نظام الموارد البشرية (HR System)"
+               });
+           } else {
+               GmailApp.sendEmail(toEmails[i], subject, body, {
+                   name: "نظام الموارد البشرية (HR System)"
+               });
+           }
+       }
+       
+       return json({ success: true, message: "تم إرسال الإشعار بنجاح" });
+    }
+
+    // SEND ATTENDANCE REPORT (manual)
+    if (action === "sendAttendanceReport") {
+      var settings = getSettingsObject();
+      var emails = data.email || settings.reportEmails;
+      if (!emails) throw new Error("يرجى إعداد إيميلات الاستلام في الإعدادات أولاً");
+
+      var start = new Date(data.startDate);
+      start.setHours(0,0,0,0);
+      var end = new Date(data.endDate);
+      end.setHours(23,59,59,999);
+
+      var records = getAttendanceInRange(start, end);
+      if (records.length === 0) return json({success:false, message: "لا توجد سجلات في هذه الفترة"});
+
+      var title = "تقرير حضور: " + start.toLocaleDateString('ar-EG') + " إلى " + end.toLocaleDateString('ar-EG');
+      var htmlTable = generateHTMLTable(records, title);
+
+      GmailApp.sendEmail(emails, title, 
+        "مرفق التقرير بصيغة Excel الاحترافية.", {
+        htmlBody: htmlTable,
+        attachments: [generateStyledExcel(records, title)],
+        name: "نظام الموارد البشرية"
+      });
+
+      return json({success:true, message: "تم إرسال التقرير بنجاح"});
+    }
+
     // Resolve Google Maps links
     if (data.action === "resolveMapLink") {
       var mapResult = resolveMapLinkData(data.link);

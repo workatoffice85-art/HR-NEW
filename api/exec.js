@@ -142,6 +142,157 @@ function validateAmount(amount) {
 }
 
 // ============================================
+// EMAIL NOTIFICATION FUNCTIONS
+// ============================================
+// 
+// EMAIL SENDING VIA GMAILAPP (same as OTP system):
+// - Uses Google Apps Script (GmailApp) to send emails
+// - No additional email provider needed
+// - Requires the Google Script to be deployed and accessible
+//
+// Make sure GOOGLE_SCRIPT_URL is correctly set in the config above
+// ============================================
+
+/**
+ * Get notification settings from database
+ * Returns: { enabled: boolean, emails: string[] }
+ */
+async function getNotificationSettings(supabase) {
+    try {
+        const { data: settings, error } = await supabase
+            .from('settings')
+            .select('*')
+            .in('key', ['notificationEmails', 'requestNotificationsEnabled']);
+        
+        if (error) {
+            console.error('Error fetching notification settings:', error);
+            return { enabled: false, emails: [] };
+        }
+        
+        const settingsMap = {};
+        if (settings) {
+            settings.forEach(s => settingsMap[s.key] = s.value);
+        }
+        
+        const enabled = settingsMap.requestNotificationsEnabled === 'true';
+        const emailsStr = settingsMap.notificationEmails || '';
+        const emails = emailsStr.split(',').map(e => e.trim()).filter(e => e);
+        
+        return { enabled, emails };
+    } catch (error) {
+        console.error('Exception fetching notification settings:', error);
+        return { enabled: false, emails: [] };
+    }
+}
+
+/**
+ * Send email notification using Google Script (GmailApp) - same as OTP system
+ * @param {Object} options - { to, subject, html, text }
+ */
+async function sendEmailNotification(options) {
+    const { to, subject, html, text } = options;
+    
+    if (!to || to.length === 0) {
+        console.log('No recipients for email notification');
+        return { success: false, message: 'No recipients' };
+    }
+    
+    console.log('📧 EMAIL NOTIFICATION:');
+    console.log('To:', to.join(', '));
+    console.log('Subject:', subject);
+    
+    try {
+        // Use Google Script to send email via GmailApp (same as OTP)
+        const response = await fetch(GOOGLE_SCRIPT_URL, {
+            method: 'POST',
+            body: JSON.stringify({
+                action: 'sendNotificationEmail',
+                to: to,
+                subject: subject,
+                body: text,
+                htmlBody: html
+            }),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            console.log('✅ Email sent successfully via GmailApp');
+            return { success: true, message: 'Email sent via GmailApp' };
+        } else {
+            console.error('Failed to send email:', result.message);
+            return { success: false, message: result.message };
+        }
+    } catch (error) {
+        console.error('Error sending email via Google Script:', error);
+        return { success: false, message: error.message };
+    }
+}
+
+/**
+ * Send request notification email to HR
+ * @param {Object} supabase - Supabase client
+ * @param {Object} requestData - { type, employeeName, details, requestId }
+ */
+async function sendRequestNotificationEmail(supabase, requestData) {
+    const settings = await getNotificationSettings(supabase);
+    
+    if (!settings.enabled || settings.emails.length === 0) {
+        console.log('Request email notifications disabled or no emails configured');
+        return { success: false, message: 'Notifications disabled' };
+    }
+    
+    const { type, employeeName, details, requestId } = requestData;
+    
+    const typeLabels = {
+        'leave': 'طلب إجازة',
+        'site': 'طلب تسجيل موقع',
+        'allowance': 'طلب زيادة بدلات',
+        'device': 'طلب تغيير جهاز'
+    };
+    
+    const typeLabel = typeLabels[type] || 'طلب جديد';
+    const subject = `نظام الموارد البشرية - ${typeLabel} من ${employeeName}`;
+    
+    const text = `
+مرحباً،
+
+تم استلام ${typeLabel} جديد في نظام الموارد البشرية.
+
+الموظف: ${employeeName}
+التفاصيل: ${details}
+
+معرف الطلب: ${requestId || 'N/A'}
+
+يرجى مراجعة الطلب في لوحة تحكم HR.
+
+نظام الموارد البشرية
+    `.trim();
+    
+    const html = `
+<div dir="rtl" style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f8fafc; border-radius: 10px;">
+    <h2 style="color: #4f46e5; margin-bottom: 20px;">📬 ${typeLabel} جديد</h2>
+    <div style="background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+        <p style="margin: 10px 0; font-size: 16px;"><strong>الموظف:</strong> ${employeeName}</p>
+        <p style="margin: 10px 0; font-size: 16px;"><strong>التفاصيل:</strong> ${details}</p>
+        <p style="margin: 10px 0; font-size: 14px; color: #64748b;"><strong>معرف الطلب:</strong> ${requestId || 'N/A'}</p>
+    </div>
+    <p style="color: #64748b; font-size: 14px;">يرجى مراجعة الطلب في لوحة تحكم HR.</p>
+    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;">
+    <p style="color: #94a3b8; font-size: 12px; text-align: center;">نظام الموارد البشرية - إشعار تلقائي</p>
+</div>
+    `.trim();
+    
+    return await sendEmailNotification({
+        to: settings.emails,
+        subject,
+        text,
+        html
+    });
+}
+
+// ============================================
 // DEVICE VERIFICATION FUNCTIONS
 // ============================================
 
@@ -249,9 +400,12 @@ async function createDeviceChangeRequest(supabase, userId, userName, oldDeviceId
             return { success: false, message: 'لديك طلب تغيير جهاز قيد المراجعة بالفعل' };
         }
         
+        const requestId = "DEV" + Math.floor(10000 + Math.random() * 90000);
+        
         const { error } = await supabase
             .from('device_change_requests')
             .insert([{
+                id: requestId,
                 user_id: userId,
                 user_name: userName,
                 old_device_id: oldDeviceId,
@@ -268,6 +422,26 @@ async function createDeviceChangeRequest(supabase, userId, userName, oldDeviceId
             console.error('Create device change request error:', error);
             return { success: false, message: 'فشل إنشاء طلب تغيير الجهاز' };
         }
+        
+        // Create notification for HR
+        await supabase.from('notifications').insert([{
+            id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
+            userRole: 'hr',
+            title: 'طلب تغيير جهاز جديد',
+            message: `قام الموظف ${userName} بطلب تغيير جهاز`,
+            type: 'device_change_request',
+            relatedId: requestId,
+            isRead: false,
+            createdAt: new Date().toISOString()
+        }]);
+        
+        // Send email notification
+        await sendRequestNotificationEmail(supabase, {
+            type: 'device',
+            employeeName: userName,
+            details: `الجهاز الجديد: ${newDeviceInfo.deviceModel || 'Unknown'} (${newDeviceInfo.osType || 'Unknown'})${reason ? ' - السبب: ' + reason : ''}`,
+            requestId: requestId
+        });
         
         return { success: true, message: 'تم إرسال طلب تغيير الجهاز بنجاح' };
     } catch (error) {
@@ -1262,6 +1436,14 @@ if (action === "updateEmployee") {
                 createdAt: new Date().toISOString()
             }]);
             
+            // Send email notification
+            await sendRequestNotificationEmail(supabase, {
+                type: 'site',
+                employeeName: data.employeeName,
+                details: `اسم الموقع المقترح: ${data.suggestedName}${data.note ? ' - ملاحظة: ' + data.note : ''}`,
+                requestId: payload.id
+            });
+            
             return res.status(200).json({ 
                 success: true, 
                 message: "تم إرسال طلب الموقع بنجاح. سيتم تفعيل الموافقة التلقائية خلال دقيقتين إذا كنت في الموقع." 
@@ -1394,6 +1576,14 @@ if (action === "updateEmployee") {
                 isRead: false,
                 createdAt: new Date().toISOString()
             }]);
+            
+            // Send email notification
+            await sendRequestNotificationEmail(supabase, {
+                type: 'allowance',
+                employeeName: data.employeeName,
+                details: `مبلغ الزيادة: ${data.amount} ج.م - الموقع: ${data.siteName}${data.note ? ' - ملاحظة: ' + data.note : ''}`,
+                requestId: payload.id || data.id
+            });
             
             return res.status(200).json({ success: true, message: "تم إرسال طلب زيادة البدلات بنجاح" });
         }
@@ -1544,6 +1734,14 @@ if (action === "updateEmployee") {
                 isRead: false,
                 createdAt: new Date().toISOString()
             }]);
+            
+            // Send email notification
+            await sendRequestNotificationEmail(supabase, {
+                type: 'leave',
+                employeeName,
+                details: `تاريخ الإجازة: ${leaveDate} - السبب: ${reason}`,
+                requestId: payload.id
+            });
             
             return res.status(200).json({ success: true, message: "تم إرسال طلب الإجازة بنجاح للمراجعة" });
         }
@@ -2100,6 +2298,41 @@ if (action === "updateEmployee") {
             } catch (e) {
                 return res.status(200).json({ success: false, message: e.message });
             }
+        }
+
+        // --- REPORT SENDING VIA GMAILAPP ---
+        if (action === "sendAttendanceReport") {
+            // Proxy to Google Script for GmailApp email with Excel attachment
+            const reportRes = await fetch(GOOGLE_SCRIPT_URL, {
+                method: 'POST',
+                body: JSON.stringify({
+                    action: 'sendAttendanceReport',
+                    startDate: data.startDate,
+                    endDate: data.endDate,
+                    email: data.email // optional - if not provided, uses settings.reportEmails
+                }),
+                headers: { 'Content-Type': 'text/plain' }
+            });
+            const reportResult = await reportRes.json();
+            return res.status(200).json(reportResult);
+        }
+
+        if (action === "sendEmployeeReport") {
+            // Proxy to Google Script for GmailApp email with Excel attachment
+            const reportRes = await fetch(GOOGLE_SCRIPT_URL, {
+                method: 'POST',
+                body: JSON.stringify({
+                    action: 'sendEmployeeDetailedReport',
+                    employeeId: data.employeeId,
+                    employeeName: data.employeeName,
+                    startDate: data.startDate,
+                    endDate: data.endDate,
+                    email: data.email // optional
+                }),
+                headers: { 'Content-Type': 'text/plain' }
+            });
+            const reportResult = await reportRes.json();
+            return res.status(200).json(reportResult);
         }
 
         // --- FINAL FALLBACK ---
