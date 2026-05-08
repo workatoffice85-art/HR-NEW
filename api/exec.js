@@ -1,9 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
-import { createHmac, timingSafeEqual } from 'crypto';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const EMAIL_ACTION_SECRET = process.env.EMAIL_ACTION_SECRET || SUPABASE_SERVICE_ROLE_KEY;
 const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwNhaRKDP-7M4dXSQend8RbYPkXRgs5nzN0-BmNzxEO8IkBN9lt6KDtJCdOqpovhJEY1Q/exec';
 
 // Rate limiting storage (in production, use Redis or similar)
@@ -187,126 +185,12 @@ async function getNotificationSettings(supabase) {
     }
 }
 
-function getPublicBaseUrl(req) {
-    const protoHeader = req?.headers?.['x-forwarded-proto'] || req?.headers?.['x-forwarded-protocol'];
-    const hostHeader = req?.headers?.['x-forwarded-host'] || req?.headers?.['host'];
-    const protoValue = Array.isArray(protoHeader) ? protoHeader[0] : protoHeader;
-    const hostValue = Array.isArray(hostHeader) ? hostHeader[0] : hostHeader;
-
-    const proto = String(protoValue || 'https').split(',')[0].trim();
-    const host = String(hostValue || '').split(',')[0].trim();
-
-    if (!host) return '';
-    return `${proto}://${host}`;
-}
-
-function normalizeEmailDecision(value) {
-    const d = String(value || '').trim().toLowerCase();
-    if (d === 'approve' || d === 'approved') return 'approve';
-    if (d === 'reject' || d === 'rejected') return 'reject';
-    return '';
-}
-
-function buildEmailActionSignature({ type, requestId, decision, exp }) {
-    const payload = `${type}|${requestId}|${decision}|${exp}`;
-    return createHmac('sha256', EMAIL_ACTION_SECRET || '').update(payload).digest('base64url');
-}
-
-function safeTimingEqual(a, b) {
-    if (typeof a !== 'string' || typeof b !== 'string') return false;
-    if (a.length !== b.length) return false;
-    try {
-        return timingSafeEqual(Buffer.from(a), Buffer.from(b));
-    } catch {
-        return false;
-    }
-}
-
-function buildEmailRequestDecisionLink(baseUrl, { type, requestId, decision, exp }) {
-    if (!baseUrl) return '';
-    const sig = buildEmailActionSignature({ type, requestId, decision, exp });
-
-    const params = new URLSearchParams({
-        action: 'emailRequestDecision',
-        type: type,
-        requestId: requestId,
-        decision: decision,
-        exp: String(exp),
-        sig: sig
-    });
-
-    return `${baseUrl}/api/exec?${params.toString()}`;
-}
-
-function renderEmailDecisionResultPage({ status, title, message }) {
-    const escapeHtml = (value) => String(value === null || value === undefined ? '' : value)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/\"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-
-    const normalizedStatus = String(status || 'error').toLowerCase();
-    const accent = normalizedStatus === 'success'
-        ? '#22c55e'
-        : normalizedStatus === 'expired'
-            ? '#f59e0b'
-            : '#ef4444';
-
-    const safeTitle = escapeHtml(title || 'النتيجة');
-    const safeMessage = escapeHtml(message || '');
-
-    return `
-<!doctype html>
-<html lang="ar" dir="rtl">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>${safeTitle}</title>
-  </head>
-  <body style="margin:0; padding:0; background:#f1f5f9; font-family: Arial, sans-serif;">
-    <div style="max-width:640px; margin:0 auto; padding:18px;">
-      <div style="border-radius:16px; overflow:hidden; background:#ffffff; box-shadow:0 10px 30px rgba(15,23,42,0.08);">
-        <div style="background:#4f46e5; color:#ffffff; padding:22px 18px; text-align:center;">
-          <div style="font-size:22px; font-weight:900;">نتيجة الطلب</div>
-        </div>
-        <div style="padding:18px;">
-          <div style="border:1px solid #e2e8f0; border-radius:14px; padding:16px; background:#f8fafc; text-align:right;">
-            <div style="display:inline-block; padding:6px 10px; border-radius:999px; background:${accent}; color:#ffffff; font-weight:800; font-size:13px;">
-              ${normalizedStatus === 'success' ? 'تمت العملية' : normalizedStatus === 'expired' ? 'الرابط منتهي' : 'فشل'}
-            </div>
-            <div style="margin-top:12px; font-size:18px; font-weight:900; color:#0f172a;">${safeTitle}</div>
-            ${safeMessage ? `<div style="margin-top:10px; font-size:14px; color:#475569; line-height:1.7;">${safeMessage}</div>` : ''}
-          </div>
-          <div style="color:#94a3b8; font-size:12px; text-align:center; padding-top:14px;">
-            يمكنك إغلاق هذه الصفحة.
-          </div>
-        </div>
-      </div>
-    </div>
-  </body>
-</html>
-    `.trim();
-}
-
 /**
  * Send email notification using Google Script (GmailApp) - same as OTP system
  * @param {Object} options - { to, subject, html, text }
  */
 async function sendEmailNotification(options) {
-    const {
-        to,
-        subject,
-        html,
-        text,
-        useRequestTemplate,
-        requestTitle,
-        requestSubtitle,
-        requestDetails,
-        requestActions,
-        requestFooterText,
-        requestFooterNote
-    } = options;
+    const { to, subject, html, text } = options;
     
     if (!to || to.length === 0) {
         console.log('No recipients for email notification');
@@ -326,14 +210,7 @@ async function sendEmailNotification(options) {
                 to: to,
                 subject: subject,
                 body: text,
-                htmlBody: html,
-                useRequestTemplate: !!useRequestTemplate,
-                requestTitle: requestTitle,
-                requestSubtitle: requestSubtitle,
-                requestDetails: requestDetails,
-                requestActions: requestActions,
-                requestFooterText: requestFooterText,
-                requestFooterNote: requestFooterNote
+                htmlBody: html
             }),
             headers: { 'Content-Type': 'text/plain' }
         });
@@ -358,7 +235,7 @@ async function sendEmailNotification(options) {
  * @param {Object} supabase - Supabase client
  * @param {Object} requestData - { type, employeeName, details, requestId }
  */
-async function sendRequestNotificationEmail(supabase, requestData, baseUrl) {
+async function sendRequestNotificationEmail(supabase, requestData) {
     const settings = await getNotificationSettings(supabase);
     
     if (!settings.enabled || settings.emails.length === 0) {
@@ -393,40 +270,25 @@ async function sendRequestNotificationEmail(supabase, requestData, baseUrl) {
 نظام الموارد البشرية
     `.trim();
     
-    const requestDetails = Array.isArray(requestData.requestDetails)
-        ? requestData.requestDetails
-        : [
-            { label: 'نوع الطلب', value: typeLabel },
-            { label: 'الموظف', value: employeeName },
-            ...(requestId ? [{ label: 'معرف الطلب', value: requestId }] : []),
-            ...(details ? [{ label: 'التفاصيل', value: details }] : [])
-        ];
-
-    const supportedTypes = new Set(['leave', 'site', 'allowance', 'device']);
-    let requestActions = Array.isArray(requestData.requestActions) ? requestData.requestActions : null;
-
-    if (!requestActions && supportedTypes.has(type) && requestId && baseUrl) {
-        const exp = Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60); // 7 days
-        const approveUrl = buildEmailRequestDecisionLink(baseUrl, { type, requestId, decision: 'approve', exp });
-        const rejectUrl = buildEmailRequestDecisionLink(baseUrl, { type, requestId, decision: 'reject', exp });
-
-        requestActions = [
-            { label: 'موافقة (Approve)', url: approveUrl, variant: 'approve' },
-            { label: 'رفض (Reject)', url: rejectUrl, variant: 'reject' }
-        ];
-    }
-
+    const html = `
+<div dir="rtl" style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f8fafc; border-radius: 10px;">
+    <h2 style="color: #4f46e5; margin-bottom: 20px;">📬 ${typeLabel} جديد</h2>
+    <div style="background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+        <p style="margin: 10px 0; font-size: 16px;"><strong>الموظف:</strong> ${employeeName}</p>
+        <p style="margin: 10px 0; font-size: 16px;"><strong>التفاصيل:</strong> ${details}</p>
+        <p style="margin: 10px 0; font-size: 14px; color: #64748b;"><strong>معرف الطلب:</strong> ${requestId || 'N/A'}</p>
+    </div>
+    <p style="color: #64748b; font-size: 14px;">يرجى مراجعة الطلب في لوحة تحكم HR.</p>
+    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;">
+    <p style="color: #94a3b8; font-size: 12px; text-align: center;">نظام الموارد البشرية - إشعار تلقائي</p>
+</div>
+    `.trim();
+    
     return await sendEmailNotification({
         to: settings.emails,
         subject,
         text,
-        useRequestTemplate: true,
-        requestTitle: typeLabel,
-        requestSubtitle: `مقدم من الموظف: ${employeeName}`,
-        requestDetails: requestDetails,
-        requestActions: requestActions || undefined,
-        requestFooterText: 'هذا الرابط مخصص للاستخدام مرة واحدة فقط.',
-        requestFooterNote: `نظام الموارد البشرية والتقارير الذكية © ${new Date().getFullYear()}`
+        html
     });
 }
 
@@ -524,7 +386,7 @@ async function verifyDeviceForAttendance(supabase, userId, deviceId, deviceInfo)
 /**
  * Create a device change request
  */
-async function createDeviceChangeRequest(supabase, userId, userName, oldDeviceId, newDeviceInfo, reason, baseUrl) {
+async function createDeviceChangeRequest(supabase, userId, userName, oldDeviceId, newDeviceInfo, reason) {
     try {
         // Check if there's already a pending request for this user
         const { data: existingRequest } = await supabase
@@ -579,7 +441,7 @@ async function createDeviceChangeRequest(supabase, userId, userName, oldDeviceId
             employeeName: userName,
             details: `الجهاز الجديد: ${newDeviceInfo.deviceModel || 'Unknown'} (${newDeviceInfo.osType || 'Unknown'})${reason ? ' - السبب: ' + reason : ''}`,
             requestId: requestId
-        }, baseUrl);
+        });
         
         return { success: true, message: 'تم إرسال طلب تغيير الجهاز بنجاح' };
     } catch (error) {
@@ -762,443 +624,6 @@ export default async function handler(req, res) {
          }
  
          const action = data.action;
-         const baseUrl = getPublicBaseUrl(req);
-
-         if (action === "emailRequestDecision") {
-             res.setHeader('Content-Type', 'text/html; charset=utf-8');
-             res.setHeader('Cache-Control', 'no-store');
-
-             const type = normalizeString(Array.isArray(data.type) ? data.type[0] : data.type).toLowerCase();
-             const requestId = normalizeString(Array.isArray(data.requestId) ? data.requestId[0] : data.requestId);
-             const decision = normalizeEmailDecision(Array.isArray(data.decision) ? data.decision[0] : data.decision);
-             const expRaw = Array.isArray(data.exp) ? data.exp[0] : data.exp;
-             const exp = parseInt(String(expRaw || '').trim(), 10);
-             const sig = normalizeString(Array.isArray(data.sig) ? data.sig[0] : data.sig);
-
-             if (!type || !requestId || !decision || !exp || !sig) {
-                 return res.status(400).send(renderEmailDecisionResultPage({
-                     status: 'error',
-                     title: 'الرابط غير صالح',
-                     message: 'بيانات الرابط غير مكتملة.'
-                 }));
-             }
-
-             const now = Math.floor(Date.now() / 1000);
-             if (exp < now) {
-                 return res.status(410).send(renderEmailDecisionResultPage({
-                     status: 'expired',
-                     title: 'انتهت صلاحية الرابط',
-                     message: 'هذا الرابط منتهي الصلاحية.'
-                 }));
-             }
-
-             const expectedSig = buildEmailActionSignature({ type, requestId, decision, exp });
-             if (!safeTimingEqual(sig, expectedSig)) {
-                 return res.status(403).send(renderEmailDecisionResultPage({
-                     status: 'error',
-                     title: 'الرابط غير صالح',
-                     message: 'فشل التحقق من الرابط.'
-                 }));
-             }
-
-             try {
-                 const actorName = 'Email';
-                 const processedAt = new Date().toISOString();
-
-                 if (type === 'leave') {
-                     const { data: reqRow, error: reqErr } = await supabase
-                         .from('leaveRequests')
-                         .select('*')
-                         .eq('id', requestId)
-                         .single();
-
-                     if (reqErr || !reqRow) {
-                         return res.status(404).send(renderEmailDecisionResultPage({
-                             status: 'error',
-                             title: 'الطلب غير موجود',
-                             message: 'تعذر العثور على طلب الإجازة.'
-                         }));
-                     }
-
-                     if (String(reqRow.status || '') !== 'pending') {
-                         return res.status(409).send(renderEmailDecisionResultPage({
-                             status: 'error',
-                             title: 'تمت معالجة الطلب مسبقاً',
-                             message: 'هذا الطلب تمت معالجته بالفعل.'
-                         }));
-                     }
-
-                     if (decision === 'approve') {
-                         const { error: updErr } = await supabase
-                             .from('leaveRequests')
-                             .update({ status: 'approved', approvedAt: processedAt, approvedBy: actorName })
-                             .eq('id', requestId);
-                         if (updErr) throw updErr;
-
-                         await supabase.from('notifications').insert([{
-                             id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
-                             userId: reqRow.employeeId,
-                             title: 'تمت الموافقة على إجازتك',
-                             message: `تمت الموافقة على طلب إجازتك بتاريخ ${reqRow.leaveDate}`,
-                             type: 'leave_approved',
-                             relatedId: requestId,
-                             isRead: false,
-                             createdAt: processedAt
-                         }]);
-
-                         syncToGoogleSheet({ action: 'approveLeaveRequest', id: requestId, approvedBy: actorName });
-
-                         return res.status(200).send(renderEmailDecisionResultPage({
-                             status: 'success',
-                             title: 'تمت الموافقة على الطلب',
-                             message: 'تم تنفيذ الموافقة بنجاح.'
-                         }));
-                     }
-
-                     const { error: rejErr } = await supabase
-                         .from('leaveRequests')
-                         .update({ status: 'rejected', rejectionReason: '' })
-                         .eq('id', requestId);
-                     if (rejErr) throw rejErr;
-
-                     await supabase.from('notifications').insert([{
-                         id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
-                         userId: reqRow.employeeId,
-                         title: 'تم رفض طلب إجازتك',
-                         message: `تم رفض طلب إجازتك بتاريخ ${reqRow.leaveDate}`,
-                         type: 'leave_rejected',
-                         relatedId: requestId,
-                         isRead: false,
-                         createdAt: processedAt
-                     }]);
-
-                     syncToGoogleSheet({ action: 'rejectLeaveRequest', id: requestId, rejectionReason: '' });
-
-                     return res.status(200).send(renderEmailDecisionResultPage({
-                         status: 'success',
-                         title: 'تم رفض الطلب',
-                         message: 'تم تنفيذ الرفض بنجاح.'
-                     }));
-                 }
-
-                 if (type === 'site') {
-                     const { data: reqRow, error: reqErr } = await supabase
-                         .from('siteRequests')
-                         .select('*')
-                         .eq('id', requestId)
-                         .single();
-
-                     if (reqErr || !reqRow) {
-                         return res.status(404).send(renderEmailDecisionResultPage({
-                             status: 'error',
-                             title: 'الطلب غير موجود',
-                             message: 'تعذر العثور على طلب الموقع.'
-                         }));
-                     }
-
-                     if (String(reqRow.status || '') !== 'pending') {
-                         return res.status(409).send(renderEmailDecisionResultPage({
-                             status: 'error',
-                             title: 'تمت معالجة الطلب مسبقاً',
-                             message: 'هذا الطلب تمت معالجته بالفعل.'
-                         }));
-                     }
-
-                     if (decision === 'approve') {
-                         const finalStatus = 'approved';
-                         const transportPrice = reqRow.transportPrice || 120;
-                         const radius = reqRow.tempRadius || 100;
-
-                         const { error: updErr } = await supabase.from('siteRequests')
-                             .update({
-                                 status: finalStatus,
-                                 approvedAt: processedAt,
-                                 transportPrice: transportPrice,
-                                 tempRadius: radius
-                             })
-                             .eq('id', requestId);
-                         if (updErr) throw updErr;
-
-                         const sitePayload = {
-                             id: String(Math.floor(10000 + Math.random() * 90000)),
-                             name: reqRow.suggestedName,
-                             latitude: reqRow.latitude,
-                             longitude: reqRow.longitude,
-                             radius: radius,
-                             transportPrice: transportPrice,
-                             mapLink: reqRow.mapLink,
-                             isTemporary: false
-                         };
-                         const { error: siteErr } = await supabase.from('sites').insert([sitePayload]);
-                         if (siteErr) throw siteErr;
-
-                         await supabase.from('notifications').insert([{
-                             id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
-                             userId: reqRow.employeeId,
-                             title: 'تمت الموافقة على موقعك',
-                             message: `تمت الموافقة على طلب تسجيل الموقع: ${reqRow.suggestedName} بشكل دائم`,
-                             type: 'site_approved',
-                             relatedId: requestId,
-                             isRead: false,
-                             createdAt: processedAt
-                         }]);
-
-                         syncToGoogleSheet({
-                             action: 'approveSiteRequest',
-                             id: requestId,
-                             mode: 'always',
-                             name: reqRow.suggestedName,
-                             transportPrice: transportPrice,
-                             radius: radius,
-                             mapLink: reqRow.mapLink
-                         });
-
-                         return res.status(200).send(renderEmailDecisionResultPage({
-                             status: 'success',
-                             title: 'تمت الموافقة على الطلب',
-                             message: 'تمت الموافقة على طلب الموقع بنجاح.'
-                         }));
-                     }
-
-                     const { error: rejErr } = await supabase.from('siteRequests').update({ status: 'rejected' }).eq('id', requestId);
-                     if (rejErr) throw rejErr;
-
-                     await supabase.from('notifications').insert([{
-                         id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
-                         userId: reqRow.employeeId,
-                         title: 'تم رفض طلب موقعك',
-                         message: `تم رفض طلب تسجيل الموقع: ${reqRow.suggestedName}`,
-                         type: 'site_rejected',
-                         relatedId: requestId,
-                         isRead: false,
-                         createdAt: processedAt
-                     }]);
-
-                     syncToGoogleSheet({ action: 'rejectSiteRequest', id: requestId });
-
-                     return res.status(200).send(renderEmailDecisionResultPage({
-                         status: 'success',
-                         title: 'تم رفض الطلب',
-                         message: 'تم رفض طلب الموقع بنجاح.'
-                     }));
-                 }
-
-                 if (type === 'allowance') {
-                     const status = (decision === 'approve') ? 'approved' : 'rejected';
-
-                     const { data: reqRow, error: reqErr } = await supabase
-                         .from('allowanceRequests')
-                         .select('*')
-                         .eq('id', requestId)
-                         .single();
-
-                     if (reqErr || !reqRow) {
-                         return res.status(404).send(renderEmailDecisionResultPage({
-                             status: 'error',
-                             title: 'الطلب غير موجود',
-                             message: 'تعذر العثور على طلب البدلات.'
-                         }));
-                     }
-
-                     if (String(reqRow.status || '') !== 'pending') {
-                         return res.status(409).send(renderEmailDecisionResultPage({
-                             status: 'error',
-                             title: 'تمت معالجة الطلب مسبقاً',
-                             message: 'هذا الطلب تمت معالجته بالفعل.'
-                         }));
-                     }
-
-                     if (status === 'approved') {
-                         const { data: attData, error: attErr } = await supabase
-                             .from('attendance')
-                             .select('transportPrice')
-                             .eq('id', reqRow.attendanceId)
-                             .single();
-
-                         if (attErr || !attData) {
-                             return res.status(500).send(renderEmailDecisionResultPage({
-                                 status: 'error',
-                                 title: 'فشل تنفيذ العملية',
-                                 message: 'سجل الحضور المرتبط بالطلب غير موجود.'
-                             }));
-                         }
-
-                         const newPrice = parseFloat(attData.transportPrice || 0) + parseFloat(reqRow.amount || 0);
-                         const { error: updAttErr } = await supabase
-                             .from('attendance')
-                             .update({ transportPrice: newPrice })
-                             .eq('id', reqRow.attendanceId);
-
-                         if (updAttErr) throw updAttErr;
-                     }
-
-                     const { error: updReqErr } = await supabase
-                         .from('allowanceRequests')
-                         .update({ status: status, adminNote: '' })
-                         .eq('id', requestId);
-
-                     if (updReqErr) throw updReqErr;
-
-                     await supabase.from('approvalLogs').insert([{
-                         requestId: requestId,
-                         adminId: actorName,
-                         adminName: actorName,
-                         action: status,
-                         details: status === 'approved' ? 'تمت الموافقة على الطلب' : 'تم رفض الطلب',
-                         timestamp: processedAt
-                     }]);
-
-                     const notifTitle = status === 'approved' ? 'تمت الموافقة على طلب زيادة البدلات' : 'تم رفض طلب زيادة البدلات';
-                     const notifMessage = status === 'approved'
-                         ? `تمت الموافقة على طلب زيادة البدلات بمبلغ ${reqRow.amount} ج.م`
-                         : `تم رفض طلب زيادة البدلات بمبلغ ${reqRow.amount} ج.م`;
-
-                     await supabase.from('notifications').insert([{
-                         id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
-                         userId: reqRow.employeeId,
-                         title: notifTitle,
-                         message: notifMessage,
-                         type: status === 'approved' ? 'allowance_approved' : 'allowance_rejected',
-                         relatedId: requestId,
-                         isRead: false,
-                         createdAt: processedAt
-                     }]);
-
-                     syncToGoogleSheet({
-                         action: 'handleAllowanceRequest',
-                         requestId: requestId,
-                         status: status,
-                         adminId: actorName,
-                         adminName: actorName,
-                         adminNote: ''
-                     });
-
-                     return res.status(200).send(renderEmailDecisionResultPage({
-                         status: 'success',
-                         title: status === 'approved' ? 'تمت الموافقة على الطلب' : 'تم رفض الطلب',
-                         message: 'تم تنفيذ العملية بنجاح.'
-                     }));
-                 }
-
-                 if (type === 'device') {
-                     if (decision === 'approve') {
-                         const { data: request, error: reqError } = await supabase
-                             .from('device_change_requests')
-                             .select('*')
-                             .eq('id', requestId)
-                             .single();
-
-                         if (reqError || !request) {
-                             return res.status(404).send(renderEmailDecisionResultPage({
-                                 status: 'error',
-                                 title: 'الطلب غير موجود',
-                                 message: 'تعذر العثور على طلب تغيير الجهاز.'
-                             }));
-                         }
-
-                         if (String(request.status || '') !== 'pending') {
-                             return res.status(409).send(renderEmailDecisionResultPage({
-                                 status: 'error',
-                                 title: 'تمت معالجة الطلب مسبقاً',
-                                 message: 'هذا الطلب تمت معالجته بالفعل.'
-                             }));
-                         }
-
-                         if (request.old_device_id) {
-                             await supabase
-                                 .from('devices')
-                                 .update({ is_active: false, updated_at: processedAt })
-                                 .eq('user_id', request.user_id)
-                                 .eq('device_id', request.old_device_id);
-                         }
-
-                         await supabase
-                             .from('devices')
-                             .update({ is_active: false, updated_at: processedAt })
-                             .eq('user_id', request.user_id)
-                             .eq('is_active', true);
-
-                         const { error: upsertError } = await supabase
-                             .from('devices')
-                             .upsert({
-                                 user_id: request.user_id,
-                                 device_id: request.new_device_id,
-                                 device_model: request.new_device_model || 'Unknown',
-                                 os_type: request.new_os_type || 'Unknown',
-                                 browser_info: request.new_browser_info || 'Unknown',
-                                 is_active: true,
-                                 updated_at: processedAt
-                             }, { onConflict: 'user_id,device_id' });
-
-                         if (upsertError) throw upsertError;
-
-                         const { error: updateError } = await supabase
-                             .from('device_change_requests')
-                             .update({ status: 'approved', processed_at: processedAt, processed_by: actorName })
-                             .eq('id', requestId);
-
-                         if (updateError) throw updateError;
-
-                         syncToGoogleSheet({ action: 'approveDeviceChangeRequest', requestId: requestId, adminId: actorName, adminName: actorName });
-
-                         return res.status(200).send(renderEmailDecisionResultPage({
-                             status: 'success',
-                             title: 'تمت الموافقة على الطلب',
-                             message: 'تمت الموافقة على طلب تغيير الجهاز بنجاح.'
-                         }));
-                     }
-
-                     const { data: request, error: reqError } = await supabase
-                         .from('device_change_requests')
-                         .select('*')
-                         .eq('id', requestId)
-                         .single();
-
-                     if (reqError || !request) {
-                         return res.status(404).send(renderEmailDecisionResultPage({
-                             status: 'error',
-                             title: 'الطلب غير موجود',
-                             message: 'تعذر العثور على طلب تغيير الجهاز.'
-                         }));
-                     }
-
-                     if (String(request.status || '') !== 'pending') {
-                         return res.status(409).send(renderEmailDecisionResultPage({
-                             status: 'error',
-                             title: 'تمت معالجة الطلب مسبقاً',
-                             message: 'هذا الطلب تمت معالجته بالفعل.'
-                         }));
-                     }
-
-                     const { error: rejErr } = await supabase
-                         .from('device_change_requests')
-                         .update({ status: 'rejected', admin_note: '', processed_at: processedAt, processed_by: actorName })
-                         .eq('id', requestId);
-                     if (rejErr) throw rejErr;
-
-                     syncToGoogleSheet({ action: 'rejectDeviceChangeRequest', requestId: requestId, adminNote: '', adminId: actorName, adminName: actorName });
-
-                     return res.status(200).send(renderEmailDecisionResultPage({
-                         status: 'success',
-                         title: 'تم رفض الطلب',
-                         message: 'تم رفض طلب تغيير الجهاز بنجاح.'
-                     }));
-                 }
-
-                 return res.status(400).send(renderEmailDecisionResultPage({
-                     status: 'error',
-                     title: 'نوع طلب غير مدعوم',
-                     message: 'هذا النوع غير مدعوم عبر البريد.'
-                 }));
-             } catch (error) {
-                 console.error('emailRequestDecision error:', error);
-                 return res.status(500).send(renderEmailDecisionResultPage({
-                     status: 'error',
-                     title: 'فشل تنفيذ العملية',
-                     message: error?.message || 'حدث خطأ غير متوقع.'
-                 }));
-             }
-         }
 
         // DUAL WRITING / BACKUP SYNC:
         // For writing actions, we asynchronously broadcast the exact request to your existing Google Apps Script
@@ -2017,7 +1442,7 @@ if (action === "updateEmployee") {
                 employeeName: data.employeeName,
                 details: `اسم الموقع المقترح: ${data.suggestedName}${data.note ? ' - ملاحظة: ' + data.note : ''}`,
                 requestId: payload.id
-            }, baseUrl);
+            });
             
             return res.status(200).json({ 
                 success: true, 
@@ -2158,7 +1583,7 @@ if (action === "updateEmployee") {
                 employeeName: data.employeeName,
                 details: `مبلغ الزيادة: ${data.amount} ج.م - الموقع: ${data.siteName}${data.note ? ' - ملاحظة: ' + data.note : ''}`,
                 requestId: payload.id || data.id
-            }, baseUrl);
+            });
             
             return res.status(200).json({ success: true, message: "تم إرسال طلب زيادة البدلات بنجاح" });
         }
@@ -2316,7 +1741,7 @@ if (action === "updateEmployee") {
                 employeeName,
                 details: `تاريخ الإجازة: ${leaveDate} - السبب: ${reason}`,
                 requestId: payload.id
-            }, baseUrl);
+            });
             
             return res.status(200).json({ success: true, message: "تم إرسال طلب الإجازة بنجاح للمراجعة" });
         }
@@ -2643,8 +2068,7 @@ if (action === "updateEmployee") {
                 employeeName, 
                 currentDeviceId, 
                 newDeviceInfo, 
-                reason,
-                baseUrl
+                reason
             );
             
             return res.status(200).json(result);
