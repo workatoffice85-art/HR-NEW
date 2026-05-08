@@ -1365,13 +1365,126 @@ function doPost(e) {
        }
     }
 
+    function escapeHtml_(value) {
+      return String(value === null || value === undefined ? "" : value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function toArray_(value) {
+      if (!value) return [];
+      if (Object.prototype.toString.call(value) === "[object Array]") return value;
+      if (typeof value === "string") {
+        try {
+          var parsed = JSON.parse(value);
+          if (Object.prototype.toString.call(parsed) === "[object Array]") return parsed;
+        } catch (e) {}
+      }
+      return [];
+    }
+
+    function generateRequestEmailTemplate_(payload) {
+      var title = payload.requestTitle || "طلب";
+      var subtitle = payload.requestSubtitle || "";
+
+      var details = toArray_(payload.requestDetails);
+      var actions = toArray_(payload.requestActions);
+
+      var footerText = payload.requestFooterText || "";
+      var footerNote = payload.requestFooterNote || "";
+
+      var detailsRows = "";
+      for (var i = 0; i < details.length; i++) {
+        var item = details[i] || {};
+        var label = escapeHtml_(item.label || "");
+        var value = escapeHtml_(item.value || "");
+        if (!label && !value) continue;
+        detailsRows += (
+          "<tr>" +
+            "<td style=\"padding:12px 14px; color:#475569; font-weight:600; border-bottom:1px solid #e2e8f0; width:38%;\">" + label + "</td>" +
+            "<td style=\"padding:12px 14px; color:#0f172a; font-weight:700; border-bottom:1px solid #e2e8f0;\">" + value + "</td>" +
+          "</tr>"
+        );
+      }
+
+      if (!detailsRows) {
+        detailsRows = (
+          "<tr><td style=\"padding:12px 14px; color:#475569; font-weight:600; border-bottom:1px solid #e2e8f0;\">تفاصيل</td>" +
+          "<td style=\"padding:12px 14px; color:#0f172a; font-weight:700; border-bottom:1px solid #e2e8f0;\">-</td></tr>"
+        );
+      }
+
+      var actionsHtml = "";
+      if (actions.length) {
+        var btns = "";
+        for (var j = 0; j < actions.length; j++) {
+          var a = actions[j] || {};
+          var labelText = escapeHtml_(a.label || "");
+          var url = String(a.url || "").trim();
+          if (!labelText || !url) continue;
+          var variant = String(a.variant || "").toLowerCase();
+          var bg = (variant === "reject") ? "#ef4444" : (variant === "approve") ? "#22c55e" : "#0ea5e9";
+          btns += (
+            "<a href=\"" + escapeHtml_(url) + "\" " +
+              "style=\"display:inline-block; min-width:160px; text-align:center; padding:12px 16px; margin:0 6px; " +
+                     "background:" + bg + "; color:#ffffff; text-decoration:none; border-radius:10px; " +
+                     "font-weight:800; font-size:16px;\">" +
+              labelText +
+            "</a>"
+          );
+        }
+        if (btns) {
+          actionsHtml =
+            "<div style=\"text-align:center; padding:18px 0 8px;\">" +
+              btns +
+            "</div>";
+        }
+      }
+
+      var footerTextHtml = footerText ? ("<div style=\"color:#64748b; font-size:13px; text-align:center; padding-top:14px;\">" + escapeHtml_(footerText) + "</div>") : "";
+      var footerNoteHtml = footerNote ? ("<div style=\"color:#94a3b8; font-size:12px; text-align:center; padding-top:10px;\">" + escapeHtml_(footerNote) + "</div>") : "";
+
+      return (
+        "<!doctype html>" +
+        "<html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"></head>" +
+        "<body style=\"margin:0; padding:0; background:#f1f5f9;\">" +
+          "<div style=\"max-width:640px; margin:0 auto; padding:18px;\">" +
+            "<div dir=\"rtl\" style=\"font-family: Arial, sans-serif; border-radius:16px; overflow:hidden; background:#ffffff; box-shadow:0 10px 30px rgba(15,23,42,0.08);\">" +
+              "<div style=\"background:#4f46e5; color:#ffffff; padding:26px 22px; text-align:center;\">" +
+                "<div style=\"font-size:26px; font-weight:900; letter-spacing:0.2px;\">" + escapeHtml_(title) + "</div>" +
+                (subtitle ? ("<div style=\"font-size:14px; opacity:0.9; padding-top:6px;\">" + escapeHtml_(subtitle) + "</div>") : "") +
+              "</div>" +
+              "<div style=\"padding:18px 18px 10px;\">" +
+                "<div style=\"background:#f8fafc; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden;\">" +
+                  "<table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" style=\"border-collapse:collapse; direction:rtl; text-align:right;\">" +
+                    detailsRows +
+                  "</table>" +
+                "</div>" +
+                actionsHtml +
+                footerTextHtml +
+                "<div style=\"border-top:1px solid #e2e8f0; margin:16px 0 0;\"></div>" +
+                footerNoteHtml +
+              "</div>" +
+            "</div>" +
+          "</div>" +
+        "</body></html>"
+      );
+    }
+
     // SEND NOTIFICATION EMAIL (for request notifications)
     if (action === "sendNotificationEmail") {
        var toEmails = data.to || [];
        var subject = data.subject || "إشعار من نظام الموارد البشرية";
        var body = data.body || "";
        var htmlBody = data.htmlBody || "";
-       
+       var useRequestTemplate = data.useRequestTemplate === true || String(data.useRequestTemplate || "").toLowerCase() === "true";
+       if (useRequestTemplate) {
+         htmlBody = generateRequestEmailTemplate_(data);
+       }
+        
        if (!toEmails || toEmails.length === 0) {
            return json({ success: false, message: "No recipients" });
        }
