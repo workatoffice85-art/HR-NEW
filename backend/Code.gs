@@ -1246,6 +1246,67 @@ function doGet(e) {
 /////////////////////////////
 // 🔥 POST API
 /////////////////////////////
+function escapeHtml(value) {
+  return String(value === null || value === undefined ? "" : value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function buildRequestNotificationEmailTemplate(options) {
+  var opts = options || {};
+  var title = escapeHtml(opts.title || "طلب جديد");
+  var subtitle = escapeHtml(opts.subtitle || "");
+  var intro = escapeHtml(opts.intro || "");
+  var details = opts.details || [];
+  var approveUrl = String(opts.approveUrl || "").trim();
+  var rejectUrl = String(opts.rejectUrl || "").trim();
+  var approveLabel = escapeHtml(opts.approveLabel || "موافقة (Approve)");
+  var rejectLabel = escapeHtml(opts.rejectLabel || "رفض (Reject)");
+  var footerNote = escapeHtml(opts.footerNote || "هذا الرابط مخصص للاستخدام مرة واحدة فقط.");
+
+  var detailsHtml = details.map(function(item) {
+    var label = escapeHtml(item.label || "");
+    var value = escapeHtml(item.value || "-");
+    return '' +
+      '<div style="padding:14px 0;border-bottom:1px solid #eef2ff;">' +
+        '<div style="font-size:13px;color:#64748b;margin-bottom:6px;">' + label + '</div>' +
+        '<div style="font-size:16px;color:#0f172a;font-weight:700;">' + value + '</div>' +
+      '</div>';
+  }).join("");
+
+  var actionsHtml = "";
+  if (approveUrl || rejectUrl) {
+    actionsHtml = '<div style="text-align:center;margin-top:26px;">';
+    if (approveUrl) {
+      actionsHtml += '<a href="' + escapeHtml(approveUrl) + '" style="display:inline-block;background:#10b981;color:#ffffff;text-decoration:none;padding:12px 26px;border-radius:10px;font-weight:700;margin:0 6px;">' + approveLabel + '</a>';
+    }
+    if (rejectUrl) {
+      actionsHtml += '<a href="' + escapeHtml(rejectUrl) + '" style="display:inline-block;background:#ef4444;color:#ffffff;text-decoration:none;padding:12px 26px;border-radius:10px;font-weight:700;margin:0 6px;">' + rejectLabel + '</a>';
+    }
+    actionsHtml += '</div>';
+  }
+
+  return '' +
+    '<div dir="rtl" style="margin:0;padding:24px;background:#e5e7eb;font-family:Tajawal,Segoe UI,Tahoma,sans-serif;">' +
+      '<div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #dbeafe;">' +
+        '<div style="background:linear-gradient(135deg,#4f46e5,#4338ca);padding:34px 24px;text-align:center;color:#ffffff;">' +
+          '<h2 style="margin:0 0 10px 0;font-size:33px;line-height:1.2;">' + title + '</h2>' +
+          (subtitle ? '<div style="font-size:15px;opacity:0.95;">' + subtitle + '</div>' : '') +
+        '</div>' +
+        '<div style="padding:24px;">' +
+          (intro ? '<div style="font-size:18px;color:#1e1b4b;margin-bottom:16px;">' + intro + '</div>' : '') +
+          '<div style="border:1px solid #e2e8f0;border-radius:14px;padding:0 18px;background:#f8fafc;">' + detailsHtml + '</div>' +
+          actionsHtml +
+          '<div style="text-align:center;margin-top:26px;color:#64748b;font-size:13px;">' + footerNote + '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="max-width:640px;margin:12px auto 0 auto;text-align:center;color:#6b7280;font-size:13px;">نظام الموارد البشرية والتقارير الذكية © 2026</div>' +
+    '</div>';
+}
+
 function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
@@ -1371,6 +1432,26 @@ function doPost(e) {
        var subject = data.subject || "إشعار من نظام الموارد البشرية";
        var body = data.body || "";
        var htmlBody = data.htmlBody || "";
+       var shouldUseRequestTemplate = !!(
+         data.useRequestTemplate ||
+         (data.requestDetails && data.requestDetails.length) ||
+         data.approveUrl ||
+         data.rejectUrl
+       );
+
+       if (shouldUseRequestTemplate) {
+         htmlBody = buildRequestNotificationEmailTemplate({
+           title: data.requestTitle || subject,
+           subtitle: data.requestSubtitle || body,
+           intro: data.requestIntro || "",
+           details: data.requestDetails || [],
+           approveUrl: data.approveUrl || "",
+           rejectUrl: data.rejectUrl || "",
+           approveLabel: data.approveLabel || "موافقة (Approve)",
+           rejectLabel: data.rejectLabel || "رفض (Reject)",
+           footerNote: data.footerNote || "هذا الرابط مخصص للاستخدام مرة واحدة فقط."
+         });
+       }
        
        if (!toEmails || toEmails.length === 0) {
            return json({ success: false, message: "No recipients" });

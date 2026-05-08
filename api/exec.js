@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js';
+﻿import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -190,19 +190,19 @@ async function getNotificationSettings(supabase) {
  * @param {Object} options - { to, subject, html, text }
  */
 async function sendEmailNotification(options) {
-    const { to, subject, html, text } = options;
-    
+    const {
+        to, subject, html, text,
+        useRequestTemplate, requestTitle, requestSubtitle, requestIntro, requestDetails,
+        approveUrl, rejectUrl, approveLabel, rejectLabel, footerNote
+    } = options;
     if (!to || to.length === 0) {
         console.log('No recipients for email notification');
         return { success: false, message: 'No recipients' };
     }
-    
-    console.log('📧 EMAIL NOTIFICATION:');
+    console.log('EMAIL NOTIFICATION:');
     console.log('To:', to.join(', '));
     console.log('Subject:', subject);
-    
     try {
-        // Use Google Script to send email via GmailApp (same as OTP)
         const response = await fetch(GOOGLE_SCRIPT_URL, {
             method: 'POST',
             body: JSON.stringify({
@@ -210,15 +210,23 @@ async function sendEmailNotification(options) {
                 to: to,
                 subject: subject,
                 body: text,
-                htmlBody: html
+                htmlBody: html,
+                useRequestTemplate: !!useRequestTemplate,
+                requestTitle: requestTitle || subject,
+                requestSubtitle: requestSubtitle || '',
+                requestIntro: requestIntro || '',
+                requestDetails: Array.isArray(requestDetails) ? requestDetails : [],
+                approveUrl: approveUrl || '',
+                rejectUrl: rejectUrl || '',
+                approveLabel: approveLabel || 'Approve',
+                rejectLabel: rejectLabel || 'Reject',
+                footerNote: footerNote || 'This link is intended for one-time use only.'
             }),
             headers: { 'Content-Type': 'text/plain' }
         });
-        
         const result = await response.json();
-        
         if (result.success) {
-            console.log('✅ Email sent successfully via GmailApp');
+            console.log('Email sent successfully via GmailApp');
             return { success: true, message: 'Email sent via GmailApp' };
         } else {
             console.error('Failed to send email:', result.message);
@@ -237,58 +245,40 @@ async function sendEmailNotification(options) {
  */
 async function sendRequestNotificationEmail(supabase, requestData) {
     const settings = await getNotificationSettings(supabase);
-    
     if (!settings.enabled || settings.emails.length === 0) {
         console.log('Request email notifications disabled or no emails configured');
         return { success: false, message: 'Notifications disabled' };
     }
-    
     const { type, employeeName, details, requestId } = requestData;
-    
     const typeLabels = {
-        'leave': 'طلب إجازة',
-        'site': 'طلب تسجيل موقع',
-        'allowance': 'طلب زيادة بدلات',
-        'device': 'طلب تغيير جهاز'
+        leave: 'Leave Request',
+        site: 'Site Request',
+        allowance: 'Allowance Request',
+        device: 'Device Change Request'
     };
-    
-    const typeLabel = typeLabels[type] || 'طلب جديد';
-    const subject = `نظام الموارد البشرية - ${typeLabel} من ${employeeName}`;
-    
-    const text = `
-مرحباً،
-
-تم استلام ${typeLabel} جديد في نظام الموارد البشرية.
-
-الموظف: ${employeeName}
-التفاصيل: ${details}
-
-معرف الطلب: ${requestId || 'N/A'}
-
-يرجى مراجعة الطلب في لوحة تحكم HR.
-
-نظام الموارد البشرية
-    `.trim();
-    
-    const html = `
-<div dir="rtl" style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f8fafc; border-radius: 10px;">
-    <h2 style="color: #4f46e5; margin-bottom: 20px;">📬 ${typeLabel} جديد</h2>
-    <div style="background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-        <p style="margin: 10px 0; font-size: 16px;"><strong>الموظف:</strong> ${employeeName}</p>
-        <p style="margin: 10px 0; font-size: 16px;"><strong>التفاصيل:</strong> ${details}</p>
-        <p style="margin: 10px 0; font-size: 14px; color: #64748b;"><strong>معرف الطلب:</strong> ${requestId || 'N/A'}</p>
-    </div>
-    <p style="color: #64748b; font-size: 14px;">يرجى مراجعة الطلب في لوحة تحكم HR.</p>
-    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;">
-    <p style="color: #94a3b8; font-size: 12px; text-align: center;">نظام الموارد البشرية - إشعار تلقائي</p>
-</div>
-    `.trim();
-    
+    const typeLabel = typeLabels[type] || 'New Request';
+    const subject = `HR System - ${typeLabel} from ${employeeName || '-'}`;
+    const text = [
+        `A new ${typeLabel} has been received in HR System.`,
+        `Employee: ${employeeName || '-'}`,
+        `Details: ${details || '-'}`,
+        `Request ID: ${requestId || 'N/A'}`
+    ].join('\n');
+    const requestDetails = [
+        { label: 'Employee', value: employeeName || '-' },
+        { label: 'Request Type', value: typeLabel },
+        { label: 'Details', value: details || '-' },
+        { label: 'Request ID', value: requestId || 'N/A' }
+    ];
     return await sendEmailNotification({
         to: settings.emails,
         subject,
         text,
-        html
+        html: '',
+        useRequestTemplate: true,
+        requestTitle: typeLabel,
+        requestSubtitle: `Submitted by employee: ${employeeName || '-'}`,
+        requestDetails
     });
 }
 
@@ -316,7 +306,7 @@ async function verifyDeviceForAttendance(supabase, userId, deviceId, deviceInfo)
         
         if (devicesError) {
             console.error('Device verification error:', devicesError);
-            return { allowed: false, message: 'خطأ في التحقق من الجهاز', deviceRegistered: false };
+            return { allowed: false, message: 'Ø®Ø·Ø£ ÙÙŠ Ø§Ù„ØªØ­Ù‚Ù‚ Ù…Ù† Ø§Ù„Ø¬Ù‡Ø§Ø²', deviceRegistered: false };
         }
         
         // 2. No device registered - this is the first time
@@ -337,7 +327,7 @@ async function verifyDeviceForAttendance(supabase, userId, deviceId, deviceInfo)
             
             if (insertError) {
                 console.error('Device registration error:', insertError);
-                return { allowed: false, message: 'فشل تسجيل الجهاز', deviceRegistered: false };
+                return { allowed: false, message: 'ÙØ´Ù„ ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø¬Ù‡Ø§Ø²', deviceRegistered: false };
             }
             
             return { allowed: true, deviceRegistered: true, isNewDevice: true };
@@ -363,7 +353,7 @@ async function verifyDeviceForAttendance(supabase, userId, deviceId, deviceInfo)
         if (pendingRequest) {
             return { 
                 allowed: false, 
-                message: 'طلب تغيير الجهاز قيد المراجعة. يرجى الانتظار موافقة الإدارة.',
+                message: 'Ø·Ù„Ø¨ ØªØºÙŠÙŠØ± Ø§Ù„Ø¬Ù‡Ø§Ø² Ù‚ÙŠØ¯ Ø§Ù„Ù…Ø±Ø§Ø¬Ø¹Ø©. ÙŠØ±Ø¬Ù‰ Ø§Ù„Ø§Ù†ØªØ¸Ø§Ø± Ù…ÙˆØ§ÙÙ‚Ø© Ø§Ù„Ø¥Ø¯Ø§Ø±Ø©.',
                 deviceRegistered: true,
                 hasPendingRequest: true
             };
@@ -372,14 +362,14 @@ async function verifyDeviceForAttendance(supabase, userId, deviceId, deviceInfo)
         // 5. Device doesn't match and no pending request - reject
         return { 
             allowed: false, 
-            message: 'الجهاز غير معتمد. يرجى طلب تغيير الجهاز من الإدارة.',
+            message: 'Ø§Ù„Ø¬Ù‡Ø§Ø² ØºÙŠØ± Ù…Ø¹ØªÙ…Ø¯. ÙŠØ±Ø¬Ù‰ Ø·Ù„Ø¨ ØªØºÙŠÙŠØ± Ø§Ù„Ø¬Ù‡Ø§Ø² Ù…Ù† Ø§Ù„Ø¥Ø¯Ø§Ø±Ø©.',
             deviceRegistered: true,
             registeredDeviceId: userDevices[0]?.device_id
         };
         
     } catch (error) {
         console.error('Device verification exception:', error);
-        return { allowed: false, message: 'خطأ في التحقق من الجهاز', deviceRegistered: false };
+        return { allowed: false, message: 'Ø®Ø·Ø£ ÙÙŠ Ø§Ù„ØªØ­Ù‚Ù‚ Ù…Ù† Ø§Ù„Ø¬Ù‡Ø§Ø²', deviceRegistered: false };
     }
 }
 
@@ -397,7 +387,7 @@ async function createDeviceChangeRequest(supabase, userId, userName, oldDeviceId
             .maybeSingle();
         
         if (existingRequest) {
-            return { success: false, message: 'لديك طلب تغيير جهاز قيد المراجعة بالفعل' };
+            return { success: false, message: 'Ù„Ø¯ÙŠÙƒ Ø·Ù„Ø¨ ØªØºÙŠÙŠØ± Ø¬Ù‡Ø§Ø² Ù‚ÙŠØ¯ Ø§Ù„Ù…Ø±Ø§Ø¬Ø¹Ø© Ø¨Ø§Ù„ÙØ¹Ù„' };
         }
         
         const requestId = "DEV" + Math.floor(10000 + Math.random() * 90000);
@@ -420,15 +410,15 @@ async function createDeviceChangeRequest(supabase, userId, userName, oldDeviceId
         
         if (error) {
             console.error('Create device change request error:', error);
-            return { success: false, message: 'فشل إنشاء طلب تغيير الجهاز' };
+            return { success: false, message: 'ÙØ´Ù„ Ø¥Ù†Ø´Ø§Ø¡ Ø·Ù„Ø¨ ØªØºÙŠÙŠØ± Ø§Ù„Ø¬Ù‡Ø§Ø²' };
         }
         
         // Create notification for HR
         await supabase.from('notifications').insert([{
             id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
             userRole: 'hr',
-            title: 'طلب تغيير جهاز جديد',
-            message: `قام الموظف ${userName} بطلب تغيير جهاز`,
+            title: 'Ø·Ù„Ø¨ ØªØºÙŠÙŠØ± Ø¬Ù‡Ø§Ø² Ø¬Ø¯ÙŠØ¯',
+            message: `Ù‚Ø§Ù… Ø§Ù„Ù…ÙˆØ¸Ù ${userName} Ø¨Ø·Ù„Ø¨ ØªØºÙŠÙŠØ± Ø¬Ù‡Ø§Ø²`,
             type: 'device_change_request',
             relatedId: requestId,
             isRead: false,
@@ -439,14 +429,14 @@ async function createDeviceChangeRequest(supabase, userId, userName, oldDeviceId
         await sendRequestNotificationEmail(supabase, {
             type: 'device',
             employeeName: userName,
-            details: `الجهاز الجديد: ${newDeviceInfo.deviceModel || 'Unknown'} (${newDeviceInfo.osType || 'Unknown'})${reason ? ' - السبب: ' + reason : ''}`,
+            details: `Ø§Ù„Ø¬Ù‡Ø§Ø² Ø§Ù„Ø¬Ø¯ÙŠØ¯: ${newDeviceInfo.deviceModel || 'Unknown'} (${newDeviceInfo.osType || 'Unknown'})${reason ? ' - Ø§Ù„Ø³Ø¨Ø¨: ' + reason : ''}`,
             requestId: requestId
         });
         
-        return { success: true, message: 'تم إرسال طلب تغيير الجهاز بنجاح' };
+        return { success: true, message: 'ØªÙ… Ø¥Ø±Ø³Ø§Ù„ Ø·Ù„Ø¨ ØªØºÙŠÙŠØ± Ø§Ù„Ø¬Ù‡Ø§Ø² Ø¨Ù†Ø¬Ø§Ø­' };
     } catch (error) {
         console.error('Create device change request exception:', error);
-        return { success: false, message: 'حدث خطأ أثناء إنشاء الطلب' };
+        return { success: false, message: 'Ø­Ø¯Ø« Ø®Ø·Ø£ Ø£Ø«Ù†Ø§Ø¡ Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ø·Ù„Ø¨' };
     }
 }
 
@@ -684,7 +674,7 @@ if (action === "login") {
                  }
              }
              const users = Array.from(usersById.values());
-             if (users.length === 0) throw new Error("بيانات الدخول غير صحيحة");
+             if (users.length === 0) throw new Error("Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø¯Ø®ÙˆÙ„ ØºÙŠØ± ØµØ­ÙŠØ­Ø©");
              
              // Enhanced password verification with hashing support
              let validUser = null;
@@ -709,13 +699,13 @@ if (action === "login") {
              }
              
              const user = validUser;
-             if (!user) throw new Error("كلمة المرور غير صحيحة");
+             if (!user) throw new Error("ÙƒÙ„Ù…Ø© Ø§Ù„Ù…Ø±ÙˆØ± ØºÙŠØ± ØµØ­ÙŠØ­Ø©");
              if (role && normalizeString(user.role).toLowerCase() !== role) {
-                 throw new Error("لا تملك صلاحية الدخول");
+                 throw new Error("Ù„Ø§ ØªÙ…Ù„Ùƒ ØµÙ„Ø§Ø­ÙŠØ© Ø§Ù„Ø¯Ø®ÙˆÙ„");
              }
             return res.status(200).json({
                 success: true,
-                message: "تم تسجيل الدخول بنجاح",
+                message: "ØªÙ… ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø¯Ø®ÙˆÙ„ Ø¨Ù†Ø¬Ø§Ø­",
                 data: {
                     id: user.id,
                     name: user.name,
@@ -849,7 +839,7 @@ if (action === "login") {
             if (!deviceId) {
                 return res.status(200).json({ 
                     success: false, 
-                    message: "مطلوب معرف الجهاز (Device ID) للتسجيل" 
+                    message: "Ù…Ø·Ù„ÙˆØ¨ Ù…Ø¹Ø±Ù Ø§Ù„Ø¬Ù‡Ø§Ø² (Device ID) Ù„Ù„ØªØ³Ø¬ÙŠÙ„" 
                 });
             }
             
@@ -887,7 +877,7 @@ if (action === "login") {
                 const todayDate = new Date(data.checkIn).toDateString();
 
                 if (openDate !== todayDate) {
-                    // Session from a previous day — mark as 'no_checkout' but preserve 'overtime' status for weekend/holiday work
+                    // Session from a previous day â€” mark as 'no_checkout' but preserve 'overtime' status for weekend/holiday work
                     const eod = new Date(openSession.checkIn);
                     eod.setHours(23, 59, 59, 999);
                     // Preserve overtime status if it was a weekend/holiday work day, otherwise mark as no_checkout
@@ -896,18 +886,18 @@ if (action === "login") {
                         .update({ checkOut: eod.toISOString(), totalHours: 0, status: preservedStatus })
                         .eq('id', openSession.id);
                 } else {
-                    // Same-day open session — block and return openSessionId for frontend
+                    // Same-day open session â€” block and return openSessionId for frontend
                     return res.status(200).json({
                         success: false,
                         openSession: true,
                         openSessionId: openSession.id,
-                        message: "لديك عملية حضور مفتوحة بالفعل. يرجى تسجيل الانصراف أولاً."
+                        message: "Ù„Ø¯ÙŠÙƒ Ø¹Ù…Ù„ÙŠØ© Ø­Ø¶ÙˆØ± Ù…ÙØªÙˆØ­Ø© Ø¨Ø§Ù„ÙØ¹Ù„. ÙŠØ±Ø¬Ù‰ ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø§Ù†ØµØ±Ø§Ù Ø£ÙˆÙ„Ø§Ù‹."
                     });
                 }
             }
 
             // 0.5 Duplicate Timestamp Prevention (Race Condition Protection)
-            // Check if there's any record within ±60 seconds window to catch concurrent requests
+            // Check if there's any record within Â±60 seconds window to catch concurrent requests
             const clientCheckIn = new Date(data.checkIn);
             const sixtySecondsAgo = new Date(clientCheckIn.getTime() - 60000);
             const sixtySecondsAhead = new Date(clientCheckIn.getTime() + 60000);
@@ -923,7 +913,7 @@ if (action === "login") {
                 return res.status(200).json({
                     success: false,
                     duplicateEntry: true,
-                    message: "تم تسجيل الحضور بالفعل في نفس اللحظة. لا يمكن تكرار العملية."
+                    message: "ØªÙ… ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø­Ø¶ÙˆØ± Ø¨Ø§Ù„ÙØ¹Ù„ ÙÙŠ Ù†ÙØ³ Ø§Ù„Ù„Ø­Ø¸Ø©. Ù„Ø§ ÙŠÙ…ÙƒÙ† ØªÙƒØ±Ø§Ø± Ø§Ù„Ø¹Ù…Ù„ÙŠØ©."
                 });
             }
 
@@ -933,7 +923,7 @@ if (action === "login") {
             const rateLimitNow = getCairoTime(new Date());
             const thirtySecondsAgo = new Date(rateLimitNow.getTime() - 30000);
             
-            console.log('🚨 Rate Limit Debug:', {
+            console.log('ðŸš¨ Rate Limit Debug:', {
                 serverTime: new Date().toISOString(),
                 cairoTime: rateLimitNow.toISOString(),
                 thirtySecondsAgo: thirtySecondsAgo.toISOString(),
@@ -947,14 +937,14 @@ if (action === "login") {
                 .order('checkIn', { ascending: false })
                 .limit(1);
 
-            console.log('🚨 Recent records found:', anyRecentRecord?.length || 0);
+            console.log('ðŸš¨ Recent records found:', anyRecentRecord?.length || 0);
             
             if (anyRecentRecord && anyRecentRecord.length > 0) {
                 const lastRecordTime = new Date(anyRecentRecord[0].checkIn);
                 const secondsElapsed = Math.floor((rateLimitNow - lastRecordTime) / 1000);
                 const secondsRemaining = 30 - secondsElapsed;
                 
-                console.log('🚨 Last record:', {
+                console.log('ðŸš¨ Last record:', {
                     checkIn: anyRecentRecord[0].checkIn,
                     parsedTime: lastRecordTime.toISOString(),
                     secondsElapsed,
@@ -964,7 +954,7 @@ if (action === "login") {
                 return res.status(200).json({
                     success: false,
                     duplicateEntry: true,
-                    message: `تم تسجيل حضور منذ ${secondsElapsed} ثانية. يرجى الانتظار ${Math.max(0, secondsRemaining)} ثانية أخرى قبل إعادة المحاولة.`
+                    message: `ØªÙ… ØªØ³Ø¬ÙŠÙ„ Ø­Ø¶ÙˆØ± Ù…Ù†Ø° ${secondsElapsed} Ø«Ø§Ù†ÙŠØ©. ÙŠØ±Ø¬Ù‰ Ø§Ù„Ø§Ù†ØªØ¸Ø§Ø± ${Math.max(0, secondsRemaining)} Ø«Ø§Ù†ÙŠØ© Ø£Ø®Ø±Ù‰ Ù‚Ø¨Ù„ Ø¥Ø¹Ø§Ø¯Ø© Ø§Ù„Ù…Ø­Ø§ÙˆÙ„Ø©.`
                 });
             }
 
@@ -974,7 +964,7 @@ if (action === "login") {
             
             // REJECT if no biometric data provided (password/PIN not allowed)
             if (!data.biometricData && !data.faceDescriptor) {
-                throw new Error("⚠️ مطلوب بصمة للتسجيل - لا يُسمح باستخدام PIN أو كلمة المرور للحضور");
+                throw new Error("âš ï¸ Ù…Ø·Ù„ÙˆØ¨ Ø¨ØµÙ…Ø© Ù„Ù„ØªØ³Ø¬ÙŠÙ„ - Ù„Ø§ ÙŠÙØ³Ù…Ø­ Ø¨Ø§Ø³ØªØ®Ø¯Ø§Ù… PIN Ø£Ùˆ ÙƒÙ„Ù…Ø© Ø§Ù„Ù…Ø±ÙˆØ± Ù„Ù„Ø­Ø¶ÙˆØ±");
             }
             
             // Verify employee has biometric registered
@@ -984,13 +974,13 @@ if (action === "login") {
                 .maybeSingle();
             
             if (!empBioData) {
-                throw new Error("⚠️ لم يتم تسجيل بصمة لهذا الموظف - يرجى التواصل مع HR");
+                throw new Error("âš ï¸ Ù„Ù… ÙŠØªÙ… ØªØ³Ø¬ÙŠÙ„ Ø¨ØµÙ…Ø© Ù„Ù‡Ø°Ø§ Ø§Ù„Ù…ÙˆØ¸Ù - ÙŠØ±Ø¬Ù‰ Ø§Ù„ØªÙˆØ§ØµÙ„ Ù…Ø¹ HR");
             }
             
             // Check if employee has ANY biometric registered (face, fingerprint, or Face ID)
             const hasBiometric = empBioData.biometricData || empBioData.faceDescriptor;
             if (!hasBiometric) {
-                throw new Error("⚠️ لم يتم تسجيل بصمة لهذا الموظف - يرجى التواصل مع HR لتسجيل الوجه أو البصمة");
+                throw new Error("âš ï¸ Ù„Ù… ÙŠØªÙ… ØªØ³Ø¬ÙŠÙ„ Ø¨ØµÙ…Ø© Ù„Ù‡Ø°Ø§ Ø§Ù„Ù…ÙˆØ¸Ù - ÙŠØ±Ø¬Ù‰ Ø§Ù„ØªÙˆØ§ØµÙ„ Ù…Ø¹ HR Ù„ØªØ³Ø¬ÙŠÙ„ Ø§Ù„ÙˆØ¬Ù‡ Ø£Ùˆ Ø§Ù„Ø¨ØµÙ…Ø©");
             }
 
             // 2. Check Location logic
@@ -1040,7 +1030,7 @@ if (action === "login") {
                 }
             }
 
-            if (!matchedSite) throw new Error("أنت خارج نطاق جميع مواقع العمل المسجلة");
+            if (!matchedSite) throw new Error("Ø£Ù†Øª Ø®Ø§Ø±Ø¬ Ù†Ø·Ø§Ù‚ Ø¬Ù…ÙŠØ¹ Ù…ÙˆØ§Ù‚Ø¹ Ø§Ù„Ø¹Ù…Ù„ Ø§Ù„Ù…Ø³Ø¬Ù„Ø©");
 
             // Calculate status using SERVER-SIDE Cairo time (authoritative source)
             const serverNow = new Date();
@@ -1112,7 +1102,7 @@ if (action === "login") {
             // Sync to Google Sheets with actual server-generated data
             syncToGoogleSheet({ action: 'addAttendance', ...payload });
 
-            return res.status(200).json({ success: true, message: "تم تسجيل الحضور بنجاح" });
+            return res.status(200).json({ success: true, message: "ØªÙ… ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø­Ø¶ÙˆØ± Ø¨Ù†Ø¬Ø§Ø­" });
         }
 
         // --- CHECK OUT ---
@@ -1120,7 +1110,7 @@ if (action === "login") {
             // 0. Biometric/PIN Check - BLOCK password-only authentication
             // Must have biometric data (face, fingerprint, or Face ID) - NO PIN/password fallback
             if (!data.biometricData && !data.faceDescriptor) {
-                throw new Error("⚠️ مطلوب بصمة للتسجيل - لا يُسمح باستخدام PIN أو كلمة المرور للانصراف");
+                throw new Error("âš ï¸ Ù…Ø·Ù„ÙˆØ¨ Ø¨ØµÙ…Ø© Ù„Ù„ØªØ³Ø¬ÙŠÙ„ - Ù„Ø§ ÙŠÙØ³Ù…Ø­ Ø¨Ø§Ø³ØªØ®Ø¯Ø§Ù… PIN Ø£Ùˆ ÙƒÙ„Ù…Ø© Ø§Ù„Ù…Ø±ÙˆØ± Ù„Ù„Ø§Ù†ØµØ±Ø§Ù");
             }
             
             // Verify employee has biometric registered
@@ -1130,13 +1120,13 @@ if (action === "login") {
                 .maybeSingle();
             
             if (!empBioData) {
-                throw new Error("⚠️ لم يتم تسجيل بصمة لهذا الموظف - يرجى التواصل مع HR");
+                throw new Error("âš ï¸ Ù„Ù… ÙŠØªÙ… ØªØ³Ø¬ÙŠÙ„ Ø¨ØµÙ…Ø© Ù„Ù‡Ø°Ø§ Ø§Ù„Ù…ÙˆØ¸Ù - ÙŠØ±Ø¬Ù‰ Ø§Ù„ØªÙˆØ§ØµÙ„ Ù…Ø¹ HR");
             }
             
             // Check if employee has ANY biometric registered (face, fingerprint, or Face ID)
             const hasBiometric = empBioData.biometricData || empBioData.faceDescriptor;
             if (!hasBiometric) {
-                throw new Error("⚠️ لم يتم تسجيل بصمة لهذا الموظف - يرجى التواصل مع HR لتسجيل الوجه أو البصمة");
+                throw new Error("âš ï¸ Ù„Ù… ÙŠØªÙ… ØªØ³Ø¬ÙŠÙ„ Ø¨ØµÙ…Ø© Ù„Ù‡Ø°Ø§ Ø§Ù„Ù…ÙˆØ¸Ù - ÙŠØ±Ø¬Ù‰ Ø§Ù„ØªÙˆØ§ØµÙ„ Ù…Ø¹ HR Ù„ØªØ³Ø¬ÙŠÙ„ Ø§Ù„ÙˆØ¬Ù‡ Ø£Ùˆ Ø§Ù„Ø¨ØµÙ…Ø©");
             }
 
             // Support checkout by specific ID (for force-close) or latest open session
@@ -1160,7 +1150,7 @@ if (action === "login") {
                 errExist = result.error;
             }
             
-            if (errExist || !existing || existing.length === 0) throw new Error("لا يوجد عملية حضور مفتوحة لنسجل الانصراف");
+            if (errExist || !existing || existing.length === 0) throw new Error("Ù„Ø§ ÙŠÙˆØ¬Ø¯ Ø¹Ù…Ù„ÙŠØ© Ø­Ø¶ÙˆØ± Ù…ÙØªÙˆØ­Ø© Ù„Ù†Ø³Ø¬Ù„ Ø§Ù„Ø§Ù†ØµØ±Ø§Ù");
 
             const checkIn = new Date(existing[0].checkIn);
             // Use SERVER-SIDE Cairo time as authoritative checkout timestamp
@@ -1181,7 +1171,7 @@ if (action === "login") {
                     .update({ checkOut: eod.toISOString(), totalHours: 0, status: preservedStatus })
                     .eq('id', existing[0].id);
                 
-                throw new Error("لا يمكن تسجيل الانصراف في يوم مختلف عن يوم الحضور. تم تحديث السجل كـ 'لم يتم الانصراف'. يرجى تسجيل الحضور مرة أخرى لبدء يوم جديد.");
+                throw new Error("Ù„Ø§ ÙŠÙ…ÙƒÙ† ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø§Ù†ØµØ±Ø§Ù ÙÙŠ ÙŠÙˆÙ… Ù…Ø®ØªÙ„Ù Ø¹Ù† ÙŠÙˆÙ… Ø§Ù„Ø­Ø¶ÙˆØ±. ØªÙ… ØªØ­Ø¯ÙŠØ« Ø§Ù„Ø³Ø¬Ù„ ÙƒÙ€ 'Ù„Ù… ÙŠØªÙ… Ø§Ù„Ø§Ù†ØµØ±Ø§Ù'. ÙŠØ±Ø¬Ù‰ ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø­Ø¶ÙˆØ± Ù…Ø±Ø© Ø£Ø®Ø±Ù‰ Ù„Ø¨Ø¯Ø¡ ÙŠÙˆÙ… Ø¬Ø¯ÙŠØ¯.");
             }
 
             let totalHours = 0;
@@ -1207,7 +1197,7 @@ if (action === "login") {
                 totalHours: totalHours
             });
 
-            return res.status(200).json({ success: true, message: "تم تسجيل الانصراف بنجاح" });
+            return res.status(200).json({ success: true, message: "ØªÙ… ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ø§Ù†ØµØ±Ø§Ù Ø¨Ù†Ø¬Ø§Ø­" });
         }
 
         // --- EMPLOYEE MGMT ---
@@ -1269,7 +1259,7 @@ if (action === "saveEmployee") {
              }
              
              invalidateCache('employees');
-             return res.status(200).json({ success: true, message: "تمت إضافة الموظف بنجاح" });
+             return res.status(200).json({ success: true, message: "ØªÙ…Øª Ø¥Ø¶Ø§ÙØ© Ø§Ù„Ù…ÙˆØ¸Ù Ø¨Ù†Ø¬Ø§Ø­" });
          }
 
 if (action === "updateEmployee") {
@@ -1314,14 +1304,14 @@ if (action === "updateEmployee") {
              }
              
              invalidateCache('employees');
-             return res.status(200).json({ success: true, message: "تم تحديث بيانات الموظف بنجاح" });
+             return res.status(200).json({ success: true, message: "ØªÙ… ØªØ­Ø¯ÙŠØ« Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ù…ÙˆØ¸Ù Ø¨Ù†Ø¬Ø§Ø­" });
          }
 
         if (action === "deleteEmployee") {
             const { error } = await supabase.from('employees').delete().eq('id', data.id);
             if (error) throw error;
             invalidateCache('employees');
-            return res.status(200).json({ success: true, message: "تم حذف الموظف بنجاح" });
+            return res.status(200).json({ success: true, message: "ØªÙ… Ø­Ø°Ù Ø§Ù„Ù…ÙˆØ¸Ù Ø¨Ù†Ø¬Ø§Ø­" });
         }
 
         // --- SITE MGMT ---
@@ -1349,7 +1339,7 @@ if (action === "updateEmployee") {
             const { error } = await supabase.from('sites').insert([payload]);
             if (error) throw error;
             invalidateCache('sites');
-            return res.status(200).json({ success: true, message: "تمت إضافة الموقع بنجاح" });
+            return res.status(200).json({ success: true, message: "ØªÙ…Øª Ø¥Ø¶Ø§ÙØ© Ø§Ù„Ù…ÙˆÙ‚Ø¹ Ø¨Ù†Ø¬Ø§Ø­" });
         }
 
         if (action === "updateSite") {
@@ -1363,14 +1353,14 @@ if (action === "updateEmployee") {
             const { error } = await supabase.from('sites').update(payload).eq('id', data.id);
             if (error) throw error;
             invalidateCache('sites');
-            return res.status(200).json({ success: true, message: "تم تحديث بيانات الموقع بنجاح" });
+            return res.status(200).json({ success: true, message: "ØªÙ… ØªØ­Ø¯ÙŠØ« Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ù…ÙˆÙ‚Ø¹ Ø¨Ù†Ø¬Ø§Ø­" });
         }
 
         if (action === "deleteSite") {
             const { error } = await supabase.from('sites').delete().eq('id', data.id);
             if (error) throw error;
             invalidateCache('sites');
-            return res.status(200).json({ success: true, message: "تم حذف الموقع بنجاح" });
+            return res.status(200).json({ success: true, message: "ØªÙ… Ø­Ø°Ù Ø§Ù„Ù…ÙˆÙ‚Ø¹ Ø¨Ù†Ø¬Ø§Ø­" });
         }
 
         // --- SITE REQUESTS ---
@@ -1428,8 +1418,8 @@ if (action === "updateEmployee") {
             await supabase.from('notifications').insert([{
                 id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
                 userRole: 'hr',
-                title: 'طلب موقع جديد',
-                message: `قام الموظف ${data.employeeName} بطلب تسجيل موقع: ${data.suggestedName}`,
+                title: 'Ø·Ù„Ø¨ Ù…ÙˆÙ‚Ø¹ Ø¬Ø¯ÙŠØ¯',
+                message: `Ù‚Ø§Ù… Ø§Ù„Ù…ÙˆØ¸Ù ${data.employeeName} Ø¨Ø·Ù„Ø¨ ØªØ³Ø¬ÙŠÙ„ Ù…ÙˆÙ‚Ø¹: ${data.suggestedName}`,
                 type: 'site_request',
                 relatedId: payload.id,
                 isRead: false,
@@ -1440,13 +1430,13 @@ if (action === "updateEmployee") {
             await sendRequestNotificationEmail(supabase, {
                 type: 'site',
                 employeeName: data.employeeName,
-                details: `اسم الموقع المقترح: ${data.suggestedName}${data.note ? ' - ملاحظة: ' + data.note : ''}`,
+                details: `Ø§Ø³Ù… Ø§Ù„Ù…ÙˆÙ‚Ø¹ Ø§Ù„Ù…Ù‚ØªØ±Ø­: ${data.suggestedName}${data.note ? ' - Ù…Ù„Ø§Ø­Ø¸Ø©: ' + data.note : ''}`,
                 requestId: payload.id
             });
             
             return res.status(200).json({ 
                 success: true, 
-                message: "تم إرسال طلب الموقع بنجاح. سيتم تفعيل الموافقة التلقائية خلال دقيقتين إذا كنت في الموقع." 
+                message: "ØªÙ… Ø¥Ø±Ø³Ø§Ù„ Ø·Ù„Ø¨ Ø§Ù„Ù…ÙˆÙ‚Ø¹ Ø¨Ù†Ø¬Ø§Ø­. Ø³ÙŠØªÙ… ØªÙØ¹ÙŠÙ„ Ø§Ù„Ù…ÙˆØ§ÙÙ‚Ø© Ø§Ù„ØªÙ„Ù‚Ø§Ø¦ÙŠØ© Ø®Ù„Ø§Ù„ Ø¯Ù‚ÙŠÙ‚ØªÙŠÙ† Ø¥Ø°Ø§ ÙƒÙ†Øª ÙÙŠ Ø§Ù„Ù…ÙˆÙ‚Ø¹." 
             });
         }
 
@@ -1455,7 +1445,7 @@ if (action === "updateEmployee") {
             
             // 1. Update Request table
             const { data: reqData, error: errFetch } = await supabase.from('siteRequests').select('*').eq('id', id).single();
-            if (errFetch || !reqData) throw new Error("الطلب غير موجود");
+            if (errFetch || !reqData) throw new Error("Ø§Ù„Ø·Ù„Ø¨ ØºÙŠØ± Ù…ÙˆØ¬ÙˆØ¯");
 
             const finalStatus = (mode === 'daily' || mode === 'today') ? 'approved_today' : 'approved';
             const { error: errReq } = await supabase.from('siteRequests')
@@ -1484,19 +1474,19 @@ if (action === "updateEmployee") {
             if (errSite) throw errSite;
             
             // Notify employee
-            const approvalType = isTemp ? 'لليوم فقط' : 'بشكل دائم';
+            const approvalType = isTemp ? 'Ù„Ù„ÙŠÙˆÙ… ÙÙ‚Ø·' : 'Ø¨Ø´ÙƒÙ„ Ø¯Ø§Ø¦Ù…';
             await supabase.from('notifications').insert([{
                 id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
                 userId: reqData.employeeId,
-                title: 'تمت الموافقة على موقعك',
-                message: `تمت الموافقة على طلب تسجيل الموقع: ${name || reqData.suggestedName} ${approvalType}`,
+                title: 'ØªÙ…Øª Ø§Ù„Ù…ÙˆØ§ÙÙ‚Ø© Ø¹Ù„Ù‰ Ù…ÙˆÙ‚Ø¹Ùƒ',
+                message: `ØªÙ…Øª Ø§Ù„Ù…ÙˆØ§ÙÙ‚Ø© Ø¹Ù„Ù‰ Ø·Ù„Ø¨ ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ù…ÙˆÙ‚Ø¹: ${name || reqData.suggestedName} ${approvalType}`,
                 type: 'site_approved',
                 relatedId: id,
                 isRead: false,
                 createdAt: new Date().toISOString()
             }]);
             
-            return res.status(200).json({ success: true, message: "تمت الموافقة على الطلب بنجاح" });
+            return res.status(200).json({ success: true, message: "ØªÙ…Øª Ø§Ù„Ù…ÙˆØ§ÙÙ‚Ø© Ø¹Ù„Ù‰ Ø§Ù„Ø·Ù„Ø¨ Ø¨Ù†Ø¬Ø§Ø­" });
         }
 
         if (action === "rejectSiteRequest") {
@@ -1511,8 +1501,8 @@ if (action === "updateEmployee") {
                 await supabase.from('notifications').insert([{
                     id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
                     userId: reqData.employeeId,
-                    title: 'تم رفض طلب موقعك',
-                    message: `تم رفض طلب تسجيل الموقع: ${reqData.suggestedName}`,
+                    title: 'ØªÙ… Ø±ÙØ¶ Ø·Ù„Ø¨ Ù…ÙˆÙ‚Ø¹Ùƒ',
+                    message: `ØªÙ… Ø±ÙØ¶ Ø·Ù„Ø¨ ØªØ³Ø¬ÙŠÙ„ Ø§Ù„Ù…ÙˆÙ‚Ø¹: ${reqData.suggestedName}`,
                     type: 'site_rejected',
                     relatedId: data.id,
                     isRead: false,
@@ -1520,7 +1510,7 @@ if (action === "updateEmployee") {
                 }]);
             }
             
-            return res.status(200).json({ success: true, message: "تم رفض الطلب بنجاح" });
+            return res.status(200).json({ success: true, message: "ØªÙ… Ø±ÙØ¶ Ø§Ù„Ø·Ù„Ø¨ Ø¨Ù†Ø¬Ø§Ø­" });
         }
 
         if (action === "clearProcessedRequests") {
@@ -1532,7 +1522,7 @@ if (action === "updateEmployee") {
                 .select();
             if (error) throw error;
             const count = deletedData ? deletedData.length : 0;
-            return res.status(200).json({ success: true, message: `تم مسح ${count} طلب منتهي بنجاح` });
+            return res.status(200).json({ success: true, message: `ØªÙ… Ù…Ø³Ø­ ${count} Ø·Ù„Ø¨ Ù…Ù†ØªÙ‡ÙŠ Ø¨Ù†Ø¬Ø§Ø­` });
         }
 
         // --- ALLOWANCE UPGRADE SYSTEM ---
@@ -1569,8 +1559,8 @@ if (action === "updateEmployee") {
             await supabase.from('notifications').insert([{
                 id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
                 userRole: 'hr',
-                title: 'طلب زيادة بدلات جديد',
-                message: `قام الموظف ${data.employeeName} بطلب زيادة بدلات بمبلغ ${data.amount} ج.م`,
+                title: 'Ø·Ù„Ø¨ Ø²ÙŠØ§Ø¯Ø© Ø¨Ø¯Ù„Ø§Øª Ø¬Ø¯ÙŠØ¯',
+                message: `Ù‚Ø§Ù… Ø§Ù„Ù…ÙˆØ¸Ù ${data.employeeName} Ø¨Ø·Ù„Ø¨ Ø²ÙŠØ§Ø¯Ø© Ø¨Ø¯Ù„Ø§Øª Ø¨Ù…Ø¨Ù„Øº ${data.amount} Ø¬.Ù…`,
                 type: 'allowance_request',
                 relatedId: payload.id || data.id,
                 isRead: false,
@@ -1581,11 +1571,11 @@ if (action === "updateEmployee") {
             await sendRequestNotificationEmail(supabase, {
                 type: 'allowance',
                 employeeName: data.employeeName,
-                details: `مبلغ الزيادة: ${data.amount} ج.م - الموقع: ${data.siteName}${data.note ? ' - ملاحظة: ' + data.note : ''}`,
+                details: `Ù…Ø¨Ù„Øº Ø§Ù„Ø²ÙŠØ§Ø¯Ø©: ${data.amount} Ø¬.Ù… - Ø§Ù„Ù…ÙˆÙ‚Ø¹: ${data.siteName}${data.note ? ' - Ù…Ù„Ø§Ø­Ø¸Ø©: ' + data.note : ''}`,
                 requestId: payload.id || data.id
             });
             
-            return res.status(200).json({ success: true, message: "تم إرسال طلب زيادة البدلات بنجاح" });
+            return res.status(200).json({ success: true, message: "ØªÙ… Ø¥Ø±Ø³Ø§Ù„ Ø·Ù„Ø¨ Ø²ÙŠØ§Ø¯Ø© Ø§Ù„Ø¨Ø¯Ù„Ø§Øª Ø¨Ù†Ø¬Ø§Ø­" });
         }
 
         if (action === "getAllowanceRequests") {
@@ -1606,8 +1596,8 @@ if (action === "updateEmployee") {
                 .eq('id', requestId)
                 .single();
             
-            if (errReq || !reqData) throw new Error("الطلب غير موجود");
-            if (reqData.status !== 'pending') throw new Error("تمت معالجة هذا الطلب مسبقاً");
+            if (errReq || !reqData) throw new Error("Ø§Ù„Ø·Ù„Ø¨ ØºÙŠØ± Ù…ÙˆØ¬ÙˆØ¯");
+            if (reqData.status !== 'pending') throw new Error("ØªÙ…Øª Ù…Ø¹Ø§Ù„Ø¬Ø© Ù‡Ø°Ø§ Ø§Ù„Ø·Ù„Ø¨ Ù…Ø³Ø¨Ù‚Ø§Ù‹");
 
             if (status === 'approved') {
                 // 2. Fetch current attendance record
@@ -1617,7 +1607,7 @@ if (action === "updateEmployee") {
                     .eq('id', reqData.attendanceId)
                     .single();
                 
-                if (errAtt || !attData) throw new Error("سجل الحضور المرتبط بالطلب غير موجود");
+                if (errAtt || !attData) throw new Error("Ø³Ø¬Ù„ Ø§Ù„Ø­Ø¶ÙˆØ± Ø§Ù„Ù…Ø±ØªØ¨Ø· Ø¨Ø§Ù„Ø·Ù„Ø¨ ØºÙŠØ± Ù…ÙˆØ¬ÙˆØ¯");
 
                 const newPrice = parseFloat(attData.transportPrice || 0) + parseFloat(reqData.amount);
 
@@ -1647,15 +1637,15 @@ if (action === "updateEmployee") {
                 adminId: adminId,
                 adminName: adminName,
                 action: status,
-                details: adminNote || (status === 'approved' ? 'تمت الموافقة على الطلب' : 'تم رفض الطلب'),
+                details: adminNote || (status === 'approved' ? 'ØªÙ…Øª Ø§Ù„Ù…ÙˆØ§ÙÙ‚Ø© Ø¹Ù„Ù‰ Ø§Ù„Ø·Ù„Ø¨' : 'ØªÙ… Ø±ÙØ¶ Ø§Ù„Ø·Ù„Ø¨'),
                 timestamp: new Date().toISOString()
             }]);
             
             // 6. Notify employee
-            const notifTitle = status === 'approved' ? 'تمت الموافقة على طلب زيادة البدلات' : 'تم رفض طلب زيادة البدلات';
+            const notifTitle = status === 'approved' ? 'ØªÙ…Øª Ø§Ù„Ù…ÙˆØ§ÙÙ‚Ø© Ø¹Ù„Ù‰ Ø·Ù„Ø¨ Ø²ÙŠØ§Ø¯Ø© Ø§Ù„Ø¨Ø¯Ù„Ø§Øª' : 'ØªÙ… Ø±ÙØ¶ Ø·Ù„Ø¨ Ø²ÙŠØ§Ø¯Ø© Ø§Ù„Ø¨Ø¯Ù„Ø§Øª';
             const notifMessage = status === 'approved' 
-                ? `تمت الموافقة على طلب زيادة البدلات بمبلغ ${reqData.amount} ج.م`
-                : `تم رفض طلب زيادة البدلات بمبلغ ${reqData.amount} ج.م${adminNote ? `. السبب: ${adminNote}` : ''}`;
+                ? `ØªÙ…Øª Ø§Ù„Ù…ÙˆØ§ÙÙ‚Ø© Ø¹Ù„Ù‰ Ø·Ù„Ø¨ Ø²ÙŠØ§Ø¯Ø© Ø§Ù„Ø¨Ø¯Ù„Ø§Øª Ø¨Ù…Ø¨Ù„Øº ${reqData.amount} Ø¬.Ù…`
+                : `ØªÙ… Ø±ÙØ¶ Ø·Ù„Ø¨ Ø²ÙŠØ§Ø¯Ø© Ø§Ù„Ø¨Ø¯Ù„Ø§Øª Ø¨Ù…Ø¨Ù„Øº ${reqData.amount} Ø¬.Ù…${adminNote ? `. Ø§Ù„Ø³Ø¨Ø¨: ${adminNote}` : ''}`;
             
             await supabase.from('notifications').insert([{
                 id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
@@ -1670,7 +1660,7 @@ if (action === "updateEmployee") {
 
             return res.status(200).json({ 
                 success: true, 
-                message: status === 'approved' ? "تمت الموافقة وتحديث البدلات بنجاح" : "تم رفض الطلب" 
+                message: status === 'approved' ? "ØªÙ…Øª Ø§Ù„Ù…ÙˆØ§ÙÙ‚Ø© ÙˆØªØ­Ø¯ÙŠØ« Ø§Ù„Ø¨Ø¯Ù„Ø§Øª Ø¨Ù†Ø¬Ø§Ø­" : "ØªÙ… Ø±ÙØ¶ Ø§Ù„Ø·Ù„Ø¨" 
             });
         }
 
@@ -1683,15 +1673,15 @@ if (action === "updateEmployee") {
                 .select();
             if (error) throw error;
             const count = deletedData ? deletedData.length : 0;
-            return res.status(200).json({ success: true, message: `تم مسح ${count} طلب بدلات منتهي بنجاح` });
+            return res.status(200).json({ success: true, message: `ØªÙ… Ù…Ø³Ø­ ${count} Ø·Ù„Ø¨ Ø¨Ø¯Ù„Ø§Øª Ù…Ù†ØªÙ‡ÙŠ Ø¨Ù†Ø¬Ø§Ø­` });
         }
 
         // --- LEAVE REQUESTS ---
         if (action === "addLeaveRequest") {
             const { employeeId, employeeName, leaveDate, reason } = data;
             
-            if (!leaveDate) return res.status(200).json({ success: false, message: "تاريخ الإجازة مطلوب" });
-            if (!reason) return res.status(200).json({ success: false, message: "سبب الإجازة مطلوب" });
+            if (!leaveDate) return res.status(200).json({ success: false, message: "ØªØ§Ø±ÙŠØ® Ø§Ù„Ø¥Ø¬Ø§Ø²Ø© Ù…Ø·Ù„ÙˆØ¨" });
+            if (!reason) return res.status(200).json({ success: false, message: "Ø³Ø¨Ø¨ Ø§Ù„Ø¥Ø¬Ø§Ø²Ø© Ù…Ø·Ù„ÙˆØ¨" });
             
             // Check for duplicate pending/approved request for this date
             const { data: existing, error: checkErr } = await supabase
@@ -1707,7 +1697,7 @@ if (action === "updateEmployee") {
             }
             
             if (existing) {
-                return res.status(200).json({ success: false, message: "لديك طلب إجازة موجود بالفعل لهذا التاريخ" });
+                return res.status(200).json({ success: false, message: "Ù„Ø¯ÙŠÙƒ Ø·Ù„Ø¨ Ø¥Ø¬Ø§Ø²Ø© Ù…ÙˆØ¬ÙˆØ¯ Ø¨Ø§Ù„ÙØ¹Ù„ Ù„Ù‡Ø°Ø§ Ø§Ù„ØªØ§Ø±ÙŠØ®" });
             }
             
             const payload = {
@@ -1727,8 +1717,8 @@ if (action === "updateEmployee") {
             await supabase.from('notifications').insert([{
                 id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
                 userRole: 'hr',
-                title: 'طلب إجازة جديد',
-                message: `قام الموظف ${employeeName} بطلب إجازة بتاريخ ${leaveDate}`,
+                title: 'Ø·Ù„Ø¨ Ø¥Ø¬Ø§Ø²Ø© Ø¬Ø¯ÙŠØ¯',
+                message: `Ù‚Ø§Ù… Ø§Ù„Ù…ÙˆØ¸Ù ${employeeName} Ø¨Ø·Ù„Ø¨ Ø¥Ø¬Ø§Ø²Ø© Ø¨ØªØ§Ø±ÙŠØ® ${leaveDate}`,
                 type: 'leave_request',
                 relatedId: payload.id,
                 isRead: false,
@@ -1739,11 +1729,11 @@ if (action === "updateEmployee") {
             await sendRequestNotificationEmail(supabase, {
                 type: 'leave',
                 employeeName,
-                details: `تاريخ الإجازة: ${leaveDate} - السبب: ${reason}`,
+                details: `ØªØ§Ø±ÙŠØ® Ø§Ù„Ø¥Ø¬Ø§Ø²Ø©: ${leaveDate} - Ø§Ù„Ø³Ø¨Ø¨: ${reason}`,
                 requestId: payload.id
             });
             
-            return res.status(200).json({ success: true, message: "تم إرسال طلب الإجازة بنجاح للمراجعة" });
+            return res.status(200).json({ success: true, message: "ØªÙ… Ø¥Ø±Ø³Ø§Ù„ Ø·Ù„Ø¨ Ø§Ù„Ø¥Ø¬Ø§Ø²Ø© Ø¨Ù†Ø¬Ø§Ø­ Ù„Ù„Ù…Ø±Ø§Ø¬Ø¹Ø©" });
         }
 
         if (action === "getLeaveRequests") {
@@ -1772,15 +1762,15 @@ if (action === "updateEmployee") {
             await supabase.from('notifications').insert([{
                 id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
                 userId: req.employeeId,
-                title: 'تمت الموافقة على إجازتك',
-                message: `تمت الموافقة على طلب إجازتك بتاريخ ${req.leaveDate}`,
+                title: 'ØªÙ…Øª Ø§Ù„Ù…ÙˆØ§ÙÙ‚Ø© Ø¹Ù„Ù‰ Ø¥Ø¬Ø§Ø²ØªÙƒ',
+                message: `ØªÙ…Øª Ø§Ù„Ù…ÙˆØ§ÙÙ‚Ø© Ø¹Ù„Ù‰ Ø·Ù„Ø¨ Ø¥Ø¬Ø§Ø²ØªÙƒ Ø¨ØªØ§Ø±ÙŠØ® ${req.leaveDate}`,
                 type: 'leave_approved',
                 relatedId: id,
                 isRead: false,
                 createdAt: new Date().toISOString()
             }]);
             
-            return res.status(200).json({ success: true, message: "تمت الموافقة على طلب الإجازة بنجاح" });
+            return res.status(200).json({ success: true, message: "ØªÙ…Øª Ø§Ù„Ù…ÙˆØ§ÙÙ‚Ø© Ø¹Ù„Ù‰ Ø·Ù„Ø¨ Ø§Ù„Ø¥Ø¬Ø§Ø²Ø© Ø¨Ù†Ø¬Ø§Ø­" });
         }
 
         if (action === "rejectLeaveRequest") {
@@ -1800,22 +1790,22 @@ if (action === "updateEmployee") {
             await supabase.from('notifications').insert([{
                 id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
                 userId: req.employeeId,
-                title: 'تم رفض طلب إجازتك',
-                message: `تم رفض طلب إجازتك بتاريخ ${req.leaveDate}${rejectionReason ? `. السبب: ${rejectionReason}` : ''}`,
+                title: 'ØªÙ… Ø±ÙØ¶ Ø·Ù„Ø¨ Ø¥Ø¬Ø§Ø²ØªÙƒ',
+                message: `ØªÙ… Ø±ÙØ¶ Ø·Ù„Ø¨ Ø¥Ø¬Ø§Ø²ØªÙƒ Ø¨ØªØ§Ø±ÙŠØ® ${req.leaveDate}${rejectionReason ? `. Ø§Ù„Ø³Ø¨Ø¨: ${rejectionReason}` : ''}`,
                 type: 'leave_rejected',
                 relatedId: id,
                 isRead: false,
                 createdAt: new Date().toISOString()
             }]);
             
-            return res.status(200).json({ success: true, message: "تم رفض طلب الإجازة" });
+            return res.status(200).json({ success: true, message: "ØªÙ… Ø±ÙØ¶ Ø·Ù„Ø¨ Ø§Ù„Ø¥Ø¬Ø§Ø²Ø©" });
         }
 
         if (action === "deleteLeaveRequest") {
             const { id } = data;
             const { error } = await supabase.from('leaveRequests').delete().eq('id', id);
             if (error) throw error;
-            return res.status(200).json({ success: true, message: "تم حذف طلب الإجازة بنجاح" });
+            return res.status(200).json({ success: true, message: "ØªÙ… Ø­Ø°Ù Ø·Ù„Ø¨ Ø§Ù„Ø¥Ø¬Ø§Ø²Ø© Ø¨Ù†Ø¬Ø§Ø­" });
         }
 
         if (action === "clearProcessedLeaveRequests") {
@@ -1826,7 +1816,7 @@ if (action === "updateEmployee") {
                 .select();
             if (error) throw error;
             const count = deletedData ? deletedData.length : 0;
-            return res.status(200).json({ success: true, message: `تم مسح ${count} طلب إجازة منتهي بنجاح` });
+            return res.status(200).json({ success: true, message: `ØªÙ… Ù…Ø³Ø­ ${count} Ø·Ù„Ø¨ Ø¥Ø¬Ø§Ø²Ø© Ù…Ù†ØªÙ‡ÙŠ Ø¨Ù†Ø¬Ø§Ø­` });
         }
 
         // --- NOTIFICATIONS ---
@@ -1837,7 +1827,7 @@ if (action === "updateEmployee") {
             
             if (userId) query = query.eq('userId', userId);
             else if (userRole) query = query.eq('userRole', userRole);
-            else return res.status(200).json({ success: false, message: "userId أو userRole مطلوب" });
+            else return res.status(200).json({ success: false, message: "userId Ø£Ùˆ userRole Ù…Ø·Ù„ÙˆØ¨" });
             
             const { data: notifs, error } = await query.order('createdAt', { ascending: false });
             if (error) throw error;
@@ -1854,7 +1844,7 @@ if (action === "updateEmployee") {
             }).eq('id', notificationId);
             if (error) throw error;
             
-            return res.status(200).json({ success: true, message: "تم تحديث الإشعار" });
+            return res.status(200).json({ success: true, message: "ØªÙ… ØªØ­Ø¯ÙŠØ« Ø§Ù„Ø¥Ø´Ø¹Ø§Ø±" });
         }
 
         if (action === "markAllNotificationsAsRead") {
@@ -1871,7 +1861,7 @@ if (action === "updateEmployee") {
             const { error, data: updated } = await query;
             if (error) throw error;
             
-            return res.status(200).json({ success: true, message: `تم تحديث ${updated?.length || 0} إشعار` });
+            return res.status(200).json({ success: true, message: `ØªÙ… ØªØ­Ø¯ÙŠØ« ${updated?.length || 0} Ø¥Ø´Ø¹Ø§Ø±` });
         }
 
         // --- OFFICIAL HOLIDAYS ---
@@ -1884,7 +1874,7 @@ if (action === "updateEmployee") {
         if (action === "addOfficialHoliday") {
             const { holidayDate, holidayName } = data;
             if (!holidayDate || !holidayName) {
-                return res.status(200).json({ success: false, message: "تاريخ واسم الإجازة مطلوبان" });
+                return res.status(200).json({ success: false, message: "ØªØ§Ø±ÙŠØ® ÙˆØ§Ø³Ù… Ø§Ù„Ø¥Ø¬Ø§Ø²Ø© Ù…Ø·Ù„ÙˆØ¨Ø§Ù†" });
             }
             const payload = {
                 holidayDate: holidayDate,
@@ -1894,7 +1884,7 @@ if (action === "updateEmployee") {
             const { error } = await supabase.from('official_holidays').insert([payload]);
             if (error) {
                 if (error.code === '23505') {
-                    return res.status(200).json({ success: false, message: "هذا التاريخ مسجل كإجازة رسمية مسبقاً" });
+                    return res.status(200).json({ success: false, message: "Ù‡Ø°Ø§ Ø§Ù„ØªØ§Ø±ÙŠØ® Ù…Ø³Ø¬Ù„ ÙƒØ¥Ø¬Ø§Ø²Ø© Ø±Ø³Ù…ÙŠØ© Ù…Ø³Ø¨Ù‚Ø§Ù‹" });
                 }
                 throw error;
             }
@@ -1917,19 +1907,19 @@ if (action === "updateEmployee") {
                     .in('id', idsToUpdate);
             }
 
-            return res.status(200).json({ success: true, message: "تم إضافة الإجازة الرسمية بنجاح وتحديث السجلات" });
+            return res.status(200).json({ success: true, message: "ØªÙ… Ø¥Ø¶Ø§ÙØ© Ø§Ù„Ø¥Ø¬Ø§Ø²Ø© Ø§Ù„Ø±Ø³Ù…ÙŠØ© Ø¨Ù†Ø¬Ø§Ø­ ÙˆØªØ­Ø¯ÙŠØ« Ø§Ù„Ø³Ø¬Ù„Ø§Øª" });
         }
 
         if (action === "deleteOfficialHoliday") {
             const { id } = data;
             if (!id) {
-                return res.status(200).json({ success: false, message: "معرف الإجازة مطلوب" });
+                return res.status(200).json({ success: false, message: "Ù…Ø¹Ø±Ù Ø§Ù„Ø¥Ø¬Ø§Ø²Ø© Ù…Ø·Ù„ÙˆØ¨" });
             }
 
             // Get the holiday date before deleting
             const { data: holiday } = await supabase.from('official_holidays').select('holidayDate').eq('id', id).single();
             if (!holiday) {
-                return res.status(200).json({ success: false, message: "الإجازة غير موجودة" });
+                return res.status(200).json({ success: false, message: "Ø§Ù„Ø¥Ø¬Ø§Ø²Ø© ØºÙŠØ± Ù…ÙˆØ¬ÙˆØ¯Ø©" });
             }
 
             const { error } = await supabase.from('official_holidays').delete().eq('id', id);
@@ -1981,7 +1971,7 @@ if (action === "updateEmployee") {
                 }
             }
 
-            return res.status(200).json({ success: true, message: "تم حذف الإجازة الرسمية بنجاح وتحديث السجلات" });
+            return res.status(200).json({ success: true, message: "ØªÙ… Ø­Ø°Ù Ø§Ù„Ø¥Ø¬Ø§Ø²Ø© Ø§Ù„Ø±Ø³Ù…ÙŠØ© Ø¨Ù†Ø¬Ø§Ø­ ÙˆØªØ­Ø¯ÙŠØ« Ø§Ù„Ø³Ø¬Ù„Ø§Øª" });
         }
 
         // --- SETTINGS ---
@@ -2005,7 +1995,7 @@ if (action === "updateEmployee") {
             });
             await Promise.all(promises);
             invalidateCache('settings');
-            return res.status(200).json({ success: true, message: "تم تحديث الإعدادات بنجاح" });
+            return res.status(200).json({ success: true, message: "ØªÙ… ØªØ­Ø¯ÙŠØ« Ø§Ù„Ø¥Ø¹Ø¯Ø§Ø¯Ø§Øª Ø¨Ù†Ø¬Ø§Ø­" });
         }
 
         // --- DATABASE MONITORING ---
@@ -2059,7 +2049,7 @@ if (action === "updateEmployee") {
             const { employeeId, employeeName, currentDeviceId, newDeviceInfo, reason } = data;
             
             if (!employeeId || !newDeviceInfo?.deviceId) {
-                return res.status(200).json({ success: false, message: "بيانات غير مكتملة" });
+                return res.status(200).json({ success: false, message: "Ø¨ÙŠØ§Ù†Ø§Øª ØºÙŠØ± Ù…ÙƒØªÙ…Ù„Ø©" });
             }
             
             const result = await createDeviceChangeRequest(
@@ -2104,11 +2094,11 @@ if (action === "updateEmployee") {
                 .single();
             
             if (reqError || !request) {
-                return res.status(200).json({ success: false, message: "الطلب غير موجود" });
+                return res.status(200).json({ success: false, message: "Ø§Ù„Ø·Ù„Ø¨ ØºÙŠØ± Ù…ÙˆØ¬ÙˆØ¯" });
             }
             
             if (request.status !== 'pending') {
-                return res.status(200).json({ success: false, message: "تمت معالجة هذا الطلب مسبقاً" });
+                return res.status(200).json({ success: false, message: "ØªÙ…Øª Ù…Ø¹Ø§Ù„Ø¬Ø© Ù‡Ø°Ø§ Ø§Ù„Ø·Ù„Ø¨ Ù…Ø³Ø¨Ù‚Ø§Ù‹" });
             }
             
             // 2. Deactivate old device (if exists)
@@ -2144,7 +2134,7 @@ if (action === "updateEmployee") {
             
             if (upsertError) {
                 console.error('Device upsert error:', upsertError);
-                return res.status(200).json({ success: false, message: "فشل إضافة/تحديث الجهاز الجديد: " + upsertError.message });
+                return res.status(200).json({ success: false, message: "ÙØ´Ù„ Ø¥Ø¶Ø§ÙØ©/ØªØ­Ø¯ÙŠØ« Ø§Ù„Ø¬Ù‡Ø§Ø² Ø§Ù„Ø¬Ø¯ÙŠØ¯: " + upsertError.message });
             }
             
             // 5. Update request status
@@ -2158,12 +2148,12 @@ if (action === "updateEmployee") {
                 .eq('id', requestId);
             
             if (updateError) {
-                return res.status(200).json({ success: false, message: "فشل تحديث حالة الطلب" });
+                return res.status(200).json({ success: false, message: "ÙØ´Ù„ ØªØ­Ø¯ÙŠØ« Ø­Ø§Ù„Ø© Ø§Ù„Ø·Ù„Ø¨" });
             }
             
             return res.status(200).json({ 
                 success: true, 
-                message: `تم الموافقة على طلب تغيير الجهاز بنجاح. الجهاز الجديد مسجل للموظف.` 
+                message: `ØªÙ… Ø§Ù„Ù…ÙˆØ§ÙÙ‚Ø© Ø¹Ù„Ù‰ Ø·Ù„Ø¨ ØªØºÙŠÙŠØ± Ø§Ù„Ø¬Ù‡Ø§Ø² Ø¨Ù†Ø¬Ø§Ø­. Ø§Ù„Ø¬Ù‡Ø§Ø² Ø§Ù„Ø¬Ø¯ÙŠØ¯ Ù…Ø³Ø¬Ù„ Ù„Ù„Ù…ÙˆØ¸Ù.` 
             });
         }
 
@@ -2178,11 +2168,11 @@ if (action === "updateEmployee") {
                 .single();
             
             if (reqError || !request) {
-                return res.status(200).json({ success: false, message: "الطلب غير موجود" });
+                return res.status(200).json({ success: false, message: "Ø§Ù„Ø·Ù„Ø¨ ØºÙŠØ± Ù…ÙˆØ¬ÙˆØ¯" });
             }
             
             if (request.status !== 'pending') {
-                return res.status(200).json({ success: false, message: "تمت معالجة هذا الطلب مسبقاً" });
+                return res.status(200).json({ success: false, message: "ØªÙ…Øª Ù…Ø¹Ø§Ù„Ø¬Ø© Ù‡Ø°Ø§ Ø§Ù„Ø·Ù„Ø¨ Ù…Ø³Ø¨Ù‚Ø§Ù‹" });
             }
             
             const { error } = await supabase
@@ -2196,10 +2186,10 @@ if (action === "updateEmployee") {
                 .eq('id', requestId);
             
             if (error) {
-                return res.status(200).json({ success: false, message: "فشل رفض الطلب" });
+                return res.status(200).json({ success: false, message: "ÙØ´Ù„ Ø±ÙØ¶ Ø§Ù„Ø·Ù„Ø¨" });
             }
             
-            return res.status(200).json({ success: true, message: "تم رفض طلب تغيير الجهاز بنجاح" });
+            return res.status(200).json({ success: true, message: "ØªÙ… Ø±ÙØ¶ Ø·Ù„Ø¨ ØªØºÙŠÙŠØ± Ø§Ù„Ø¬Ù‡Ø§Ø² Ø¨Ù†Ø¬Ø§Ø­" });
         }
 
         // --- GET ALL DEVICES (Admin) ---
@@ -2230,7 +2220,7 @@ if (action === "updateEmployee") {
             const { deviceId, userId, deviceIdString } = data;
 
             if (!deviceId || !userId) {
-                return res.status(200).json({ success: false, message: "بيانات غير مكتملة" });
+                return res.status(200).json({ success: false, message: "Ø¨ÙŠØ§Ù†Ø§Øª ØºÙŠØ± Ù…ÙƒØªÙ…Ù„Ø©" });
             }
 
             // Use deviceIdString (the actual device fingerprint) for attendance deletion
@@ -2256,13 +2246,13 @@ if (action === "updateEmployee") {
                 .eq('user_id', userId);
 
             if (deviceError) {
-                return res.status(200).json({ success: false, message: "فشل حذف الجهاز" });
+                return res.status(200).json({ success: false, message: "ÙØ´Ù„ Ø­Ø°Ù Ø§Ù„Ø¬Ù‡Ø§Ø²" });
             }
 
             const attendanceCount = deletedAttendance ? deletedAttendance.length : 0;
             return res.status(200).json({
                 success: true,
-                message: `تم حذف الجهاز بنجاح${attendanceCount > 0 ? ` و ${attendanceCount} سجل حضور مرتبط` : ''}`
+                message: `ØªÙ… Ø­Ø°Ù Ø§Ù„Ø¬Ù‡Ø§Ø² Ø¨Ù†Ø¬Ø§Ø­${attendanceCount > 0 ? ` Ùˆ ${attendanceCount} Ø³Ø¬Ù„ Ø­Ø¶ÙˆØ± Ù…Ø±ØªØ¨Ø·` : ''}`
             });
         }
 
@@ -2271,7 +2261,7 @@ if (action === "updateEmployee") {
             const { userId } = data;
             
             if (!userId) {
-                return res.status(200).json({ success: false, message: "معرف المستخدم مطلوب" });
+                return res.status(200).json({ success: false, message: "Ù…Ø¹Ø±Ù Ø§Ù„Ù…Ø³ØªØ®Ø¯Ù… Ù…Ø·Ù„ÙˆØ¨" });
             }
             
             const { data: devices, error } = await supabase
@@ -2351,3 +2341,4 @@ if (action === "updateEmployee") {
         return res.status(200).json({ success: false, message: errorMsg });
     }
 }
+
