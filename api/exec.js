@@ -1013,8 +1013,7 @@ if (action === "login") {
                     for (let r of reqs) {
                         let isAutoApprovable = false;
                         if (r.status === 'pending') {
-                            const createdAt = new Date(r.timestamp || r.approvedAt);
-                            if (now - createdAt >= 2 * 60 * 1000) isAutoApprovable = true;
+                            isAutoApprovable = true;
                         }
 
                         if (r.status === 'approved_today' || isAutoApprovable) {
@@ -1030,7 +1029,7 @@ if (action === "login") {
                                         status: 'approved_today',
                                         tempRadius: 700,
                                         approvedAt: getCairoISOString(now),
-                                        note: (r.note ? r.note + " | " : "") + "[AUTO APPROVED after 2 minutes]"
+                                        note: (r.note ? r.note + " | " : "") + "[AUTO APPROVED immediately]"
                                     }).eq('id', r.id);
                                 }
                                 break;
@@ -1446,7 +1445,7 @@ if (action === "updateEmployee") {
             
             return res.status(200).json({ 
                 success: true, 
-                message: "تم إرسال طلب الموقع بنجاح. سيتم تفعيل الموافقة التلقائية خلال دقيقتين إذا كنت في الموقع." 
+                message: "تم إرسال طلب الموقع بنجاح. سيتم تفعيل الموافقة التلقائية فوراً إذا كنت في الموقع."
             });
         }
 
