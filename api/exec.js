@@ -591,6 +591,42 @@ async function syncToGoogleSheet(body) {
     }
 }
 
+// --- AUTO-APPROVE SITE REQUESTS HELPER ---
+async function autoApproveSites(supabase) {
+    const twoMinsAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+    
+    // Find pending requests older than 2 mins
+    const { data: pendingReqs } = await supabase
+        .from('siteRequests')
+        .select('*')
+        .eq('status', 'pending')
+        .lt('timestamp', twoMinsAgo);
+        
+    if (!pendingReqs || pendingReqs.length === 0) return;
+    
+    for (const req of pendingReqs) {
+        // Mark as auto-approved in siteRequests table
+        await supabase.from('siteRequests').update({ 
+            status: 'approved_today',
+            approvedAt: new Date().toISOString()
+        }).eq('id', req.id);
+        
+        // Insert into active sites table using the request ID
+        // (This allows us to retroactively delete it if rejected later)
+        const sitePayload = {
+            id: req.id,
+            name: req.suggestedName,
+            latitude: req.latitude,
+            longitude: req.longitude,
+            radius: req.tempRadius || 100,
+            transportPrice: req.transportPrice || 120,
+            mapLink: req.mapLink,
+            isTemporary: true
+        };
+        await supabase.from('sites').insert([sitePayload]);
+    }
+}
+
 export default async function handler(req, res) {
      if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
          return res.status(500).json({ success: false, message: "Missing Supabase configuration. Please set environment variables." });
@@ -821,6 +857,7 @@ if (action === "login") {
 
         // --- EMPLOYEE DASHBOARD INIT ---
         if (action === "getPortalInitialData") {
+            await autoApproveSites(supabase);
             const empId = data.employeeId;
             const [siteRes, attRes] = await Promise.all([
                 supabase.from('sites').select('*'),
@@ -1326,6 +1363,7 @@ if (action === "updateEmployee") {
 
         // --- SITE MGMT ---
         if (action === "getSites") {
+            await autoApproveSites(supabase);
             const cacheKey = 'sites';
             const cached = getCached(cacheKey);
             if (cached) return res.status(200).json({ success: true, data: cached });
@@ -1375,6 +1413,7 @@ if (action === "updateEmployee") {
 
         // --- SITE REQUESTS ---
         if (action === "getSiteRequests") {
+            await autoApproveSites(supabase);
             const { data: reqs, error } = await supabase.from('siteRequests').select('*');
             if (error) throw error;
             return res.status(200).json({ success: true, data: reqs || [] });
@@ -1446,7 +1485,7 @@ if (action === "updateEmployee") {
             
             return res.status(200).json({ 
                 success: true, 
-                message: "تم إرسال طلب الموقع بنجاح. سيتم تفعيل الموافقة التلقائية خلال دقيقتين إذا كنت في الموقع." 
+                message: "تم إرسال طلب الموقع بنجاح. سيتم التفعيل التلقائي خلال دقيقتين إذا كنت في الموقع." 
             });
         }
 
@@ -1505,6 +1544,11 @@ if (action === "updateEmployee") {
             
             const { error } = await supabase.from('siteRequests').update({ status: 'rejected' }).eq('id', data.id);
             if (error) throw error;
+            
+            // Retroactively delete the site if it was auto-approved and added to `sites`
+            await supabase.from('sites').delete().eq('id', data.id);
+            // Retroactively delete any attendance logged at this site by any employee
+            await supabase.from('attendance').delete().eq('siteId', data.id);
             
             // Notify employee
             if (reqData) {
@@ -2293,8 +2337,24 @@ if (action === "updateEmployee") {
         if (action === "resolveMapLink") {
             const link = data.link;
             try {
-                const resLink = await fetch(link, { method: 'HEAD', redirect: 'follow' });
-                return res.status(200).json({ success: true, url: resLink.url });
+                const resLink = await fetch(link, { method: 'GET', redirect: 'follow' });
+                let finalUrl = resLink.url;
+                let lat = null, lng = null;
+                
+                let match = finalUrl.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/) || finalUrl.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/);
+                
+                if (!match) {
+                    const htmlText = await resLink.text();
+                    match = htmlText.match(/center=(-?\d+\.\d+)%2C(-?\d+\.\d+)/) || htmlText.match(/\[(-?\d+\.\d+),(-?\d+\.\d+)\]/);
+                }
+                
+                if (match) {
+                    lat = parseFloat(match[1]);
+                    lng = parseFloat(match[2]);
+                    return res.status(200).json({ success: true, url: finalUrl, lat, lng });
+                }
+                
+                return res.status(200).json({ success: true, url: finalUrl });
             } catch (e) {
                 return res.status(200).json({ success: false, message: e.message });
             }
