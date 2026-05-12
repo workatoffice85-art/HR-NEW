@@ -151,7 +151,7 @@ async function login() {
         const response = await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify({ action: 'login', identifier: email, password: pass }),
-            headers: { 'Content-Type': 'text/plain' }
+            headers: { 'Content-Type': 'application/json' }
         });
         const result = await response.json();
         
@@ -178,7 +178,7 @@ async function requestOTP() {
     document.getElementById('btnRequestOTP').innerText = 'جاري الإرسال...';
     try {
        const res = await fetch(API_URL, {
-            method:'POST', body: JSON.stringify({action:'sendOTP', email: tempEmail, phone: tempPhone}), headers:{'Content-Type':'text/plain'}
+            method:'POST', body: JSON.stringify({action:'sendOTP', email: tempEmail, phone: tempPhone}), headers:{'Content-Type':'application/json'}
        });
        const result = await res.json();
        if(result.success) {
@@ -201,7 +201,7 @@ async function verifyOTP() {
     document.getElementById('btnVerifyOTP').innerText = 'جاري...';
     try {
        const res = await fetch(API_URL, {
-            method:'POST', body: JSON.stringify({action:'verifyOTP', email: tempEmail, code: code}), headers:{'Content-Type':'text/plain'}
+            method:'POST', body: JSON.stringify({action:'verifyOTP', email: tempEmail, code: code}), headers:{'Content-Type':'application/json'}
        });
        const result = await res.json();
        if(result.success) {
@@ -383,7 +383,7 @@ async function completeRegistration() {
 
     try {
         const res = await fetch(API_URL, {
-            method:'POST', body: JSON.stringify(payload), headers:{'Content-Type':'text/plain'}
+            method:'POST', body: JSON.stringify(payload), headers:{'Content-Type':'application/json'}
         });
         const result = await res.json();
         if(result.success) {
@@ -647,7 +647,7 @@ async function submitDeviceChangeRequest(deviceId, deviceInfo) {
                 },
                 reason: 'طلب تغيير الجهاز للموظف'
             }),
-            headers: { 'Content-Type': 'text/plain' }
+            headers: { 'Content-Type': 'application/json' }
         });
         
         const result = await res.json();
@@ -1260,7 +1260,7 @@ async function handleCheckIn() {
     };
 
     try {
-        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'text/plain' } });
+        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'application/json' } });
         const result = await res.json();
         if(result.success) {
             alert(result.message);
@@ -1328,7 +1328,7 @@ async function forceCloseAndRecheckIn(openSessionId, originalPayload) {
                 biometricData: biometricData ? JSON.stringify(biometricData) : null,
                 faceDescriptor: biometricData ? JSON.stringify(biometricData) : null
             }),
-            headers: { 'Content-Type': 'text/plain' }
+            headers: { 'Content-Type': 'application/json' }
         });
         const closeResult = await closeRes.json();
         if (!closeResult.success) {
@@ -1341,7 +1341,7 @@ async function forceCloseAndRecheckIn(openSessionId, originalPayload) {
         const retryRes = await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify(originalPayload),
-            headers: { 'Content-Type': 'text/plain' }
+            headers: { 'Content-Type': 'application/json' }
         });
         const retryResult = await retryRes.json();
         if (retryResult.success) {
@@ -1412,7 +1412,7 @@ async function handleCheckOut() {
         faceDescriptor: finalBiometricData ? JSON.stringify(finalBiometricData) : null
     };
     try {
-        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'text/plain' } });
+        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'application/json' } });
         const result = await res.json();
         if(result.success) {
             alert(result.message);
@@ -1453,7 +1453,7 @@ async function submitSiteRequest() {
     if (link) {
         try {
             const res = await fetch(API_URL, {
-                method: 'POST', body: JSON.stringify({ action: 'resolveMapLink', link: link }), headers:{'Content-Type':'text/plain'}
+                method: 'POST', body: JSON.stringify({ action: 'resolveMapLink', link: link }), headers:{'Content-Type':'application/json'}
             });
             const result = await res.json();
             if (result.success && result.lat && result.lng) {
@@ -1480,7 +1480,7 @@ async function submitSiteRequest() {
         const res = await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify(payload),
-            headers: { 'Content-Type': 'text/plain' }
+            headers: { 'Content-Type': 'application/json' }
         });
         const result = await res.json();
         if (result.success) {
@@ -1586,7 +1586,7 @@ async function submitAllowanceRequest() {
         const res = await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify(payload),
-            headers: { 'Content-Type': 'text/plain' }
+            headers: { 'Content-Type': 'application/json' }
         });
         const result = await res.json();
         if (result.success) {
@@ -1654,7 +1654,7 @@ async function submitLeaveRequest() {
         const res = await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify(payload),
-            headers: { 'Content-Type': 'text/plain' }
+            headers: { 'Content-Type': 'application/json' }
         });
         const result = await res.json();
         if (result.success) {
@@ -2142,7 +2142,7 @@ async function saveBiometricUpdate() {
         const res = await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify(payload),
-            headers: { 'Content-Type': 'text/plain' }
+            headers: { 'Content-Type': 'application/json' }
         });
         
         const result = await res.json();
@@ -2305,7 +2305,7 @@ async function markNotificationAsRead(notificationId) {
         const res = await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify({ action: 'markNotificationAsRead', notificationId: notificationId }),
-            headers: { 'Content-Type': 'text/plain' }
+            headers: { 'Content-Type': 'application/json' }
         });
         const result = await res.json();
         
@@ -2327,7 +2327,7 @@ async function markAllNotificationsAsRead() {
         const res = await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify({ action: 'markAllNotificationsAsRead', userId: currentUser.id }),
-            headers: { 'Content-Type': 'text/plain' }
+            headers: { 'Content-Type': 'application/json' }
         });
         const result = await res.json();
         
