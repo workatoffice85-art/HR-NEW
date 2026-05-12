@@ -448,7 +448,7 @@ async function verifyDeviceForAttendance(supabase, userId, deviceId, deviceInfo)
 /**
  * Create a device change request
  */
-async function createDeviceChangeRequest(supabase, userId, userName, oldDeviceId, newDeviceInfo, reason) {
+async function createDeviceChangeRequest(supabase, userId, userName, oldDeviceId, newDeviceInfo, reason, req) {
     try {
         // Check if there's already a pending request for this user
         const { data: existingRequest } = await supabase
@@ -737,7 +737,7 @@ export default async function handler(req, res) {
                 if (type === 'site') tableName = 'siteRequests';
                 else if (type === 'leave') tableName = 'leaveRequests';
                 else if (type === 'allowance') tableName = 'allowanceRequests';
-                else if (type === 'device') tableName = 'deviceChangeRequests';
+                else if (type === 'device') tableName = 'device_change_requests';
                 else {
                     res.setHeader('Content-Type', 'text/html; charset=utf-8');
                     return res.status(400).send('<h1 style="text-align:center;margin-top:50px;font-family:Arial;">نوع الطلب غير صالح</h1>');
@@ -765,7 +765,15 @@ export default async function handler(req, res) {
                 if (type === 'leave') {
                     if (response === 'approve') {
                         await supabase.from('leaveRequests').update({ status: 'approved', approvedAt: nowIso, approvedBy: adminName }).eq('id', id);
-                        await supabase.from('notifications').insert([{ employeeId: reqData.employeeId, title: "تمت الموافقة على إجازتك", details: "تم الموافقة على طلب الإجازة", type: "leave_approved", relatedId: id, isRead: false, timestamp: nowIso }]);
+                        await supabase.from('notifications').insert([{ 
+                            userId: reqData.employeeId, 
+                            title: "تمت الموافقة على إجازتك", 
+                            message: "تم الموافقة على طلب الإجازة عبر البريد الإلكتروني", 
+                            type: "leave_approved", 
+                            relatedId: id, 
+                            isRead: false, 
+                            createdAt: nowIso 
+                        }]);
                     } else {
                         await supabase.from('leaveRequests').update({ status: 'rejected', rejectionReason: 'مرفوض من الإيميل' }).eq('id', id);
                     }
@@ -773,7 +781,15 @@ export default async function handler(req, res) {
                     if (response === 'approve') {
                         await supabase.from('siteRequests').update({ status: 'approved', approvedAt: nowIso }).eq('id', id);
                         await supabase.from('sites').insert([{ id: reqData.id, name: reqData.suggestedName, latitude: reqData.latitude, longitude: reqData.longitude, radius: reqData.tempRadius || 100, transportPrice: reqData.transportPrice || 120, mapLink: reqData.mapLink, isTemporary: true }]);
-                        await supabase.from('notifications').insert([{ employeeId: reqData.employeeId, title: "تم قبول طلب الموقع", details: "يمكنك الآن تسجيل الحضور من هذا الموقع", type: "site_approved", relatedId: id, isRead: false, timestamp: nowIso }]);
+                        await supabase.from('notifications').insert([{ 
+                            userId: reqData.employeeId, 
+                            title: "تم قبول طلب الموقع", 
+                            message: "يمكنك الآن تسجيل الحضور من هذا الموقع (تمت الموافقة عبر البريد)", 
+                            type: "site_approved", 
+                            relatedId: id, 
+                            isRead: false, 
+                            createdAt: nowIso 
+                        }]);
                     } else {
                         await supabase.from('siteRequests').update({ status: 'rejected' }).eq('id', id);
                     }
@@ -792,10 +808,21 @@ export default async function handler(req, res) {
                     }
                 } else if (type === 'device') {
                     if (response === 'approve') {
-                        await supabase.from('deviceChangeRequests').update({ status: 'approved', processed_at: nowIso, processed_by: adminName }).eq('id', id);
-                        await supabase.from('employees').update({ device_id: null, device_fingerprint: null }).eq('id', reqData.employee_id);
+                        // For device change from email, we just mark the request as approved
+                        // The actual device deactivation happens when admin approves from dashboard
+                        // But we can at least update the request
+                        await supabase.from('device_change_requests').update({ 
+                            status: 'approved', 
+                            processed_at: nowIso, 
+                            processed_by: adminName 
+                        }).eq('id', id);
                     } else {
-                        await supabase.from('deviceChangeRequests').update({ status: 'rejected', processed_at: nowIso, processed_by: adminName, notes: 'مرفوض من الإيميل' }).eq('id', id);
+                        await supabase.from('device_change_requests').update({ 
+                            status: 'rejected', 
+                            processed_at: nowIso, 
+                            processed_by: adminName, 
+                            admin_note: 'مرفوض من الإيميل' 
+                        }).eq('id', id);
                     }
                 }
 
@@ -1605,17 +1632,17 @@ if (action === "updateEmployee") {
                 status: 'pending',
                 timestamp: new Date().toISOString()
             };
-            const { error } = await supabase.from('siteRequests').insert([reqPayload]);
+            const { data: insertedData, error } = await supabase.from('siteRequests').insert([reqPayload]).select('id').single();
             if (error) throw error;
+            const generatedId = insertedData.id;
             
             // Create notification for HR
             await supabase.from('notifications').insert([{
-                id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
                 userRole: 'hr',
                 title: 'طلب موقع جديد',
                 message: `قام الموظف ${data.employeeName} بطلب تسجيل موقع: ${data.suggestedName}`,
                 type: 'site_request',
-                relatedId: reqPayload.id,
+                relatedId: generatedId,
                 isRead: false,
                 createdAt: new Date().toISOString()
             }]);
@@ -1625,7 +1652,7 @@ if (action === "updateEmployee") {
                 type: 'site',
                 employeeName: data.employeeName,
                 details: `اسم الموقع: ${data.name || data.suggestedName} | التكلفة: ${data.transportPrice || 120} ج.م`,
-                requestId: reqPayload.id
+                requestId: generatedId
             }, req);
             
             return res.status(200).json({ 
@@ -1668,12 +1695,10 @@ if (action === "updateEmployee") {
             if (errSite) throw errSite;
             
             // Notify employee
-            const approvalType = isTemp ? 'لليوم فقط' : 'بشكل دائم';
             await supabase.from('notifications').insert([{
-                id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
                 userId: reqData.employeeId,
-                title: 'تمت الموافقة على موقعك',
-                message: `تمت الموافقة على طلب تسجيل الموقع: ${name || reqData.suggestedName} ${approvalType}`,
+                title: 'تم قبول طلب الموقع',
+                message: `تم قبول طلبك لتسجيل موقع: ${name || reqData.suggestedName}`,
                 type: 'site_approved',
                 relatedId: id,
                 isRead: false,
@@ -1698,7 +1723,6 @@ if (action === "updateEmployee") {
             // Notify employee
             if (reqData) {
                 await supabase.from('notifications').insert([{
-                    id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
                     userId: reqData.employeeId,
                     title: 'تم رفض طلب موقعك',
                     message: `تم رفض طلب تسجيل الموقع: ${reqData.suggestedName}`,
@@ -1740,7 +1764,6 @@ if (action === "updateEmployee") {
 
         if (action === "addAllowanceRequest") {
             const reqPayload = {
-                id: "ALLOW" + Math.floor(10000 + Math.random() * 90000),
                 employeeId: data.employeeId,
                 employeeName: data.employeeName,
                 attendanceId: data.attendanceId,
@@ -1752,27 +1775,28 @@ if (action === "updateEmployee") {
                 status: 'pending',
                 createdAt: new Date().toISOString()
             };
-            const { error } = await supabase.from('allowanceRequests').insert([reqPayload]);
+            const { data: insertedData, error } = await supabase.from('allowanceRequests').insert([reqPayload]).select('id').single();
             if (error) throw error;
+            
+            const requestId = insertedData.id;
             
             // Create notification for HR
             await supabase.from('notifications').insert([{
-                id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
                 userRole: 'hr',
                 title: 'طلب زيادة بدلات جديد',
                 message: `قام الموظف ${data.employeeName} بطلب زيادة بدلات بمبلغ ${data.amount} ج.م`,
                 type: 'allowance_request',
-                relatedId: reqPayload.id,
+                relatedId: requestId,
                 isRead: false,
                 createdAt: new Date().toISOString()
             }]);
             
-            // Send email notification
+            // Send email notification (passing req for host URL)
             await sendRequestNotificationEmail(supabase, {
                 type: 'allowance',
                 employeeName: data.employeeName,
                 details: `المبلغ: ${data.amount} ج.م | السبب: ${data.note || 'بدون ملاحظات'}`,
-                requestId: reqPayload.id
+                requestId: requestId
             }, req);
             
             return res.status(200).json({ success: true, message: "تم إرسال طلب زيادة البدلات بنجاح" });
@@ -1842,16 +1866,10 @@ if (action === "updateEmployee") {
             }]);
             
             // 6. Notify employee
-            const notifTitle = status === 'approved' ? 'تمت الموافقة على طلب زيادة البدلات' : 'تم رفض طلب زيادة البدلات';
-            const notifMessage = status === 'approved' 
-                ? `تمت الموافقة على طلب زيادة البدلات بمبلغ ${reqData.amount} ج.م`
-                : `تم رفض طلب زيادة البدلات بمبلغ ${reqData.amount} ج.م${adminNote ? `. السبب: ${adminNote}` : ''}`;
-            
             await supabase.from('notifications').insert([{
-                id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
                 userId: reqData.employeeId,
-                title: notifTitle,
-                message: notifMessage,
+                title: 'تحديث حالة طلب البدلات',
+                message: `تم ${status === 'approved' ? 'الموافقة على' : 'رفض'} طلب البدلات الخاص بك`,
                 type: status === 'approved' ? 'allowance_approved' : 'allowance_rejected',
                 relatedId: requestId,
                 isRead: false,
@@ -1960,10 +1978,9 @@ if (action === "updateEmployee") {
             
             // Notify employee
             await supabase.from('notifications').insert([{
-                id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
-                userId: req.employeeId,
+                userId: reqData.employeeId,
                 title: 'تمت الموافقة على إجازتك',
-                message: `تمت الموافقة على طلب إجازتك بتاريخ ${req.leaveDate}`,
+                message: `تمت الموافقة على طلب إجازتك بتاريخ ${reqData.leaveDate}`,
                 type: 'leave_approved',
                 relatedId: id,
                 isRead: false,
@@ -2258,7 +2275,8 @@ if (action === "updateEmployee") {
                 employeeName, 
                 currentDeviceId, 
                 newDeviceInfo, 
-                reason
+                reason,
+                req
             );
             
             return res.status(200).json(result);
