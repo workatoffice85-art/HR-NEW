@@ -727,17 +727,18 @@ export default async function handler(req, res) {
             
             // --- EMAIL ONE-CLICK ACTIONS ---
             if (action === "emailAction") {
-                const { id, type, response } = data;
+                const { id, type, response, confirmed } = data;
                 if (!id || !type || !response) {
                     res.setHeader('Content-Type', 'text/html; charset=utf-8');
                     return res.status(400).send('<h1 style="text-align:center;margin-top:50px;font-family:Arial;">بيانات غير مكتملة</h1>');
                 }
 
                 let tableName = '';
-                if (type === 'site') tableName = 'siteRequests';
-                else if (type === 'leave') tableName = 'leaveRequests';
-                else if (type === 'allowance') tableName = 'allowanceRequests';
-                else if (type === 'device') tableName = 'device_change_requests';
+                let requestLabel = '';
+                if (type === 'site') { tableName = 'siteRequests'; requestLabel = 'طلب موقع جديد'; }
+                else if (type === 'leave') { tableName = 'leaveRequests'; requestLabel = 'طلب إجازة'; }
+                else if (type === 'allowance') { tableName = 'allowanceRequests'; requestLabel = 'طلب زيادة بدلات'; }
+                else if (type === 'device') { tableName = 'device_change_requests'; requestLabel = 'طلب تغيير جهاز'; }
                 else {
                     res.setHeader('Content-Type', 'text/html; charset=utf-8');
                     return res.status(400).send('<h1 style="text-align:center;margin-top:50px;font-family:Arial;">نوع الطلب غير صالح</h1>');
@@ -752,9 +753,48 @@ export default async function handler(req, res) {
 
                 if (reqData.status !== 'pending') {
                     return res.status(200).send(`
-                        <div dir="rtl" style="font-family:Arial;text-align:center;margin-top:50px;">
-                            <h2>تم معالجة هذا الطلب مسبقاً!</h2>
-                            <p style="color:#666;">حالة الطلب الحالية: <strong>${reqData.status.includes('approve') ? 'مقبول' : 'مرفوض'}</strong></p>
+                        <div dir="rtl" style="font-family:Arial;text-align:center;margin-top:50px;padding:20px;">
+                            <div style="max-width:500px; margin:0 auto; padding:40px; border-radius:15px; background:#f8fafc; box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);">
+                                <div style="font-size:50px; margin-bottom:20px;">ℹ️</div>
+                                <h2 style="color:#1e293b; margin-bottom:10px;">تم معالجة هذا الطلب مسبقاً!</h2>
+                                <p style="color:#64748b; font-size:16px;">حالة الطلب الحالية: <strong style="color:${reqData.status.includes('approve') ? '#10b981' : '#ef4444'};">${reqData.status.includes('approve') ? 'مقبول' : 'مرفوض'}</strong></p>
+                                <div style="margin-top:30px; padding-top:20px; border-top:1px solid #e2e8f0; color:#94a3b8; font-size:13px;">
+                                    نظام الموارد البشرية والتقارير الذكية © 2026
+                                </div>
+                            </div>
+                        </div>
+                    `);
+                }
+
+                // SECURITY: Prevent pre-fetching by email clients (Outlook, Gmail, etc.)
+                // Only proceed if the user actually clicked a confirmation button on our landing page
+                if (confirmed !== 'true') {
+                    const actionText = response === 'approve' ? 'موافقة' : 'رفض';
+                    const actionColor = response === 'approve' ? '#10b981' : '#ef4444';
+                    const employeeName = reqData.employeeName || reqData.user_name || 'غير معروف';
+                    const details = type === 'site' ? (reqData.suggestedName || 'موقع جديد') : (type === 'leave' ? reqData.leaveDate : (type === 'allowance' ? reqData.amount + ' ج.م' : 'تغيير جهاز'));
+
+                    return res.status(200).send(`
+                        <div dir="rtl" style="font-family:Arial, sans-serif; background:#f1f5f9; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px;">
+                            <div style="max-width:500px; width:100%; background:white; padding:40px; border-radius:20px; box-shadow:0 10px 25px -5px rgba(0,0,0,0.1); text-align:center;">
+                                <div style="width:70px; height:70px; background:${actionColor}20; color:${actionColor}; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 25px; font-size:32px;">
+                                    ${response === 'approve' ? '✔️' : '✖️'}
+                                </div>
+                                <h2 style="color:#1e293b; margin:0 0 10px 0; font-size:24px;">تأكيد ${actionText}</h2>
+                                <p style="color:#64748b; margin-bottom:30px; font-size:16px; line-height:1.6;">
+                                    أنت على وشك <strong>${actionText}</strong> على <strong>${requestLabel}</strong><br>
+                                    للموظف: <strong>${employeeName}</strong><br>
+                                    التفاصيل: <strong>${details}</strong>
+                                </p>
+                                
+                                <a href="${req.url}&confirmed=true" style="display:inline-block; background:${actionColor}; color:white; text-decoration:none; padding:16px 40px; border-radius:12px; font-weight:bold; font-size:18px; transition:all 0.2s; box-shadow:0 4px 6px -1px ${actionColor}40;">
+                                    تأكيد الـ ${actionText} الآن
+                                </a>
+                                
+                                <div style="margin-top:25px; color:#94a3b8; font-size:14px;">
+                                    إذا لم تكن أنت من طلب هذا الإجراء، يرجى إغلاق الصفحة.
+                                </div>
+                            </div>
                         </div>
                     `);
                 }
