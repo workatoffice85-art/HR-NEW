@@ -234,8 +234,9 @@ async function sendEmailNotification(options) {
  * Send request notification email to HR
  * @param {Object} supabase - Supabase client
  * @param {Object} requestData - { type, employeeName, details, requestId }
+ * @param {Object} req - The original HTTP request (to get host URL)
  */
-async function sendRequestNotificationEmail(supabase, requestData) {
+async function sendRequestNotificationEmail(supabase, requestData, req) {
     const settings = await getNotificationSettings(supabase);
     
     if (!settings.enabled || settings.emails.length === 0) {
@@ -270,18 +271,79 @@ async function sendRequestNotificationEmail(supabase, requestData) {
 نظام الموارد البشرية
     `.trim();
     
+    const host = req?.headers?.host || 'hr-portal.vercel.app';
+    const protocol = host.includes('localhost') || host.includes('127.0.0.1') ? 'http' : 'https';
+    const appUrl = `${protocol}://${host}`;
+    
+    const approveUrl = `${appUrl}/api/exec?action=emailAction&id=${requestId}&type=${type}&response=approve`;
+    const rejectUrl = `${appUrl}/api/exec?action=emailAction&id=${requestId}&type=${type}&response=reject`;
+    
     const html = `
-<div dir="rtl" style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f8fafc; border-radius: 10px;">
-    <h2 style="color: #4f46e5; margin-bottom: 20px;">📬 ${typeLabel} جديد</h2>
-    <div style="background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-        <p style="margin: 10px 0; font-size: 16px;"><strong>الموظف:</strong> ${employeeName}</p>
-        <p style="margin: 10px 0; font-size: 16px;"><strong>التفاصيل:</strong> ${details}</p>
-        <p style="margin: 10px 0; font-size: 14px; color: #64748b;"><strong>معرف الطلب:</strong> ${requestId || 'N/A'}</p>
-    </div>
-    <p style="color: #64748b; font-size: 14px;">يرجى مراجعة الطلب في لوحة تحكم HR.</p>
-    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;">
-    <p style="color: #94a3b8; font-size: 12px; text-align: center;">نظام الموارد البشرية - إشعار تلقائي</p>
-</div>
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${typeLabel}</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f4f5f7; -webkit-font-smoothing: antialiased;">
+    <table width="100%" border="0" cellpadding="0" cellspacing="0" bgcolor="#f4f5f7" style="background-color: #f4f5f7;">
+        <tr>
+            <td align="center" style="padding: 40px 10px;">
+                <table width="600" border="0" cellpadding="0" cellspacing="0" bgcolor="#ffffff" style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); max-width: 600px;">
+                    <tr>
+                        <td bgcolor="#4f46e5" align="center" style="background-color: #4f46e5; padding: 30px 20px;">
+                            <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: bold;">${typeLabel}</h1>
+                            <p style="color: #e0e7ff; margin: 10px 0 0 0; font-size: 16px;">مقدم من الموظف: ${employeeName}</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 30px 20px;">
+                            <p style="margin: 0 0 20px 0; font-size: 16px; color: #333333; text-align: right;" dir="rtl"><strong>نوع الطلب:</strong> ${typeLabel}</p>
+                            
+                            <table width="100%" border="0" cellpadding="0" cellspacing="0" style="border: 1px solid #e5e7eb; border-radius: 6px; background-color: #f9fafb;">
+                                <tr>
+                                    <td style="padding: 20px;" dir="rtl" align="right">
+                                        <p style="margin: 0 0 10px 0; font-size: 15px; color: #4b5563;"><strong>الموظف:</strong> ${employeeName}</p>
+                                        <p style="margin: 0 0 10px 0; font-size: 15px; color: #4b5563;"><strong>التاريخ:</strong> ${new Date().toISOString().split('T')[0]}</p>
+                                        <p style="margin: 0 0 10px 0; font-size: 15px; color: #4b5563;"><strong>التفاصيل:</strong> ${details}</p>
+                                        <p style="margin: 0; font-size: 14px; color: #9ca3af;"><strong>معرف الطلب:</strong> ${requestId || 'N/A'}</p>
+                                    </td>
+                                </tr>
+                            </table>
+                            
+                            <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-top: 30px;">
+                              <tr>
+                                <td align="center">
+                                  <table border="0" cellspacing="0" cellpadding="0" dir="rtl">
+                                    <tr>
+                                      <td align="center" style="border-radius: 6px;" bgcolor="#10b981">
+                                        <a href="${approveUrl}" target="_blank" style="font-size: 16px; font-family: Arial, sans-serif; color: #ffffff; text-decoration: none; padding: 12px 30px; border-radius: 6px; border: 1px solid #10b981; display: inline-block; font-weight: bold; background-color: #10b981;">موافقة (Approve)</a>
+                                      </td>
+                                      <td width="15" style="width: 15px;"></td>
+                                      <td align="center" style="border-radius: 6px;" bgcolor="#ef4444">
+                                        <a href="${rejectUrl}" target="_blank" style="font-size: 16px; font-family: Arial, sans-serif; color: #ffffff; text-decoration: none; padding: 12px 30px; border-radius: 6px; border: 1px solid #ef4444; display: inline-block; font-weight: bold; background-color: #ef4444;">رفض (Reject)</a>
+                                      </td>
+                                    </tr>
+                                  </table>
+                                </td>
+                              </tr>
+                            </table>
+                            
+                            <p style="margin: 30px 0 0 0; font-size: 13px; color: #6b7280; text-align: center;">هذا الرابط مخصص للاستخدام مره واحده فقط.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td bgcolor="#f8fafc" align="center" style="background-color: #f8fafc; padding: 20px; border-top: 1px solid #e2e8f0;">
+                            <p style="margin: 0; font-size: 12px; color: #94a3b8;">نظام الموارد البشرية والتقارير الذكية &copy; ${new Date().getFullYear()}</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
     `.trim();
     
     return await sendEmailNotification({
@@ -439,9 +501,9 @@ async function createDeviceChangeRequest(supabase, userId, userName, oldDeviceId
         await sendRequestNotificationEmail(supabase, {
             type: 'device',
             employeeName: userName,
-            details: `الجهاز الجديد: ${newDeviceInfo.deviceModel || 'Unknown'} (${newDeviceInfo.osType || 'Unknown'})${reason ? ' - السبب: ' + reason : ''}`,
+            details: `السبب: ${reason}`,
             requestId: requestId
-        });
+        }, req);
         
         return { success: true, message: 'تم إرسال طلب تغيير الجهاز بنجاح' };
     } catch (error) {
@@ -546,9 +608,9 @@ function getCairoISOString(date = new Date()) {
     const year = parts.find(p => p.type === 'year').value;
     const month = parts.find(p => p.type === 'month').value;
     const day = parts.find(p => p.type === 'day').value;
-    const hour = parts.find(p => p.type === 'hour').value;
-    const minute = parts.find(p => p.type === 'minute').value;
-    const second = parts.find(p => p.type === 'second').value;
+    const hour = parts.find(p => p.hour === 'hour').value;
+    const minute = parts.find(p => p.minute === 'minute').value;
+    const second = parts.find(p => p.second === 'second').value;
 
     // Return with Cairo offset
     return `${year}-${month}-${day}T${hour}:${minute}:${second}+02:00`;
@@ -653,13 +715,115 @@ export default async function handler(req, res) {
      try {
          // Parse the body if POST, or query if GET
          let data = {};
-         if (req.method === 'POST') {
+         let action = "";
+         const isGet = req.method === 'GET';
+
+         if (!isGet) {
              data = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+             action = data.action;
          } else {
-             data = req.query;
+            action = req.query.action;
+            data = req.query;
+            
+            // --- EMAIL ONE-CLICK ACTIONS ---
+            if (action === "emailAction") {
+                const { id, type, response } = data;
+                if (!id || !type || !response) {
+                    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+                    return res.status(400).send('<h1 style="text-align:center;margin-top:50px;font-family:Arial;">بيانات غير مكتملة</h1>');
+                }
+
+                let tableName = '';
+                if (type === 'site') tableName = 'siteRequests';
+                else if (type === 'leave') tableName = 'leaveRequests';
+                else if (type === 'allowance') tableName = 'allowanceRequests';
+                else if (type === 'device') tableName = 'deviceChangeRequests';
+                else {
+                    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+                    return res.status(400).send('<h1 style="text-align:center;margin-top:50px;font-family:Arial;">نوع الطلب غير صالح</h1>');
+                }
+
+                const { data: reqData, error: reqErr } = await supabase.from(tableName).select('*').eq('id', id).single();
+                
+                res.setHeader('Content-Type', 'text/html; charset=utf-8');
+                if (reqErr || !reqData) {
+                    return res.status(404).send('<h1 style="text-align:center;margin-top:50px;font-family:Arial;">الطلب غير موجود</h1>');
+                }
+
+                if (reqData.status !== 'pending') {
+                    return res.status(200).send(`
+                        <div dir="rtl" style="font-family:Arial;text-align:center;margin-top:50px;">
+                            <h2>تم معالجة هذا الطلب مسبقاً!</h2>
+                            <p style="color:#666;">حالة الطلب الحالية: <strong>${reqData.status.includes('approve') ? 'مقبول' : 'مرفوض'}</strong></p>
+                        </div>
+                    `);
+                }
+
+                const adminName = 'HR (عبر الإيميل)';
+                const nowIso = new Date().toISOString();
+
+                if (type === 'leave') {
+                    if (response === 'approve') {
+                        await supabase.from('leaveRequests').update({ status: 'approved', approvedAt: nowIso, approvedBy: adminName }).eq('id', id);
+                        await supabase.from('notifications').insert([{ employeeId: reqData.employeeId, title: "تمت الموافقة على إجازتك", details: "تم الموافقة على طلب الإجازة", type: "leave_approved", relatedId: id, isRead: false, timestamp: nowIso }]);
+                    } else {
+                        await supabase.from('leaveRequests').update({ status: 'rejected', rejectionReason: 'مرفوض من الإيميل' }).eq('id', id);
+                    }
+                } else if (type === 'site') {
+                    if (response === 'approve') {
+                        await supabase.from('siteRequests').update({ status: 'approved', approvedAt: nowIso }).eq('id', id);
+                        await supabase.from('sites').insert([{ id: reqData.id, name: reqData.suggestedName, latitude: reqData.latitude, longitude: reqData.longitude, radius: reqData.tempRadius || 100, transportPrice: reqData.transportPrice || 120, mapLink: reqData.mapLink, isTemporary: true }]);
+                        await supabase.from('notifications').insert([{ employeeId: reqData.employeeId, title: "تم قبول طلب الموقع", details: "يمكنك الآن تسجيل الحضور من هذا الموقع", type: "site_approved", relatedId: id, isRead: false, timestamp: nowIso }]);
+                    } else {
+                        await supabase.from('siteRequests').update({ status: 'rejected' }).eq('id', id);
+                    }
+                } else if (type === 'allowance') {
+                    if (response === 'approve') {
+                        await supabase.from('allowanceRequests').update({ status: 'approved', approvedAt: nowIso, approvedBy: adminName }).eq('id', id);
+                        if (reqData.attendanceId) {
+                            const { data: att } = await supabase.from('attendance').select('*').eq('id', reqData.attendanceId).single();
+                            if (att) {
+                                await supabase.from('attendance').update({ transportPrice: reqData.amount }).eq('id', reqData.attendanceId);
+                                await supabase.from('siteAllowances').upsert([{ employeeId: reqData.employeeId, siteId: att.siteId, transportPrice: reqData.amount }], { onConflict: 'employeeId, siteId' });
+                            }
+                        }
+                    } else {
+                        await supabase.from('allowanceRequests').update({ status: 'rejected', rejectionReason: 'مرفوض من الإيميل' }).eq('id', id);
+                    }
+                } else if (type === 'device') {
+                    if (response === 'approve') {
+                        await supabase.from('deviceChangeRequests').update({ status: 'approved', processed_at: nowIso, processed_by: adminName }).eq('id', id);
+                        await supabase.from('employees').update({ device_id: null, device_fingerprint: null }).eq('id', reqData.employee_id);
+                    } else {
+                        await supabase.from('deviceChangeRequests').update({ status: 'rejected', processed_at: nowIso, processed_by: adminName, notes: 'مرفوض من الإيميل' }).eq('id', id);
+                    }
+                }
+
+                const successColor = response === 'approve' ? '#10b981' : '#ef4444';
+                const successText = response === 'approve' ? 'تمت الموافقة على الطلب بنجاح' : 'تم رفض الطلب بنجاح';
+                
+                return res.status(200).send(`
+                    <!DOCTYPE html>
+                    <html lang="ar" dir="rtl">
+                    <head>
+                        <meta charset="UTF-8">
+                        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                        <title>معالجة الطلب</title>
+                    </head>
+                    <body style="margin:0; font-family: Arial, sans-serif; background-color: #f4f5f7; display: flex; justify-content: center; align-items: center; min-height: 100vh;">
+                        <div style="background-color: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; max-width: 400px; width: 100%; box-sizing: border-box;">
+                            <div style="width: 80px; height: 80px; background-color: ${successColor}; color: white; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 40px; margin: 0 auto 20px;">
+                                ${response === 'approve' ? '✓' : '✗'}
+                            </div>
+                            <h2 style="color: #333; margin-bottom: 10px;">${successText}</h2>
+                            <p style="color: #666; margin-bottom: 20px;">تم تسجيل الإجراء في قاعدة البيانات ولن يتمكن أحد من تعديل هذا الطلب مرة أخرى من الإيميل.</p>
+                            <p style="font-size: 14px; color: #999;">نظام الموارد البشرية والتقارير الذكية © ${new Date().getFullYear()}</p>
+                        </div>
+                    </body>
+                    </html>
+                `);
+            }
          }
- 
-         const action = data.action;
 
         // DUAL WRITING / BACKUP SYNC:
         // For writing actions, we asynchronously broadcast the exact request to your existing Google Apps Script
@@ -876,8 +1040,6 @@ if (action === "login") {
 
         // --- ADD ATTENDANCE (CHECK-IN) ---
         if (action === "addAttendance") {
-            console.log("addAttendance called with data:", JSON.stringify(data));
-            
             // 0. DEVICE VERIFICATION (Mandatory Layer)
             // Verify device before allowing attendance
             const deviceId = data.deviceId;
@@ -970,33 +1132,17 @@ if (action === "login") {
             const rateLimitNow = getCairoTime(new Date());
             const thirtySecondsAgo = new Date(rateLimitNow.getTime() - 30000);
             
-            console.log('🚨 Rate Limit Debug:', {
-                serverTime: new Date().toISOString(),
-                cairoTime: rateLimitNow.toISOString(),
-                thirtySecondsAgo: thirtySecondsAgo.toISOString(),
-                employeeId: data.employeeId
-            });
-            
             const { data: anyRecentRecord } = await supabase.from('attendance')
                 .select('id, checkIn, checkOut')
                 .eq('employeeId', data.employeeId)
                 .gte('checkIn', thirtySecondsAgo.toISOString())
                 .order('checkIn', { ascending: false })
                 .limit(1);
-
-            console.log('🚨 Recent records found:', anyRecentRecord?.length || 0);
             
             if (anyRecentRecord && anyRecentRecord.length > 0) {
                 const lastRecordTime = new Date(anyRecentRecord[0].checkIn);
                 const secondsElapsed = Math.floor((rateLimitNow - lastRecordTime) / 1000);
                 const secondsRemaining = 30 - secondsElapsed;
-                
-                console.log('🚨 Last record:', {
-                    checkIn: anyRecentRecord[0].checkIn,
-                    parsedTime: lastRecordTime.toISOString(),
-                    secondsElapsed,
-                    secondsRemaining
-                });
                 
                 return res.status(200).json({
                     success: false,
@@ -1442,7 +1588,7 @@ if (action === "updateEmployee") {
                 }
             }
 
-            const payload = {
+            const reqPayload = {
                 id: data.id || "REQ" + Math.floor(10000 + Math.random() * 90000),
                 employeeId: data.employeeId,
                 employeeName: data.employeeName,
@@ -1460,7 +1606,7 @@ if (action === "updateEmployee") {
                 status: 'pending',
                 timestamp: new Date().toISOString()
             };
-            const { error } = await supabase.from('siteRequests').insert([payload]);
+            const { error } = await supabase.from('siteRequests').insert([reqPayload]);
             if (error) throw error;
             
             // Create notification for HR
@@ -1470,7 +1616,7 @@ if (action === "updateEmployee") {
                 title: 'طلب موقع جديد',
                 message: `قام الموظف ${data.employeeName} بطلب تسجيل موقع: ${data.suggestedName}`,
                 type: 'site_request',
-                relatedId: payload.id,
+                relatedId: reqPayload.id,
                 isRead: false,
                 createdAt: new Date().toISOString()
             }]);
@@ -1479,9 +1625,9 @@ if (action === "updateEmployee") {
             await sendRequestNotificationEmail(supabase, {
                 type: 'site',
                 employeeName: data.employeeName,
-                details: `اسم الموقع المقترح: ${data.suggestedName}${data.note ? ' - ملاحظة: ' + data.note : ''}`,
-                requestId: payload.id
-            });
+                details: `اسم الموقع: ${data.name || data.suggestedName} | التكلفة: ${data.transportPrice || 120} ج.م`,
+                requestId: reqPayload.id
+            }, req);
             
             return res.status(200).json({ 
                 success: true, 
@@ -1594,7 +1740,8 @@ if (action === "updateEmployee") {
         }
 
         if (action === "addAllowanceRequest") {
-            const payload = {
+            const reqPayload = {
+                id: "ALLOW" + Math.floor(10000 + Math.random() * 90000),
                 employeeId: data.employeeId,
                 employeeName: data.employeeName,
                 attendanceId: data.attendanceId,
@@ -1606,7 +1753,7 @@ if (action === "updateEmployee") {
                 status: 'pending',
                 createdAt: new Date().toISOString()
             };
-            const { error } = await supabase.from('allowanceRequests').insert([payload]);
+            const { error } = await supabase.from('allowanceRequests').insert([reqPayload]);
             if (error) throw error;
             
             // Create notification for HR
@@ -1616,7 +1763,7 @@ if (action === "updateEmployee") {
                 title: 'طلب زيادة بدلات جديد',
                 message: `قام الموظف ${data.employeeName} بطلب زيادة بدلات بمبلغ ${data.amount} ج.م`,
                 type: 'allowance_request',
-                relatedId: payload.id || data.id,
+                relatedId: reqPayload.id,
                 isRead: false,
                 createdAt: new Date().toISOString()
             }]);
@@ -1625,9 +1772,9 @@ if (action === "updateEmployee") {
             await sendRequestNotificationEmail(supabase, {
                 type: 'allowance',
                 employeeName: data.employeeName,
-                details: `مبلغ الزيادة: ${data.amount} ج.م - الموقع: ${data.siteName}${data.note ? ' - ملاحظة: ' + data.note : ''}`,
-                requestId: payload.id || data.id
-            });
+                details: `المبلغ: ${data.amount} ج.م | السبب: ${data.note || 'بدون ملاحظات'}`,
+                requestId: reqPayload.id
+            }, req);
             
             return res.status(200).json({ success: true, message: "تم إرسال طلب زيادة البدلات بنجاح" });
         }
