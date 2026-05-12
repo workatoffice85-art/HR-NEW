@@ -1,4 +1,4 @@
-const API_URL = '/api/exec';
+const API_URL = `${window.location.origin}/api/exec`;
 // const OLD_BACKUP_API = 'https://script.google.com/macros/s/AKfycbwNhaRKDP-7M4dXSQend8RbYPkXRgs5nzN0-BmNzxEO8IkBN9lt6KDtJCdOqpovhJEY1Q/exec';
 let currentUser = JSON.parse(localStorage.getItem('empSession'));
 let currentSite = null;
