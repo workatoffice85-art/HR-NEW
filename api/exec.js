@@ -704,6 +704,33 @@ export default async function handler(req, res) {
          res.status(200).end();
          return;
      }
+
+     // Parse the body if POST, or query if GET
+     let data = {};
+     let action = "";
+     const isGet = req.method === 'GET';
+
+     if (!isGet) {
+         if (typeof req.body === 'string') {
+             if (req.body.trim().startsWith('{')) {
+                 try {
+                     data = JSON.parse(req.body);
+                 } catch (e) {
+                     const params = new URLSearchParams(req.body);
+                     data = Object.fromEntries(params.entries());
+                 }
+             } else {
+                 const params = new URLSearchParams(req.body);
+                 data = Object.fromEntries(params.entries());
+             }
+         } else {
+             data = req.body || {};
+         }
+         action = data.action || req.query.action;
+     } else {
+         action = req.query.action;
+         data = req.query;
+     }
  
      // Rate limiting
      const forwarded = req.headers['x-forwarded-for'];
@@ -713,21 +740,9 @@ export default async function handler(req, res) {
      }
  
      try {
-         // Parse the body if POST, or query if GET
-         let data = {};
-         let action = "";
-         const isGet = req.method === 'GET';
-
-         if (!isGet) {
-             data = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-             action = data.action;
-         } else {
-            action = req.query.action;
-            data = req.query;
-            
-            // --- EMAIL ONE-CLICK ACTIONS ---
-            if (action === "emailAction") {
-                const { id, type, response } = data;
+         // --- EMAIL ONE-CLICK ACTIONS ---
+         if (action === "emailAction") {
+             const { id, type, response } = data;
                 if (!id || !type || !response) {
                     res.setHeader('Content-Type', 'text/html; charset=utf-8');
                     return res.status(400).send('<h1 style="text-align:center;margin-top:50px;font-family:Arial;">بيانات غير مكتملة</h1>');
@@ -845,7 +860,16 @@ export default async function handler(req, res) {
                         const { error: updErr } = await supabase.from('siteRequests').update({ status: 'approved', approvedAt: nowIso }).eq('id', id);
                         if (updErr) throw updErr;
                         
-                        await supabase.from('sites').insert([{ id: reqData.id, name: reqData.suggestedName, latitude: reqData.latitude, longitude: reqData.longitude, radius: reqData.tempRadius || 100, transportPrice: reqData.transportPrice || 120, mapLink: reqData.mapLink, isTemporary: true }]);
+                        await supabase.from('sites').insert([{ 
+                            id: String(Math.floor(10000 + Math.random() * 90000)), 
+                            name: reqData.suggestedName, 
+                            latitude: reqData.latitude, 
+                            longitude: reqData.longitude, 
+                            radius: reqData.tempRadius || 100, 
+                            transportPrice: reqData.transportPrice || 120, 
+                            mapLink: reqData.mapLink, 
+                            isTemporary: true 
+                        }]);
                         await supabase.from('notifications').insert([{ 
                             userId: reqData.employeeId, 
                             title: "تم قبول طلب الموقع", 
