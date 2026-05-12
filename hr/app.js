@@ -398,13 +398,10 @@ function toTransportNumber(value) {
 }
 
 function getCurrentTransportPrice(record) {
-    if (record.transportPrice !== undefined && record.transportPrice !== null) {
-        return toTransportNumber(record.transportPrice);
-    }
     const employee = allEmployees.find(e => String(e.id) === String(record.employeeId));
     const allowance = employee && employee.siteAllowances ? 
         employee.siteAllowances.find(a => String(a.siteId) === String(record.siteId)) : null;
-    return allowance ? parseFloat(allowance.transportPrice || 0) : 0;
+    return allowance ? parseFloat(allowance.transportPrice || 0) : toTransportNumber(record.transportPrice);
 }
 
 function calculateUniqueDailyTransport(records) {
@@ -883,7 +880,8 @@ function generateReport() {
         const employee = allEmployees.find(e => String(e.id) === String(empId));
         const allowance = employee && employee.siteAllowances ? 
             employee.siteAllowances.find(a => String(a.siteId) === String(record.siteId)) : null;
-        const transportValue = getCurrentTransportPrice(record);
+        const transportValue = allowance ? parseFloat(allowance.transportPrice || 0) : 
+            toTransportNumber(record.transportPrice);
         
         if (!(recordDate in empStats.transportByDate)) {
             empStats.transportByDate[recordDate] = transportValue;

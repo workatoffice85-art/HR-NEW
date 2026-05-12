@@ -606,10 +606,6 @@ async function verifyBiometric() {
 
 // Device Fingerprint - unique identifier for hardware biometric binding
 function getDeviceFingerprint() {
-    let storedId = localStorage.getItem('empDeviceUUID');
-    if (storedId) return storedId;
-
-    // Backward compatibility: Compute the old fingerprint once and save it
     const nav = navigator;
     const screen = window.screen;
     const components = [
@@ -621,6 +617,7 @@ function getDeviceFingerprint() {
         nav.hardwareConcurrency,
         nav.deviceMemory || 'unknown'
     ];
+    // Simple hash function
     let hash = 0;
     const str = components.join('|');
     for (let i = 0; i < str.length; i++) {
@@ -628,11 +625,7 @@ function getDeviceFingerprint() {
         hash = ((hash << 5) - hash) + char;
         hash = hash & hash;
     }
-    const oldFingerprint = Math.abs(hash).toString(16) + '-' + components[0].slice(0, 20);
-    
-    // Save it permanently so future updates to userAgent won't change it
-    localStorage.setItem('empDeviceUUID', oldFingerprint);
-    return oldFingerprint;
+    return Math.abs(hash).toString(16) + '-' + components[0].slice(0, 20);
 }
 
 // Submit device change request to admin
@@ -646,7 +639,6 @@ async function submitDeviceChangeRequest(deviceId, deviceInfo) {
                 action: 'submitDeviceChangeRequest',
                 employeeId: currentUser.id,
                 employeeName: currentUser.name,
-                currentDeviceId: localStorage.getItem('empDeviceUUID'),
                 newDeviceInfo: {
                     deviceId: deviceId,
                     deviceModel: deviceInfo.deviceModel,
@@ -1757,12 +1749,9 @@ function toTransportNumber(value) {
 }
 
 function getCurrentTransportPrice(record) {
-    if (record.transportPrice !== undefined && record.transportPrice !== null) {
-        return toTransportNumber(record.transportPrice);
-    }
     const allowance = currentUser && currentUser.siteAllowances ? 
         currentUser.siteAllowances.find(a => String(a.siteId) === String(record.siteId)) : null;
-    return allowance ? parseFloat(allowance.transportPrice || 0) : 0;
+    return allowance ? parseFloat(allowance.transportPrice || 0) : toTransportNumber(record.transportPrice);
 }
 
 function getWeekendDaysFromSettings() {
