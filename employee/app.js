@@ -1757,9 +1757,12 @@ function toTransportNumber(value) {
 }
 
 function getCurrentTransportPrice(record) {
+    if (record.transportPrice !== undefined && record.transportPrice !== null) {
+        return toTransportNumber(record.transportPrice);
+    }
     const allowance = currentUser && currentUser.siteAllowances ? 
         currentUser.siteAllowances.find(a => String(a.siteId) === String(record.siteId)) : null;
-    return allowance ? parseFloat(allowance.transportPrice || 0) : toTransportNumber(record.transportPrice);
+    return allowance ? parseFloat(allowance.transportPrice || 0) : 0;
 }
 
 function getWeekendDaysFromSettings() {

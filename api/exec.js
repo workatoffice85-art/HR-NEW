@@ -462,12 +462,9 @@ async function createDeviceChangeRequest(supabase, userId, userName, oldDeviceId
             return { success: false, message: 'لديك طلب تغيير جهاز قيد المراجعة بالفعل' };
         }
         
-        const requestId = "DEV" + Math.floor(10000 + Math.random() * 90000);
-        
-        const { error } = await supabase
+        const { data: insertedReq, error } = await supabase
             .from('device_change_requests')
             .insert([{
-                id: requestId,
                 user_id: userId,
                 user_name: userName,
                 old_device_id: oldDeviceId,
@@ -478,16 +475,19 @@ async function createDeviceChangeRequest(supabase, userId, userName, oldDeviceId
                 reason: reason || '',
                 status: 'pending',
                 created_at: new Date().toISOString()
-            }]);
+            }])
+            .select('id')
+            .single();
         
         if (error) {
             console.error('Create device change request error:', error);
             return { success: false, message: 'فشل إنشاء طلب تغيير الجهاز' };
         }
         
+        const requestId = insertedReq.id;
+        
         // Create notification for HR
         await supabase.from('notifications').insert([{
-            id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
             userRole: 'hr',
             title: 'طلب تغيير جهاز جديد',
             message: `قام الموظف ${userName} بطلب تغيير جهاز`,
@@ -497,7 +497,7 @@ async function createDeviceChangeRequest(supabase, userId, userName, oldDeviceId
             createdAt: new Date().toISOString()
         }]);
         
-        // Send email notification
+        // Send email notification (passing req for host URL)
         await sendRequestNotificationEmail(supabase, {
             type: 'device',
             employeeName: userName,
@@ -608,9 +608,9 @@ function getCairoISOString(date = new Date()) {
     const year = parts.find(p => p.type === 'year').value;
     const month = parts.find(p => p.type === 'month').value;
     const day = parts.find(p => p.type === 'day').value;
-    const hour = parts.find(p => p.hour === 'hour').value;
-    const minute = parts.find(p => p.minute === 'minute').value;
-    const second = parts.find(p => p.second === 'second').value;
+    const hour = parts.find(p => p.type === 'hour').value;
+    const minute = parts.find(p => p.type === 'minute').value;
+    const second = parts.find(p => p.type === 'second').value;
 
     // Return with Cairo offset
     return `${year}-${month}-${day}T${hour}:${minute}:${second}+02:00`;
@@ -783,8 +783,8 @@ export default async function handler(req, res) {
                         if (reqData.attendanceId) {
                             const { data: att } = await supabase.from('attendance').select('*').eq('id', reqData.attendanceId).single();
                             if (att) {
-                                await supabase.from('attendance').update({ transportPrice: reqData.amount }).eq('id', reqData.attendanceId);
-                                await supabase.from('siteAllowances').upsert([{ employeeId: reqData.employeeId, siteId: att.siteId, transportPrice: reqData.amount }], { onConflict: 'employeeId, siteId' });
+                                const newPrice = parseFloat(att.transportPrice || 0) + parseFloat(reqData.amount || 0);
+                                await supabase.from('attendance').update({ transportPrice: newPrice }).eq('id', reqData.attendanceId);
                             }
                         }
                     } else {
@@ -1589,7 +1589,6 @@ if (action === "updateEmployee") {
             }
 
             const reqPayload = {
-                id: data.id || "REQ" + Math.floor(10000 + Math.random() * 90000),
                 employeeId: data.employeeId,
                 employeeName: data.employeeName,
                 suggestedName: data.suggestedName,
@@ -1902,7 +1901,6 @@ if (action === "updateEmployee") {
             }
             
             const payload = {
-                id: "LEAVE" + Math.floor(10000 + Math.random() * 90000),
                 employeeId,
                 employeeName,
                 leaveDate,
@@ -1911,28 +1909,29 @@ if (action === "updateEmployee") {
                 createdAt: new Date().toISOString()
             };
             
-            const { error } = await supabase.from('leaveRequests').insert([payload]);
+            const { data: insertedData, error } = await supabase.from('leaveRequests').insert([payload]).select('id').single();
             if (error) throw error;
+            
+            const requestId = insertedData.id;
             
             // Create notification for HR
             await supabase.from('notifications').insert([{
-                id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
                 userRole: 'hr',
                 title: 'طلب إجازة جديد',
                 message: `قام الموظف ${employeeName} بطلب إجازة بتاريخ ${leaveDate}`,
                 type: 'leave_request',
-                relatedId: payload.id,
+                relatedId: requestId,
                 isRead: false,
                 createdAt: new Date().toISOString()
             }]);
             
-            // Send email notification
+            // Send email notification (passing req for host URL)
             await sendRequestNotificationEmail(supabase, {
                 type: 'leave',
                 employeeName,
                 details: `تاريخ الإجازة: ${leaveDate} - السبب: ${reason}`,
-                requestId: payload.id
-            });
+                requestId: requestId
+            }, req);
             
             return res.status(200).json({ success: true, message: "تم إرسال طلب الإجازة بنجاح للمراجعة" });
         }
