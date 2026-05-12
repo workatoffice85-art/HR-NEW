@@ -727,7 +727,7 @@ export default async function handler(req, res) {
             
             // --- EMAIL ONE-CLICK ACTIONS ---
             if (action === "emailAction") {
-                const { id, type, response, confirmed } = data;
+                const { id, type, response } = data;
                 if (!id || !type || !response) {
                     res.setHeader('Content-Type', 'text/html; charset=utf-8');
                     return res.status(400).send('<h1 style="text-align:center;margin-top:50px;font-family:Arial;">بيانات غير مكتملة</h1>');
@@ -766,9 +766,8 @@ export default async function handler(req, res) {
                     `);
                 }
 
-                // SECURITY: Prevent pre-fetching by email clients (Outlook, Gmail, etc.)
-                // Only proceed if the user actually clicked a confirmation button on our landing page
-                if (confirmed !== 'true') {
+                // SECURITY: Prevent pre-fetching by email clients using a POST form
+                if (req.method === 'GET') {
                     const actionText = response === 'approve' ? 'موافقة' : 'رفض';
                     const actionColor = response === 'approve' ? '#10b981' : '#ef4444';
                     const employeeName = reqData.employeeName || reqData.user_name || 'غير معروف';
@@ -787,9 +786,14 @@ export default async function handler(req, res) {
                                     التفاصيل: <strong>${details}</strong>
                                 </p>
                                 
-                                <a href="${req.url}&confirmed=true" style="display:inline-block; background:${actionColor}; color:white; text-decoration:none; padding:16px 40px; border-radius:12px; font-weight:bold; font-size:18px; transition:all 0.2s; box-shadow:0 4px 6px -1px ${actionColor}40;">
-                                    تأكيد الـ ${actionText} الآن
-                                </a>
+                                <form method="POST" action="/api/exec?action=emailAction">
+                                    <input type="hidden" name="id" value="${id}">
+                                    <input type="hidden" name="type" value="${type}">
+                                    <input type="hidden" name="response" value="${response}">
+                                    <button type="submit" style="width:100%; cursor:pointer; border:none; background:${actionColor}; color:white; padding:16px; border-radius:12px; font-weight:bold; font-size:18px; transition:all 0.2s; box-shadow:0 4px 6px -1px ${actionColor}40;">
+                                        تأكيد الـ ${actionText} الآن
+                                    </button>
+                                </form>
                                 
                                 <div style="margin-top:25px; color:#94a3b8; font-size:14px;">
                                     إذا لم تكن أنت من طلب هذا الإجراء، يرجى إغلاق الصفحة.
