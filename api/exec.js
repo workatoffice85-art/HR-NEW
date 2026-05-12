@@ -764,7 +764,12 @@ export default async function handler(req, res) {
 
                 if (type === 'leave') {
                     if (response === 'approve') {
-                        await supabase.from('leaveRequests').update({ status: 'approved', approvedAt: nowIso, approvedBy: adminName }).eq('id', id);
+                        const { error: updErr } = await supabase.from('leaveRequests').update({ 
+                            status: 'approved', 
+                            approvedAt: nowIso, 
+                            approvedBy: adminName 
+                        }).eq('id', id);
+                        if (updErr) throw updErr;
                         await supabase.from('notifications').insert([{ 
                             userId: reqData.employeeId, 
                             title: "تمت الموافقة على إجازتك", 
@@ -775,11 +780,27 @@ export default async function handler(req, res) {
                             createdAt: nowIso 
                         }]);
                     } else {
-                        await supabase.from('leaveRequests').update({ status: 'rejected', rejectionReason: 'مرفوض من الإيميل' }).eq('id', id);
+                        const { error: updErr } = await supabase.from('leaveRequests').update({ 
+                            status: 'rejected', 
+                            rejectionReason: 'مرفوض من الإيميل' 
+                        }).eq('id', id);
+                        if (updErr) throw updErr;
+                        
+                        await supabase.from('notifications').insert([{ 
+                            userId: reqData.employeeId, 
+                            title: 'تم رفض طلب الإجازة', 
+                            message: 'تم رفض طلب إجازتك عبر البريد الإلكتروني', 
+                            type: 'leave_rejected', 
+                            relatedId: id, 
+                            isRead: false, 
+                            createdAt: nowIso 
+                        }]);
                     }
                 } else if (type === 'site') {
                     if (response === 'approve') {
-                        await supabase.from('siteRequests').update({ status: 'approved', approvedAt: nowIso }).eq('id', id);
+                        const { error: updErr } = await supabase.from('siteRequests').update({ status: 'approved', approvedAt: nowIso }).eq('id', id);
+                        if (updErr) throw updErr;
+                        
                         await supabase.from('sites').insert([{ id: reqData.id, name: reqData.suggestedName, latitude: reqData.latitude, longitude: reqData.longitude, radius: reqData.tempRadius || 100, transportPrice: reqData.transportPrice || 120, mapLink: reqData.mapLink, isTemporary: true }]);
                         await supabase.from('notifications').insert([{ 
                             userId: reqData.employeeId, 
@@ -791,38 +812,72 @@ export default async function handler(req, res) {
                             createdAt: nowIso 
                         }]);
                     } else {
-                        await supabase.from('siteRequests').update({ status: 'rejected' }).eq('id', id);
+                        const { error: updErr } = await supabase.from('siteRequests').update({ status: 'rejected' }).eq('id', id);
+                        if (updErr) throw updErr;
                     }
                 } else if (type === 'allowance') {
                     if (response === 'approve') {
-                        await supabase.from('allowanceRequests').update({ status: 'approved', approvedAt: nowIso, approvedBy: adminName }).eq('id', id);
+                        const { error: updErr } = await supabase.from('allowanceRequests').update({ 
+                            status: 'approved', 
+                            approvedAt: nowIso, 
+                            approvedBy: adminName 
+                        }).eq('id', id);
+                        if (updErr) throw updErr;
+                        
+                        await supabase.from('notifications').insert([{ 
+                            userId: reqData.employeeId, 
+                            title: 'تحديث حالة طلب البدلات', 
+                            message: 'تم الموافقة على طلب البدلات الخاص بك عبر البريد', 
+                            type: 'allowance_approved', 
+                            relatedId: id, 
+                            isRead: false, 
+                            createdAt: nowIso 
+                        }]);
+                        
                         if (reqData.attendanceId) {
                             const { data: att } = await supabase.from('attendance').select('*').eq('id', reqData.attendanceId).single();
                             if (att) {
                                 const newPrice = parseFloat(att.transportPrice || 0) + parseFloat(reqData.amount || 0);
-                                await supabase.from('attendance').update({ transportPrice: newPrice }).eq('id', reqData.attendanceId);
+                                const { error: updAttErr } = await supabase.from('attendance').update({ transportPrice: newPrice }).eq('id', reqData.attendanceId);
+                                if (updAttErr) throw updAttErr;
                             }
                         }
                     } else {
-                        await supabase.from('allowanceRequests').update({ status: 'rejected', rejectionReason: 'مرفوض من الإيميل' }).eq('id', id);
+                        const { error: updErr } = await supabase.from('allowanceRequests').update({ 
+                            status: 'rejected', 
+                            adminNote: 'مرفوض من الإيميل' 
+                        }).eq('id', id);
+                        if (updErr) throw updErr;
+                        
+                        await supabase.from('notifications').insert([{ 
+                            userId: reqData.employeeId, 
+                            title: 'تحديث حالة طلب البدلات', 
+                            message: 'تم رفض طلب البدلات الخاص بك عبر البريد', 
+                            type: 'allowance_rejected', 
+                            relatedId: id, 
+                            isRead: false, 
+                            createdAt: nowIso 
+                        }]);
                     }
                 } else if (type === 'device') {
                     if (response === 'approve') {
                         // For device change from email, we just mark the request as approved
                         // The actual device deactivation happens when admin approves from dashboard
                         // But we can at least update the request
-                        await supabase.from('device_change_requests').update({ 
+                        const { error: updErr } = await supabase.from('device_change_requests').update({ 
                             status: 'approved', 
                             processed_at: nowIso, 
                             processed_by: adminName 
                         }).eq('id', id);
+                        if (updErr) throw updErr;
                     } else {
-                        await supabase.from('device_change_requests').update({ 
+                        const { error: updErr } = await supabase.from('device_change_requests').update({ 
                             status: 'rejected', 
                             processed_at: nowIso, 
                             processed_by: adminName, 
                             admin_note: 'مرفوض من الإيميل' 
                         }).eq('id', id);
+                        if (updErr) throw updErr;
                     }
                 }
 
