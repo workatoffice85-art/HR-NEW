@@ -1751,7 +1751,12 @@ function toTransportNumber(value) {
 function getCurrentTransportPrice(record) {
     const allowance = currentUser && currentUser.siteAllowances ? 
         currentUser.siteAllowances.find(a => String(a.siteId) === String(record.siteId)) : null;
-    return allowance ? parseFloat(allowance.transportPrice || 0) : toTransportNumber(record.transportPrice);
+    
+    const hierarchyPrice = allowance ? parseFloat(allowance.transportPrice || 0) : 0;
+    const recordPrice = toTransportNumber(record.transportPrice);
+    
+    // 🚀 Respect the higher value to allow one-time approved increases to reflect correctly
+    return Math.max(recordPrice, hierarchyPrice);
 }
 
 function getWeekendDaysFromSettings() {

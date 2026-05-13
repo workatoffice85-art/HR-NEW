@@ -662,37 +662,57 @@ function isRequestSiteId(siteId) {
 function resolveTransportPrice(rawTransport, employeeId, siteId, context) {
   var normalizedSiteId = String(siteId || "");
   var normalizedEmployeeId = String(employeeId || "");
+  var hierarchyPrice = 0;
+  var foundInHierarchy = false;
 
   // 1. Check Site Allowances Sheet (Custom mapping)
   var allowanceSheet = getOrCreateSheet("siteAllowances", ["employeeId", "siteId", "transportPrice"]);
   var allowanceRows = allowanceSheet.getDataRange().getValues();
   for (var i = 1; i < allowanceRows.length; i++) {
     if (String(allowanceRows[i][0]) === normalizedEmployeeId && String(allowanceRows[i][1]) === normalizedSiteId) {
-      return toNumberSafe(allowanceRows[i][2], 0);
+      hierarchyPrice = toNumberSafe(allowanceRows[i][2], 0);
+      foundInHierarchy = true;
+      break;
     }
   }
 
-  // 2. Check Temporary site requests
-  if (isRequestSiteId(normalizedSiteId)) {
-    var requestTransport = context && context.requestMap
-      ? toNumberSafe(context.requestMap[normalizedSiteId], null)
-      : null;
-    if (requestTransport !== null) return requestTransport;
+  if (!foundInHierarchy) {
+    // 2. Check Temporary site requests
+    if (isRequestSiteId(normalizedSiteId)) {
+      var requestTransport = context && context.requestMap
+        ? toNumberSafe(context.requestMap[normalizedSiteId], null)
+        : null;
+      if (requestTransport !== null) {
+        hierarchyPrice = requestTransport;
+        foundInHierarchy = true;
+      }
+    }
   }
 
-  // 3. Check Employee Default
-  var employeeTransport = context && context.employeeMap
-    ? toNumberSafe(context.employeeMap[normalizedEmployeeId], null)
-    : null;
-  if (employeeTransport !== null) return employeeTransport;
+  if (!foundInHierarchy) {
+    // 3. Check Employee Default
+    var employeeTransport = context && context.employeeMap
+      ? toNumberSafe(context.employeeMap[normalizedEmployeeId], null)
+      : null;
+    if (employeeTransport !== null) {
+      hierarchyPrice = employeeTransport;
+      foundInHierarchy = true;
+    }
+  }
 
-  // 4. Check Site Default
-  var siteTransport = context && context.siteMap
-    ? toNumberSafe(context.siteMap[normalizedSiteId], null)
-    : null;
-  if (siteTransport !== null) return siteTransport;
+  if (!foundInHierarchy) {
+    // 4. Check Site Default
+    var siteTransport = context && context.siteMap
+      ? toNumberSafe(context.siteMap[normalizedSiteId], null)
+      : null;
+    if (siteTransport !== null) {
+      hierarchyPrice = siteTransport;
+      foundInHierarchy = true;
+    }
+  }
 
-  return 0;
+  // 🚀 Respect the higher value to allow one-time approved increases (saved in rawTransport) to reflect correctly
+  return Math.max(toNumberSafe(rawTransport, 0), hierarchyPrice);
 }
 
 function syncAttendanceTransportForEmployee(employeeId, employeeTransport) {
@@ -1906,9 +1926,30 @@ function doPost(e) {
           var note = rows[i][ALLOWANCE_REQUEST_COL.NOTE];
           
           if (data.status === "approved") {
-            s.getRange(i + 1, ALLOWANCE_REQUEST_COL.STATUS + 1).setValue("approved");
+                        s.getRange(i + 1, ALLOWANCE_REQUEST_COL.STATUS + 1).setValue("approved");
             s.getRange(i + 1, ALLOWANCE_REQUEST_COL.APPROVED_AT + 1).setValue(new Date().toISOString());
             s.getRange(i + 1, ALLOWANCE_REQUEST_COL.APPROVED_BY + 1).setValue(data.adminName || "HR");
+            
+            // Sync with attendance sheet
+            try {
+              var requestDateStr = new Date(rows[i][ALLOWANCE_REQUEST_COL.REQUEST_DATE]).toDateString();
+              var attSheet = getSpreadsheet().getSheetByName("attendance");
+              if (attSheet) {
+                var attData = attSheet.getDataRange().getValues();
+                for (var j = attData.length - 1; j >= 1; j--) {
+                  var attDateStr = new Date(attData[j][4]).toDateString();
+                  if (String(attData[j][0]) === String(employeeId) && attDateStr === requestDateStr) {
+                    // Found the attendance record!
+                    var currentPrice = toNumberSafe(attData[j][10], 0);
+                    var newPrice = currentPrice + toNumberSafe(amount, 0);
+                    attSheet.getRange(j + 1, 11).setValue(newPrice); // 11th column is transportPrice
+                    break;
+                  }
+                }
+              }
+            } catch (e) {
+              console.error("Error syncing attendance transport: " + e.message);
+            }
             // Notify employee about approval
             createNotification(employeeId, "", "تمت الموافقة على طلب زيادة البدلات", "تمت الموافقة على طلب زيادة البدلات بمبلغ " + amount + " ج.م", "allowance_approved", data.requestId);
             return json({ success: true, message: "تمت الموافقة على الطلب بنجاح" });
