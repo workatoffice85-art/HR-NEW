@@ -274,6 +274,12 @@ function renderAttendanceTable(data) {
     const employeeOnlyList = allEmployees.filter(e => e.role !== 'hr');
     const employeeOnlyIds = new Set(employeeOnlyList.map(e => String(e.id)));
     
+    const filterDateStr = filterDate || new Date().toISOString().split('T')[0];
+    const approvedLeaveEmployeeIds = new Set(
+        allLeaveRequests.filter(req => req.leaveDate === filterDateStr && req.status === 'approved')
+                        .map(req => String(req.employeeId))
+    );
+
     const presentEmployeeIds = new Set();
     filtered.forEach(record => {
         if (record.employeeId && employeeOnlyIds.has(String(record.employeeId))) {
@@ -282,7 +288,13 @@ function renderAttendanceTable(data) {
     });
     const presentCount = presentEmployeeIds.size;
     const totalEmployees = employeeOnlyList.length;
-    const absentCount = Math.max(0, totalEmployees - presentCount);
+    
+    // Absent means: not present AND not on approved leave
+    const absentEmployeeIds = employeeOnlyList
+        .filter(emp => !presentEmployeeIds.has(String(emp.id)) && !approvedLeaveEmployeeIds.has(String(emp.id)))
+        .map(emp => String(emp.id));
+    
+    const absentCount = absentEmployeeIds.length;
 
     // Update stats display
     const statPresent = document.getElementById('statPresent');
@@ -292,10 +304,7 @@ function renderAttendanceTable(data) {
 
     // Show absent employees view
     if (attendanceViewMode === 'absent') {
-        // Find absent employees
-        const absentEmployees = employeeOnlyList.filter(emp => !presentEmployeeIds.has(String(emp.id)));
-        
-        absentEmployees.forEach(emp => {
+        employeeOnlyList.filter(emp => absentEmployeeIds.includes(String(emp.id))).forEach(emp => {
             tbody.innerHTML += `
                 <tr style="background:rgba(239,68,68,0.05);">
                     <td data-label="الموظف">${emp.name}</td>
@@ -304,6 +313,21 @@ function renderAttendanceTable(data) {
                     <td data-label="وقت الانصراف" dir="ltr">-</td>
                     <td data-label="بدل الانتقال">-</td>
                     <td data-label="الحالة"><span style="color:var(--danger)">غائب</span></td>
+                </tr>
+            `;
+        });
+        
+        // Also show employees on approved leave as a separate group or just informational?
+        // Let's add them with a different style to be clear
+        employeeOnlyList.filter(emp => approvedLeaveEmployeeIds.has(String(emp.id)) && !presentEmployeeIds.has(String(emp.id))).forEach(emp => {
+            tbody.innerHTML += `
+                <tr style="background:rgba(59,130,246,0.05);">
+                    <td data-label="الموظف">${emp.name}</td>
+                    <td data-label="الموقع">-</td>
+                    <td data-label="وقت الحضور" dir="ltr">-</td>
+                    <td data-label="وقت الانصراف" dir="ltr">-</td>
+                    <td data-label="بدل الانتقال">-</td>
+                    <td data-label="الحالة"><span style="color:#3b82f6">إجازة معتمدة</span></td>
                 </tr>
             `;
         });
@@ -573,7 +597,21 @@ async function generateEmployeeDetailedReport() {
 
     const workingDaysCount = getWorkingDaysCount(startDate, endDate);
     const daysPresent = presentDates.size;
-    const daysAbsent = Math.max(workingDaysCount - daysPresent, 0);
+    
+    // Calculate approved leaves on working days to subtract from absence
+    const weekendDays = getWeekendDaysFromSettings();
+    const holidayDatesSet = new Set(allOfficialHolidays.map(h => h.holidayDate ? h.holidayDate.split('T')[0] : null).filter(Boolean));
+    
+    const approvedLeavesOnWorkingDaysCount = allLeaveRequests.filter(req => {
+        return String(req.employeeId) === String(employeeId) &&
+               req.leaveDate >= startStr && req.leaveDate <= endStr &&
+               req.status === 'approved' &&
+               !weekendDays.includes(new Date(req.leaveDate).getDay()) &&
+               !holidayDatesSet.has(req.leaveDate) &&
+               !presentDates.has(req.leaveDate);
+    }).length;
+
+    const daysAbsent = Math.max(workingDaysCount - daysPresent - approvedLeavesOnWorkingDaysCount, 0);
 
     // Calculate overtime pay based on employee salary
     const employee = allEmployees.find(e => String(e.id) === String(employeeId));
@@ -636,7 +674,6 @@ async function generateEmployeeDetailedReport() {
         approvedLeavesByDate[req.leaveDate] = req;
     });
 
-    const weekendDays = getWeekendDaysFromSettings();
     const holidayDates = new Set();
     allOfficialHolidays.forEach(h => {
         if (h.holidayDate) {
@@ -922,7 +959,20 @@ function generateReport() {
         const data = reportAcc[empId];
         kpiTotalLates += data.lates;
         
-        const absentDays = workingDaysCount - data.daysPresent;
+        // Calculate approved leaves for this employee in the selected range to subtract from absence
+        const weekendDays = getWeekendDaysFromSettings();
+        const holidayDatesSet = new Set(allOfficialHolidays.map(h => h.holidayDate ? h.holidayDate.split('T')[0] : null).filter(Boolean));
+        
+        const approvedLeavesCount = allLeaveRequests.filter(req => {
+            return String(req.employeeId) === String(empId) &&
+                   req.leaveDate >= startStr && req.leaveDate <= endStr &&
+                   req.status === 'approved' &&
+                   !weekendDays.includes(new Date(req.leaveDate).getDay()) &&
+                   !holidayDatesSet.has(req.leaveDate) &&
+                   !data.uniqueDates.has(req.leaveDate); // Only if not already present
+        }).length;
+
+        const absentDays = Math.max(workingDaysCount - data.daysPresent - approvedLeavesCount, 0);
         
         names.push(data.name);
         lates.push(data.lates);

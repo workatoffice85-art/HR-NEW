@@ -6,6 +6,7 @@ let lastLocation = null;
 let lastDetection = null;
 let sitesData = [];
 let allAttendanceData = [];
+let allLeaveRequests = [];
 let faceMatcher = null;
 let currentFaceDescriptor = null; // DEPRECATED: use currentBiometricVerification
 let currentBiometricVerification = null; // { type: 'face'|'fingerprint', data: any }
@@ -431,6 +432,7 @@ async function initSystem() {
         if (dataResult.success) {
             sitesData = dataResult.sites || [];
             allAttendanceData = dataResult.attendance || [];
+            allLeaveRequests = dataResult.leaveRequests || [];
 
             // Load official holidays
             if (holidaysResult.success) {
@@ -1688,15 +1690,18 @@ async function fetchMyReports() {
 
     document.getElementById('loader').classList.remove('hidden');
     try {
-        // Fetch attendance and employee data in parallel
-        const [attRes, empRes] = await Promise.all([
+        // Fetch attendance, employee data, and leave requests in parallel
+        const [attRes, empRes, leaveRes] = await Promise.all([
             fetch(`${API_URL}?action=getAttendance&employeeId=${currentUser.id}`),
-            fetch(`${API_URL}?action=getEmployees`)
+            fetch(`${API_URL}?action=getEmployees`),
+            fetch(`${API_URL}?action=getLeaveRequests&employeeId=${currentUser.id}`)
         ]);
         const attResult = await attRes.json();
         const empResult = await empRes.json();
+        const leaveResult = await leaveRes.json();
 
         if(attResult.success) {
+            allLeaveRequests = leaveResult.success ? (leaveResult.data || []) : [];
             // Update currentUser with fresh data including salary and siteAllowances
             if(empResult.success && empResult.data) {
                 const empData = empResult.data.find(e => String(e.id) === String(currentUser.id));
@@ -1821,6 +1826,15 @@ function renderMyReports(data, monthStr) {
         }
     }
 
+    // Create a map for approved leaves for quick lookup
+    const approvedLeavesByDate = {};
+    allLeaveRequests.forEach(req => {
+        if (req.status === 'approved') {
+            const dateStr = req.leaveDate.split('T')[0];
+            approvedLeavesByDate[dateStr] = req;
+        }
+    });
+
     let totalTransport = 0;
     const dailyTransport = {};
     
@@ -1888,13 +1902,23 @@ function renderMyReports(data, monthStr) {
 
     totalTransport = Object.values(dailyTransport).reduce((sum, value) => sum + value, 0);
 
-    // Add Absent Days (Only for working days that have no record)
+    let approvedLeavesOnWorkingDaysCount = 0;
+    // Add Absent or Leave Days (Only for working days that have no record)
     workingDaysPassed.forEach(dateStr => {
         if (!presentDates.has(dateStr)) {
-            fullReport.push({
-                date: dateStr + 'T00:00:00+02:00', // Keep as ISO string format
-                type: 'absent'
-            });
+            if (approvedLeavesByDate[dateStr]) {
+                approvedLeavesOnWorkingDaysCount++;
+                fullReport.push({
+                    date: dateStr + 'T00:00:00+02:00',
+                    type: 'leave',
+                    reason: approvedLeavesByDate[dateStr].reason || 'إجازة معتمدة'
+                });
+            } else {
+                fullReport.push({
+                    date: dateStr + 'T00:00:00+02:00', // Keep as ISO string format
+                    type: 'absent'
+                });
+            }
         }
     });
 
@@ -1935,6 +1959,15 @@ function renderMyReports(data, monthStr) {
                     <td data-label="الحالة" style="padding: 8px 5px;"><span style="color:${statusColor}; font-weight: bold;">${statusText}</span></td>
                 </tr>
             `;
+        } else if (item.type === 'leave') {
+            // Leave Row
+            tbody.innerHTML += `
+                <tr style="background: rgba(16, 185, 129, 0.05); border-bottom: 1px solid var(--card-border);">
+                    <td data-label="التاريخ" style="padding: 8px 5px;">${formatCairoDate(item.date)}</td>
+                    <td data-label="التفاصيل" colspan="4" style="text-align:center !important; color:var(--secondary); font-size:0.8rem; padding: 8px 5px;">إجازة معتمدة: ${item.reason}</td>
+                    <td data-label="الحالة" style="padding: 8px 5px;"><span style="color:var(--secondary); font-weight: bold;">إجازة</span></td>
+                </tr>
+            `;
         } else {
             // Absent Row
             tbody.innerHTML += `
@@ -1947,7 +1980,7 @@ function renderMyReports(data, monthStr) {
         }
     });
 
-    const totalAbsent = workingDaysPassed.length - presentDates.size;
+    const totalAbsent = Math.max(workingDaysPassed.length - presentDates.size - approvedLeavesOnWorkingDaysCount, 0);
 
     // Calculate overtime pay based on employee salary
     const salary = currentUser.salary ? parseFloat(currentUser.salary) : 0;

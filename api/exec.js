@@ -862,11 +862,25 @@ if (action === "login") {
         // --- EMPLOYEE DASHBOARD INIT ---
         if (action === "getPortalInitialData") {
             const empId = data.employeeId;
-            const [siteRes, attRes] = await Promise.all([
+            const [siteRes, attRes, leaveRes] = await Promise.all([
                 supabase.from('sites').select('*'),
-                supabase.from('attendance').select('*').eq('employeeId', empId).order('checkIn', { ascending: true })
+                supabase.from('attendance').select('*').eq('employeeId', empId).order('checkIn', { ascending: true }),
+                supabase.from('leaveRequests').select('*').eq('employeeId', empId).order('leaveDate', { ascending: false })
             ]);
-            return res.status(200).json({ success: true, sites: siteRes.data || [], attendance: attRes.data || [] });
+            return res.status(200).json({ 
+                success: true, 
+                sites: siteRes.data || [], 
+                attendance: attRes.data || [],
+                leaveRequests: leaveRes.data || []
+            });
+        }
+
+        if (action === "getLeaveRequests") {
+            let query = supabase.from('leaveRequests').select('*').order('leaveDate', { ascending: false });
+            if (data.employeeId) query = query.eq('employeeId', data.employeeId);
+            const { data: leaves, error } = await query;
+            if (error) throw error;
+            return res.status(200).json({ success: true, data: leaves });
         }
 
         if (action === "getAttendance") {

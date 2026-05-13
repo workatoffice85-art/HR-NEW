@@ -2065,15 +2065,23 @@ function sendEmployeeDetailedReport(data) {
   var records = getAttendanceInRange(start, end).filter(function(r) {
     return String(r.employeeId) === String(data.employeeId);
   });
+  
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var allLeaves = _getLeaveRequestsData(ss).filter(function(req) {
+    var reqDate = new Date(req.leaveDate);
+    return String(req.employeeId) === String(data.employeeId) &&
+           reqDate >= start && reqDate <= end &&
+           req.status === "approved";
+  });
 
-  if (records.length === 0) {
-    return json({ success: false, message: "لا توجد عمليات لهذا الموظف ضمن الفترة المحددة" });
+  if (records.length === 0 && allLeaves.length === 0) {
+    return json({ success: false, message: "لا توجد عمليات أو إجازات لهذا الموظف ضمن الفترة المحددة" });
   }
 
-  var employeeName = (data.employeeName || records[0].employeeName || data.employeeId || "").toString();
-  var stats = calculateEmployeeDetailedStats(records, start, end);
+  var employeeName = (data.employeeName || (records[0] ? records[0].employeeName : "") || data.employeeId || "").toString();
+  var stats = calculateEmployeeDetailedStats(records, start, end, allLeaves);
   var title = "التقرير التفصيلي للموظف: " + employeeName + " | " + start.toLocaleDateString('ar-EG') + " - " + end.toLocaleDateString('ar-EG');
-  var htmlBody = generateEmployeeDetailedHTML(records, title, employeeName, stats, start, end);
+  var htmlBody = generateEmployeeDetailedHTML(records, title, employeeName, stats, start, end, allLeaves);
 
   GmailApp.sendEmail(emails, title,
     "مرفق التقرير التفصيلي للموظف بصيغة Excel.", {
@@ -2132,7 +2140,7 @@ function calculateUniqueDailyTransportTotal(records) {
   return total;
 }
 
-function calculateEmployeeDetailedStats(records, startDate, endDate) {
+function calculateEmployeeDetailedStats(records, startDate, endDate, approvedLeaves) {
   var presentDates = {};
   var lateDates = {};
   var totalHours = 0;
@@ -2154,27 +2162,87 @@ function calculateEmployeeDetailedStats(records, startDate, endDate) {
   var daysPresent = Object.keys(presentDates).length;
   var lateDays = Object.keys(lateDates).length;
   var workingDays = getWorkingDaysCountInRange(startDate, endDate);
+  
+  // Deduct approved leaves that are on working days and not already counted as present
+  var leaveDeduction = 0;
+  if (approvedLeaves && approvedLeaves.length > 0) {
+    var settings = getSettingsObject();
+    var weekendDays = (settings.weekendDays || "5,6").split(',').map(function(d) { return parseInt(d.trim()); });
+    var holidays = _getHolidaysData(SpreadsheetApp.getActiveSpreadsheet()).map(function(h) { 
+      return h.holidayDate ? h.holidayDate.split('T')[0] : null; 
+    });
+
+    approvedLeaves.forEach(function(req) {
+      var d = new Date(req.leaveDate);
+      var dateKey = d.toDateString();
+      var isoKey = req.leaveDate.split('T')[0];
+      
+      var isWeekend = weekendDays.indexOf(d.getDay()) !== -1;
+      var isHoliday = holidays.indexOf(isoKey) !== -1;
+      var wasPresent = presentDates[dateKey];
+      
+      if (!isWeekend && !isHoliday && !wasPresent) {
+        leaveDeduction++;
+      }
+    });
+  }
 
   return {
     daysPresent: daysPresent,
-    daysAbsent: Math.max(workingDays - daysPresent, 0),
+    daysAbsent: Math.max(workingDays - daysPresent - leaveDeduction, 0),
     lateDays: lateDays,
+    leaveCount: approvedLeaves ? approvedLeaves.length : 0,
     totalHours: totalHours,
     totalTransport: totalTransport,
     operationsCount: records.length
   };
 }
 
-function generateEmployeeDetailedHTML(records, title, employeeName, stats, startDate, endDate) {
-  var sorted = records.slice().sort(function(a, b) {
-    return new Date(b.checkIn) - new Date(a.checkIn);
+function generateEmployeeDetailedHTML(records, title, employeeName, stats, startDate, endDate, approvedLeaves) {
+  var fullReport = records.map(function(r) {
+    return {
+      date: new Date(r.checkIn),
+      siteName: r.siteName,
+      checkIn: r.checkIn,
+      checkOut: r.checkOut,
+      status: r.status,
+      hours: r.hours,
+      transport: r.transport,
+      type: 'entry'
+    };
+  });
+  
+  if (approvedLeaves) {
+    approvedLeaves.forEach(function(l) {
+      fullReport.push({
+        date: new Date(l.leaveDate),
+        reason: l.reason,
+        type: 'leave'
+      });
+    });
+  }
+
+  var sorted = fullReport.sort(function(a, b) {
+    return b.date - a.date;
   });
 
   var rows = sorted.map(function(r) {
-    var checkInDate = r.checkIn ? new Date(r.checkIn) : null;
-    var dateText = (checkInDate && !isNaN(checkInDate)) ? checkInDate.toLocaleDateString('ar-EG') : "-";
-    var checkInText = (checkInDate && !isNaN(checkInDate))
-      ? checkInDate.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })
+    var dateText = r.date ? r.date.toLocaleDateString('ar-EG') : "-";
+    
+    if (r.type === 'leave') {
+      return `
+        <tr style="border-bottom:1px solid #e5e7eb; background:rgba(16,185,129,0.05);">
+          <td style="padding:10px 8px;">${dateText}</td>
+          <td style="padding:10px 8px; text-align:center;" colspan="3">إجازة معتمدة: ${r.reason || "-"}</td>
+          <td style="padding:10px 8px;"><span style="background:#10b981;color:#fff;padding:3px 10px;border-radius:20px;font-size:0.75rem;">إجازة</span></td>
+          <td style="padding:10px 8px;">-</td>
+          <td style="padding:10px 8px;">0.00 ج.م</td>
+        </tr>
+      `;
+    }
+
+    var checkInText = (r.checkIn)
+      ? new Date(r.checkIn).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })
       : "-";
 
     var checkOutText = "لم ينصرف بعد";
@@ -2233,6 +2301,10 @@ function generateEmployeeDetailedHTML(records, title, employeeName, stats, start
           <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:10px;text-align:center;">
             <div style="font-size:0.8rem;color:#9a3412;">أيام التأخير</div>
             <div style="font-size:1.4rem;font-weight:700;color:#ea580c;">${stats.lateDays}</div>
+          </div>
+          <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px;text-align:center;">
+            <div style="font-size:0.8rem;color:#0369a1;">طلبات الإجازة</div>
+            <div style="font-size:1.4rem;font-weight:700;color:#0284c7;">${stats.leaveCount}</div>
           </div>
           <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px;text-align:center;">
             <div style="font-size:0.8rem;color:#1d4ed8;">إجمالي الساعات</div>
