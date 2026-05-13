@@ -1281,12 +1281,16 @@ async function handleCheckIn() {
             }
         } else if (result.deviceRejected) {
             // Device not authorized - show change request option
-            const requestChange = confirm(
-                '❌ ' + result.message + '\n\n' +
-                'هل تريد إرسال طلب لتغيير الجهاز إلى الإدارة؟'
-            );
-            if (requestChange) {
-                await submitDeviceChangeRequest(deviceId, deviceInfo);
+            if (result.hasPendingRequest) {
+                alert('❌ ' + result.message);
+            } else {
+                const requestChange = confirm(
+                    '❌ ' + result.message + '\n\n' +
+                    'هل تريد إرسال طلب لتغيير الجهاز إلى الإدارة؟'
+                );
+                if (requestChange) {
+                    await submitDeviceChangeRequest(deviceId, deviceInfo);
+                }
             }
             playErrorSound();
             vibrateError();
@@ -2139,7 +2143,7 @@ async function saveBiometricUpdate() {
             role: currentUser.role,
             assignedSites: currentUser.assignedSites ? currentUser.assignedSites.join(',') : '',
             biometricType: bioUpdateData.type,
-            biometricData: bioUpdateData.data,  // Already JSON string from enrollment
+            biometricData: JSON.stringify(bioUpdateData),
             // Legacy field
             faceDescriptor: bioUpdateData.type === 'face' ? bioUpdateData.data : null
         };

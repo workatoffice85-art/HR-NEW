@@ -203,4 +203,71 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- Grant execute permission to authenticated users
 GRANT EXECUTE ON FUNCTION get_database_size() TO authenticated;
 GRANT EXECUTE ON FUNCTION get_database_size() TO anon;
-GRANT EXECUTE ON FUNCTION get_database_size() TO service_role;
+
+-- ============================================
+-- DEVICES TABLE
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS devices (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id TEXT REFERENCES employees(id) ON DELETE CASCADE,
+    device_id TEXT NOT NULL,
+    device_model TEXT,
+    os_type TEXT,
+    browser_info TEXT,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(user_id, device_id)
+);
+
+-- RLS Policies for devices
+ALTER TABLE devices ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can see their own devices" 
+ON devices FOR SELECT 
+USING (auth.uid()::text = user_id);
+
+CREATE POLICY "Admins can see all devices" 
+ON devices FOR SELECT 
+USING (EXISTS (SELECT 1 FROM employees WHERE id = auth.uid()::text AND role = 'hr'));
+
+-- ============================================
+-- DEVICE CHANGE REQUESTS TABLE
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS device_change_requests (
+    id TEXT PRIMARY KEY,
+    user_id TEXT REFERENCES employees(id) ON DELETE CASCADE,
+    user_name TEXT,
+    old_device_id TEXT,
+    new_device_id TEXT,
+    new_device_model TEXT,
+    new_os_type TEXT,
+    new_browser_info TEXT,
+    reason TEXT,
+    status TEXT DEFAULT 'pending', -- 'pending', 'approved', 'rejected'
+    admin_id TEXT,
+    admin_name TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    reviewed_at TIMESTAMPTZ
+);
+
+-- RLS Policies for device_change_requests
+ALTER TABLE device_change_requests ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can see their own requests" 
+ON device_change_requests FOR SELECT 
+USING (auth.uid()::text = user_id);
+
+CREATE POLICY "Admins can see all requests" 
+ON device_change_requests FOR SELECT 
+USING (EXISTS (SELECT 1 FROM employees WHERE id = auth.uid()::text AND role = 'hr'));
+
+CREATE POLICY "Users can insert their own requests" 
+ON device_change_requests FOR INSERT 
+WITH CHECK (auth.uid()::text = user_id);
+
+CREATE POLICY "Admins can update requests" 
+ON device_change_requests FOR UPDATE 
+USING (EXISTS (SELECT 1 FROM employees WHERE id = auth.uid()::text AND role = 'hr'));

@@ -427,8 +427,8 @@ async function createDeviceChangeRequest(supabase, userId, userName, oldDeviceId
         await supabase.from('notifications').insert([{
             id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
             userRole: 'hr',
-            title: 'طلب تغيير جهاز جديد',
-            message: `قام الموظف ${userName} بطلب تغيير جهاز`,
+            title: 'طلب اعتماد جهاز (جديد/محدث)',
+            message: `الموظف ${userName} يحاول الدخول من معرف جهاز جديد. (قد يكون نفس الجهاز ولكن تم مسح بيانات المتصفح).`,
             type: 'device_change_request',
             relatedId: requestId,
             isRead: false,
