@@ -426,11 +426,20 @@ function getCurrentTransportPrice(record) {
     const allowance = employee && employee.siteAllowances ? 
         employee.siteAllowances.find(a => String(a.siteId) === String(record.siteId)) : null;
     
-    const hierarchyPrice = allowance ? parseFloat(allowance.transportPrice || 0) : 0;
-    const recordPrice = toTransportNumber(record.transportPrice);
+    if (allowance) {
+        const site = allSites.find(s => String(s.id) === String(record.siteId));
+        const siteDefault = site ? toTransportNumber(site.transportPrice) : 120;
+        
+        const hierarchyPrice = parseFloat(allowance.transportPrice || 0);
+        const recordPrice = toTransportNumber(record.transportPrice);
+        
+        if (recordPrice === siteDefault) {
+            return hierarchyPrice;
+        }
+        return Math.max(recordPrice, hierarchyPrice);
+    }
     
-    // 🚀 Respect the higher value to allow one-time approved increases to reflect correctly
-    return Math.max(recordPrice, hierarchyPrice);
+    return toTransportNumber(record.transportPrice);
 }
 
 function calculateUniqueDailyTransport(records) {

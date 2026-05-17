@@ -664,6 +664,7 @@ function resolveTransportPrice(rawTransport, employeeId, siteId, context) {
   var normalizedEmployeeId = String(employeeId || "");
   var hierarchyPrice = 0;
   var foundInHierarchy = false;
+  var isCustomAllowance = false;
 
   // 1. Check Site Allowances Sheet (Custom mapping)
   var allowanceSheet = getOrCreateSheet("siteAllowances", ["employeeId", "siteId", "transportPrice"]);
@@ -672,6 +673,7 @@ function resolveTransportPrice(rawTransport, employeeId, siteId, context) {
     if (String(allowanceRows[i][0]) === normalizedEmployeeId && String(allowanceRows[i][1]) === normalizedSiteId) {
       hierarchyPrice = toNumberSafe(allowanceRows[i][2], 0);
       foundInHierarchy = true;
+      isCustomAllowance = true;
       break;
     }
   }
@@ -708,6 +710,29 @@ function resolveTransportPrice(rawTransport, employeeId, siteId, context) {
     if (siteTransport !== null) {
       hierarchyPrice = siteTransport;
       foundInHierarchy = true;
+    }
+  }
+
+  if (isCustomAllowance) {
+    var siteTransportDefault = context && context.siteMap
+      ? toNumberSafe(context.siteMap[normalizedSiteId], null)
+      : null;
+    if (siteTransportDefault === null) {
+      try {
+        var sitesSheet = getOrCreateSheet("sites", ["id","name","latitude","longitude","radius","transportPrice","mapLink"]);
+        var sitesRows = sitesSheet.getDataRange().getValues();
+        for (var k = 1; k < sitesRows.length; k++) {
+          if (String(sitesRows[k][0]) === normalizedSiteId) {
+            siteTransportDefault = toNumberSafe(sitesRows[k][5], 0);
+            break;
+          }
+        }
+      } catch (e) {}
+    }
+    var siteDefault = siteTransportDefault !== null ? siteTransportDefault : 120;
+    var recordPrice = toNumberSafe(rawTransport, 0);
+    if (recordPrice === siteDefault) {
+      return hierarchyPrice;
     }
   }
 
