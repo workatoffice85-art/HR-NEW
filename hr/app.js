@@ -2539,11 +2539,21 @@ function renderAllowanceRequestsTable(data) {
         if (req.status === 'approved') {
             statusText = 'تمت الموافقة ✓';
             statusColor = 'var(--secondary)';
-            actions = '<span style="color:var(--text-muted); font-size:0.8rem;">تمت المعالجة</span>';
+            actions = `
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="color:var(--text-muted); font-size:0.8rem;">تمت المعالجة</span>
+                    <button class="btn-danger" style="width:auto; padding:2px 8px; font-size:0.75rem; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" onclick="deleteAllowanceRequest('${req.id}', '${req.employeeName}')">حذف 🗑️</button>
+                </div>
+            `;
         } else if (req.status === 'rejected') {
             statusText = 'مرفوض ❌';
             statusColor = 'var(--danger)';
-            actions = '<span style="color:var(--text-muted); font-size:0.8rem;">تمت المعالجة</span>';
+            actions = `
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="color:var(--text-muted); font-size:0.8rem;">تمت المعالجة</span>
+                    <button class="btn-danger" style="width:auto; padding:2px 8px; font-size:0.75rem; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" onclick="deleteAllowanceRequest('${req.id}', '${req.employeeName}')">حذف 🗑️</button>
+                </div>
+            `;
         }
 
         const createdAt = formatCairoDate(req.createdAt) + ' ' + formatCairoTime(req.createdAt);
@@ -2593,6 +2603,32 @@ async function handleAllowanceUpgrade(requestId, status) {
     } catch (e) {
         console.error(e);
         alert("فشل الاتصال بالسيرفر");
+    }
+    document.getElementById('loader').classList.add('hidden');
+}
+
+async function deleteAllowanceRequest(id, employeeName) {
+    if (!confirm(`هل أنت متأكد من حذف طلب بدل الموظف "${employeeName}"؟\nهذا الإجراء سيقوم بمسح الطلب نهائياً من النظام.`)) return;
+
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'deleteAllowanceRequest', id: id }),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+        if (result.success) {
+            alert(result.message);
+            approvedAllowanceExtraMap = null;
+            await fetchAllowanceRequests(true);
+            await initDashboard(true);
+        } else {
+            alert('خطأ: ' + result.message);
+        }
+    } catch (e) {
+        console.error(e);
+        alert('خطأ في الاتصال');
     }
     document.getElementById('loader').classList.add('hidden');
 }

@@ -1740,6 +1740,13 @@ if (action === "updateEmployee") {
             return res.status(200).json({ success: true, message: `تم مسح ${count} طلب بدلات منتهي بنجاح` });
         }
 
+        if (action === "deleteAllowanceRequest") {
+            const { id } = data;
+            const { error } = await supabase.from('allowanceRequests').delete().eq('id', id);
+            if (error) throw error;
+            return res.status(200).json({ success: true, message: "تم حذف طلب البدل بنجاح" });
+        }
+
         // --- LEAVE REQUESTS ---
         if (action === "addLeaveRequest") {
             const { employeeId, employeeName, leaveDate, reason } = data;
