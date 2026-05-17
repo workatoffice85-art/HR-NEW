@@ -731,9 +731,11 @@ function resolveTransportPrice(rawTransport, employeeId, siteId, context) {
     }
     var siteDefault = siteTransportDefault !== null ? siteTransportDefault : 120;
     var recordPrice = toNumberSafe(rawTransport, 0);
-    if (recordPrice === siteDefault) {
-      return hierarchyPrice;
-    }
+    
+    var baseDefault = siteDefault > 0 ? siteDefault : 120;
+    var manualIncrease = recordPrice > baseDefault ? recordPrice - baseDefault : 0;
+    
+    return hierarchyPrice + manualIncrease;
   }
 
   // 🚀 Respect the higher value to allow one-time approved increases (saved in rawTransport) to reflect correctly

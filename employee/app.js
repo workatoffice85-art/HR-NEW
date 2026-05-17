@@ -1768,10 +1768,10 @@ function getCurrentTransportPrice(record) {
         const hierarchyPrice = parseFloat(allowance.transportPrice || 0);
         const recordPrice = toTransportNumber(record.transportPrice);
         
-        if (recordPrice === siteDefault) {
-            return hierarchyPrice;
-        }
-        return Math.max(recordPrice, hierarchyPrice);
+        const baseDefault = siteDefault > 0 ? siteDefault : 120;
+        const manualIncrease = recordPrice > baseDefault ? recordPrice - baseDefault : 0;
+        
+        return hierarchyPrice + manualIncrease;
     }
     
     return toTransportNumber(record.transportPrice);

@@ -433,10 +433,10 @@ function getCurrentTransportPrice(record) {
         const hierarchyPrice = parseFloat(allowance.transportPrice || 0);
         const recordPrice = toTransportNumber(record.transportPrice);
         
-        if (recordPrice === siteDefault) {
-            return hierarchyPrice;
-        }
-        return Math.max(recordPrice, hierarchyPrice);
+        const baseDefault = siteDefault > 0 ? siteDefault : 120;
+        const manualIncrease = recordPrice > baseDefault ? recordPrice - baseDefault : 0;
+        
+        return hierarchyPrice + manualIncrease;
     }
     
     return toTransportNumber(record.transportPrice);
@@ -928,11 +928,7 @@ function generateReport() {
             }
         }
         // Get current transport price from siteAllowances (reflects latest changes)
-        const employee = allEmployees.find(e => String(e.id) === String(empId));
-        const allowance = employee && employee.siteAllowances ? 
-            employee.siteAllowances.find(a => String(a.siteId) === String(record.siteId)) : null;
-        const transportValue = allowance ? parseFloat(allowance.transportPrice || 0) : 
-            toTransportNumber(record.transportPrice);
+        const transportValue = getCurrentTransportPrice(record);
         
         if (!(recordDate in empStats.transportByDate)) {
             empStats.transportByDate[recordDate] = transportValue;
