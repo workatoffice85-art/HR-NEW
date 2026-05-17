@@ -1761,20 +1761,11 @@ function getCurrentTransportPrice(record) {
     const allowance = currentUser && currentUser.siteAllowances ? 
         currentUser.siteAllowances.find(a => String(a.siteId) === String(record.siteId)) : null;
     
-    if (allowance) {
-        const site = sitesData.find(s => String(s.id) === String(record.siteId));
-        const siteDefault = site ? toTransportNumber(site.transportPrice) : 120;
-        
-        const hierarchyPrice = parseFloat(allowance.transportPrice || 0);
-        const recordPrice = toTransportNumber(record.transportPrice);
-        
-        const baseDefault = siteDefault > 0 ? siteDefault : 120;
-        const manualIncrease = recordPrice > baseDefault ? recordPrice - baseDefault : 0;
-        
-        return hierarchyPrice + manualIncrease;
-    }
+    const hierarchyPrice = allowance ? parseFloat(allowance.transportPrice || 0) : 0;
+    const recordPrice = toTransportNumber(record.transportPrice);
     
-    return toTransportNumber(record.transportPrice);
+    // 🚀 Respect the higher value to allow one-time approved increases to reflect correctly
+    return Math.max(recordPrice, hierarchyPrice);
 }
 
 function getWeekendDaysFromSettings() {
