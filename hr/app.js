@@ -6,6 +6,7 @@ let allEmployees = [];
 let allSites = [];
 let allSiteRequests = [];
 let allAllowanceRequests = [];
+let approvedAllowanceExtraMap = null;
 let allLeaveRequests = [];
 let appSettings = {};
 let allOfficialHolidays = [];
@@ -158,6 +159,7 @@ async function initDashboard(forceRefresh = false) {
             allSites = result.sites || [];
             allSiteRequests = result.siteRequests || [];
             allAllowanceRequests = result.allowanceRequests || [];
+            approvedAllowanceExtraMap = null;
             allLeaveRequests = result.leaveRequests || [];
             appSettings = result.settings || {};
 
@@ -421,16 +423,48 @@ function toTransportNumber(value) {
     return Number.isNaN(parsed) ? 0 : parsed;
 }
 
+function isRequestSiteId(siteId) {
+    return /^REQ/i.test(String(siteId || ''));
+}
+
+function getApprovedAllowanceExtra(employeeId, siteId, dateKey) {
+    const empIdStr = String(employeeId || '');
+    const siteIdStr = String(siteId || '');
+    const dateStr = String(dateKey || '').slice(0, 10);
+    if (!empIdStr || !siteIdStr || !dateStr) return 0;
+
+    if (!approvedAllowanceExtraMap) {
+        approvedAllowanceExtraMap = {};
+        (allAllowanceRequests || []).forEach(req => {
+            if (!req) return;
+            if (String(req.status || '').toLowerCase() !== 'approved') return;
+
+            const reqDate = String(req.requestDate || '').slice(0, 10);
+            if (!reqDate) return;
+
+            const key = `${String(req.employeeId || '')}|${String(req.siteId || '')}|${reqDate}`;
+            approvedAllowanceExtraMap[key] = (approvedAllowanceExtraMap[key] || 0) + toTransportNumber(req.amount);
+        });
+    }
+
+    const lookupKey = `${empIdStr}|${siteIdStr}|${dateStr}`;
+    return approvedAllowanceExtraMap[lookupKey] || 0;
+}
+
 function getCurrentTransportPrice(record) {
     const employee = allEmployees.find(e => String(e.id) === String(record.employeeId));
     const allowance = employee && employee.siteAllowances ? 
         employee.siteAllowances.find(a => String(a.siteId) === String(record.siteId)) : null;
     
-    const hierarchyPrice = allowance ? parseFloat(allowance.transportPrice || 0) : 0;
     const recordPrice = toTransportNumber(record.transportPrice);
     
-    // 🚀 Respect the higher value to allow one-time approved increases to reflect correctly
-    return Math.max(recordPrice, hierarchyPrice);
+    // If no site override, keep stored value (already includes any approved increases).
+    if (!allowance) return recordPrice;
+
+    const basePrice = toTransportNumber(allowance.transportPrice);
+    const dateKey = record && record.checkIn ? String(record.checkIn).slice(0, 10) : '';
+    const extra = isRequestSiteId(record.siteId) ? 0 : getApprovedAllowanceExtra(record.employeeId, record.siteId, dateKey);
+    return basePrice + extra;
 }
 
 function calculateUniqueDailyTransport(records) {
@@ -2482,6 +2516,7 @@ async function fetchAllowanceRequests(force = false) {
         const result = await res.json();
         if (result.success) {
             allAllowanceRequests = result.data || [];
+            approvedAllowanceExtraMap = null;
             renderAllowanceRequestsTable(allAllowanceRequests);
         }
     } catch (e) { console.error(e); }
