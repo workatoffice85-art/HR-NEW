@@ -1938,6 +1938,20 @@ function renderMyReports(data, monthStr) {
 
     totalTransport = Object.values(dailyTransport).reduce((sum, value) => sum + value, 0);
 
+    // Calculate paid allowances per unique day (maximum paidAmount/transportPrice for the day if isPaid is true)
+    const dailyPaidTransport = {};
+    presentRecords.forEach(record => {
+        const dateKey = record.checkIn ? record.checkIn.slice(0, 10) : null;
+        if (dateKey && record.isPaid) {
+            const paidValue = parseFloat(record.paidAmount || record.transportPrice || 0);
+            if (!(dateKey in dailyPaidTransport) || paidValue > dailyPaidTransport[dateKey]) {
+                dailyPaidTransport[dateKey] = paidValue;
+            }
+        }
+    });
+    const totalPaidTransport = Object.values(dailyPaidTransport).reduce((sum, value) => sum + value, 0);
+    const totalRemainingTransport = Math.max(totalTransport - totalPaidTransport, 0);
+
     let approvedLeavesOnWorkingDaysCount = 0;
     // Add Absent or Leave Days (Only for working days that have no record)
     workingDaysPassed.forEach(dateStr => {
@@ -2038,6 +2052,8 @@ function renderMyReports(data, monthStr) {
     document.getElementById('empTotalOvertime').innerText = totalOvertime;
     document.getElementById('empTotalOvertimePay').innerText = overtimePay.toFixed(2) + " ج.م";
     document.getElementById('empTotalTransport').innerText = totalTransport.toFixed(2) + " ج.م";
+    document.getElementById('empTotalPaidTransport').innerText = totalPaidTransport.toFixed(2) + " ج.م";
+    document.getElementById('empTotalRemainingTransport').innerText = totalRemainingTransport.toFixed(2) + " ج.م";
 }
 
 // ============================================================
