@@ -645,11 +645,45 @@ function getRequestTransportMap() {
   return map;
 }
 
+function getSiteAllowancesMap() {
+  var sheet = getOrCreateSheet("siteAllowances", ["employeeId", "siteId", "transportPrice"]);
+  var rows = sheet.getDataRange().getValues();
+  var map = {};
+  for (var i = 1; i < rows.length; i++) {
+    var empId = String(rows[i][0] || "");
+    var siteId = String(rows[i][1] || "");
+    if (!empId || !siteId) continue;
+    map[empId + "|" + siteId] = toNumberSafe(rows[i][2], 0);
+  }
+  return map;
+}
+
+function getApprovedAllowanceExtrasMap() {
+  var sheet = getAllowanceRequestsSheet();
+  var rows = sheet.getDataRange().getValues();
+  var map = {};
+  for (var i = 1; i < rows.length; i++) {
+    var status = String(rows[i][ALLOWANCE_REQUEST_COL.STATUS] || "");
+    if (status !== "approved") continue;
+
+    var empId = String(rows[i][ALLOWANCE_REQUEST_COL.EMPLOYEE_ID] || "");
+    var siteId = String(rows[i][ALLOWANCE_REQUEST_COL.SITE_ID] || "");
+    var dateKey = toDateKey(rows[i][ALLOWANCE_REQUEST_COL.REQUEST_DATE] || rows[i][ALLOWANCE_REQUEST_COL.CREATED_AT]);
+    if (!empId || !siteId || !dateKey) continue;
+
+    var key = empId + "|" + siteId + "|" + dateKey;
+    map[key] = toNumberSafe(map[key], 0) + toNumberSafe(rows[i][ALLOWANCE_REQUEST_COL.AMOUNT], 0);
+  }
+  return map;
+}
+
 function buildTransportContext() {
   return {
     siteMap: getSiteTransportMap(),
     employeeMap: getEmployeeTransportMap(),
-    requestMap: getRequestTransportMap()
+    requestMap: getRequestTransportMap(),
+    allowanceMap: getSiteAllowancesMap(),
+    allowanceExtrasMap: getApprovedAllowanceExtrasMap()
   };
 }
 
@@ -659,22 +693,28 @@ function isRequestSiteId(siteId) {
 
 
 
-function resolveTransportPrice(rawTransport, employeeId, siteId, context) {
+function resolveTransportPrice(rawTransport, employeeId, siteId, context, recordDate) {
   var normalizedSiteId = String(siteId || "");
   var normalizedEmployeeId = String(employeeId || "");
+  var rawValue = toNumberSafe(rawTransport, 0);
+
+  // 1. Check Site Allowances Map (Custom mapping). If a row exists (even 0), it overrides.
+  var allowanceKey = normalizedEmployeeId + "|" + normalizedSiteId;
+  if (context && context.allowanceMap && Object.prototype.hasOwnProperty.call(context.allowanceMap, allowanceKey)) {
+    var baseAllowance = toNumberSafe(context.allowanceMap[allowanceKey], 0);
+    var extraAllowance = 0;
+    var dateKey = toDateKey(recordDate);
+    if (dateKey && context.allowanceExtrasMap) {
+      var extraKey = normalizedEmployeeId + "|" + normalizedSiteId + "|" + dateKey;
+      if (Object.prototype.hasOwnProperty.call(context.allowanceExtrasMap, extraKey)) {
+        extraAllowance = toNumberSafe(context.allowanceExtrasMap[extraKey], 0);
+      }
+    }
+    return baseAllowance + extraAllowance;
+  }
+
   var hierarchyPrice = 0;
   var foundInHierarchy = false;
-
-  // 1. Check Site Allowances Sheet (Custom mapping)
-  var allowanceSheet = getOrCreateSheet("siteAllowances", ["employeeId", "siteId", "transportPrice"]);
-  var allowanceRows = allowanceSheet.getDataRange().getValues();
-  for (var i = 1; i < allowanceRows.length; i++) {
-    if (String(allowanceRows[i][0]) === normalizedEmployeeId && String(allowanceRows[i][1]) === normalizedSiteId) {
-      hierarchyPrice = toNumberSafe(allowanceRows[i][2], 0);
-      foundInHierarchy = true;
-      break;
-    }
-  }
 
   if (!foundInHierarchy) {
     // 2. Check Temporary site requests
@@ -712,7 +752,7 @@ function resolveTransportPrice(rawTransport, employeeId, siteId, context) {
   }
 
   // 🚀 Respect the higher value to allow one-time approved increases (saved in rawTransport) to reflect correctly
-  return Math.max(toNumberSafe(rawTransport, 0), hierarchyPrice);
+  return Math.max(rawValue, hierarchyPrice);
 }
 
 function syncAttendanceTransportForEmployee(employeeId, employeeTransport) {
@@ -1180,7 +1220,7 @@ function doGet(e) {
       var transportContext = buildTransportContext();
 
       var records = d.map(function(r) {
-        var transport = resolveTransportPrice(r[10], r[0], r[2], transportContext);
+        var transport = resolveTransportPrice(r[10], r[0], r[2], transportContext, r[4]);
         var rawHours = r[9];
         var hoursNum = toNumberSafe(rawHours, null);
         
@@ -1745,7 +1785,7 @@ function doPost(e) {
         manualStatus = (checkInTimeStr > workStart) ? "late" : "present";
       }
       var transportContext = buildTransportContext();
-      var attendanceTransport = resolveTransportPrice(site.transportPrice, data.employeeId, site.id, transportContext);
+      var attendanceTransport = resolveTransportPrice(site.transportPrice, data.employeeId, site.id, transportContext, data.checkIn);
 
       sheet.appendRow([
         data.employeeId,data.employeeName,
@@ -2402,7 +2442,7 @@ function getAttendanceInRange(start, end) {
     var d = new Date(r[4]);
     return d >= start && d <= end;
   }).map(function(r) {
-    var transport = resolveTransportPrice(r[10], r[0], r[2], transportContext);
+    var transport = resolveTransportPrice(r[10], r[0], r[2], transportContext, r[4]);
     return {
       employeeId: r[0], employeeName: r[1], siteName: r[3], checkIn: r[4], checkOut: r[5], status: r[8], hours: r[9], transport: transport
     };
@@ -2713,7 +2753,7 @@ function _getAttendanceData(ss, employeeId) {
     return {
       employeeId:r[0], employeeName:r[1], siteId:r[2], siteName:r[3],
       checkIn:r[4], checkOut:r[5], latitude:r[6], longitude:r[7], status:r[8], 
-      totalHours: hoursNum || 0, transportPrice: resolveTransportPrice(r[10], r[0], r[2], transportContext)
+      totalHours: hoursNum || 0, transportPrice: resolveTransportPrice(r[10], r[0], r[2], transportContext, r[4])
     };
   });
   if (employeeId) records = records.filter(function(r) { return String(r.employeeId) === String(employeeId); });

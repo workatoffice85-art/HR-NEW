@@ -6,6 +6,7 @@ let allEmployees = [];
 let allSites = [];
 let allSiteRequests = [];
 let allAllowanceRequests = [];
+let approvedAllowanceExtraMap = null;
 let allLeaveRequests = [];
 let appSettings = {};
 let allOfficialHolidays = [];
@@ -158,6 +159,7 @@ async function initDashboard(forceRefresh = false) {
             allSites = result.sites || [];
             allSiteRequests = result.siteRequests || [];
             allAllowanceRequests = result.allowanceRequests || [];
+            approvedAllowanceExtraMap = null;
             allLeaveRequests = result.leaveRequests || [];
             appSettings = result.settings || {};
 
@@ -421,16 +423,48 @@ function toTransportNumber(value) {
     return Number.isNaN(parsed) ? 0 : parsed;
 }
 
+function isRequestSiteId(siteId) {
+    return /^REQ/i.test(String(siteId || ''));
+}
+
+function getApprovedAllowanceExtra(employeeId, siteId, dateKey) {
+    const empIdStr = String(employeeId || '');
+    const siteIdStr = String(siteId || '');
+    const dateStr = String(dateKey || '').slice(0, 10);
+    if (!empIdStr || !siteIdStr || !dateStr) return 0;
+
+    if (!approvedAllowanceExtraMap) {
+        approvedAllowanceExtraMap = {};
+        (allAllowanceRequests || []).forEach(req => {
+            if (!req) return;
+            if (String(req.status || '').toLowerCase() !== 'approved') return;
+
+            const reqDate = String(req.requestDate || '').slice(0, 10);
+            if (!reqDate) return;
+
+            const key = `${String(req.employeeId || '')}|${String(req.siteId || '')}|${reqDate}`;
+            approvedAllowanceExtraMap[key] = (approvedAllowanceExtraMap[key] || 0) + toTransportNumber(req.amount);
+        });
+    }
+
+    const lookupKey = `${empIdStr}|${siteIdStr}|${dateStr}`;
+    return approvedAllowanceExtraMap[lookupKey] || 0;
+}
+
 function getCurrentTransportPrice(record) {
     const employee = allEmployees.find(e => String(e.id) === String(record.employeeId));
     const allowance = employee && employee.siteAllowances ? 
         employee.siteAllowances.find(a => String(a.siteId) === String(record.siteId)) : null;
     
-    const hierarchyPrice = allowance ? parseFloat(allowance.transportPrice || 0) : 0;
     const recordPrice = toTransportNumber(record.transportPrice);
     
-    // 🚀 Respect the higher value to allow one-time approved increases to reflect correctly
-    return Math.max(recordPrice, hierarchyPrice);
+    // If no site override, keep stored value (already includes any approved increases).
+    if (!allowance) return recordPrice;
+
+    const basePrice = toTransportNumber(allowance.transportPrice);
+    const dateKey = record && record.checkIn ? String(record.checkIn).slice(0, 10) : '';
+    const extra = isRequestSiteId(record.siteId) ? 0 : getApprovedAllowanceExtra(record.employeeId, record.siteId, dateKey);
+    return basePrice + extra;
 }
 
 function calculateUniqueDailyTransport(records) {
@@ -2601,6 +2635,7 @@ async function fetchAllowanceRequests(force = false) {
         const result = await res.json();
         if (result.success) {
             allAllowanceRequests = result.data || [];
+            approvedAllowanceExtraMap = null;
             renderAllowanceRequestsTable(allAllowanceRequests);
         }
     } catch (e) { console.error(e); }
@@ -2623,11 +2658,21 @@ function renderAllowanceRequestsTable(data) {
         if (req.status === 'approved') {
             statusText = 'تمت الموافقة ✓';
             statusColor = 'var(--secondary)';
-            actions = '<span style="color:var(--text-muted); font-size:0.8rem;">تمت المعالجة</span>';
+            actions = `
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="color:var(--text-muted); font-size:0.8rem;">تمت المعالجة</span>
+                    <button class="btn-danger" style="width:auto; padding:2px 8px; font-size:0.75rem; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" onclick="deleteAllowanceRequest('${req.id}', '${req.employeeName}')">حذف 🗑️</button>
+                </div>
+            `;
         } else if (req.status === 'rejected') {
             statusText = 'مرفوض ❌';
             statusColor = 'var(--danger)';
-            actions = '<span style="color:var(--text-muted); font-size:0.8rem;">تمت المعالجة</span>';
+            actions = `
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="color:var(--text-muted); font-size:0.8rem;">تمت المعالجة</span>
+                    <button class="btn-danger" style="width:auto; padding:2px 8px; font-size:0.75rem; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" onclick="deleteAllowanceRequest('${req.id}', '${req.employeeName}')">حذف 🗑️</button>
+                </div>
+            `;
         }
 
         const createdAt = formatCairoDate(req.createdAt) + ' ' + formatCairoTime(req.createdAt);
@@ -2677,6 +2722,32 @@ async function handleAllowanceUpgrade(requestId, status) {
     } catch (e) {
         console.error(e);
         alert("فشل الاتصال بالسيرفر");
+    }
+    document.getElementById('loader').classList.add('hidden');
+}
+
+async function deleteAllowanceRequest(id, employeeName) {
+    if (!confirm(`هل أنت متأكد من حذف طلب بدل الموظف "${employeeName}"؟\nهذا الإجراء سيقوم بمسح الطلب نهائياً من النظام.`)) return;
+
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'deleteAllowanceRequest', id: id }),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+        if (result.success) {
+            alert(result.message);
+            approvedAllowanceExtraMap = null;
+            await fetchAllowanceRequests(true);
+            await initDashboard(true);
+        } else {
+            alert('خطأ: ' + result.message);
+        }
+    } catch (e) {
+        console.error(e);
+        alert('خطأ في الاتصال');
     }
     document.getElementById('loader').classList.add('hidden');
 }

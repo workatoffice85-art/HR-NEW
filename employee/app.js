@@ -7,6 +7,8 @@ let lastDetection = null;
 let sitesData = [];
 let allAttendanceData = [];
 let allLeaveRequests = [];
+let allAllowanceRequests = [];
+let approvedAllowanceExtraMap = null;
 let faceMatcher = null;
 let currentFaceDescriptor = null; // DEPRECATED: use currentBiometricVerification
 let currentBiometricVerification = null; // { type: 'face'|'fingerprint', data: any }
@@ -1691,17 +1693,21 @@ async function fetchMyReports() {
     document.getElementById('loader').classList.remove('hidden');
     try {
         // Fetch attendance, employee data, and leave requests in parallel
-        const [attRes, empRes, leaveRes] = await Promise.all([
+        const [attRes, empRes, leaveRes, allowRes] = await Promise.all([
             fetch(`${API_URL}?action=getAttendance&employeeId=${currentUser.id}`),
             fetch(`${API_URL}?action=getEmployees`),
-            fetch(`${API_URL}?action=getLeaveRequests&employeeId=${currentUser.id}`)
+            fetch(`${API_URL}?action=getLeaveRequests&employeeId=${currentUser.id}`),
+            fetch(`${API_URL}?action=getAllowanceRequests&employeeId=${currentUser.id}`)
         ]);
         const attResult = await attRes.json();
         const empResult = await empRes.json();
         const leaveResult = await leaveRes.json();
+        const allowResult = await allowRes.json();
 
         if(attResult.success) {
             allLeaveRequests = leaveResult.success ? (leaveResult.data || []) : [];
+            allAllowanceRequests = allowResult && allowResult.success ? (allowResult.data || []) : [];
+            approvedAllowanceExtraMap = null;
             // Update currentUser with fresh data including salary and siteAllowances
             if(empResult.success && empResult.data) {
                 const empData = empResult.data.find(e => String(e.id) === String(currentUser.id));
@@ -1757,15 +1763,44 @@ function toTransportNumber(value) {
     return Number.isNaN(parsed) ? 0 : parsed;
 }
 
+function getApprovedAllowanceExtra(employeeId, siteId, dateKey) {
+    const empIdStr = String(employeeId || '');
+    const siteIdStr = String(siteId || '');
+    const dateStr = String(dateKey || '').slice(0, 10);
+    if (!empIdStr || !siteIdStr || !dateStr) return 0;
+
+    if (!approvedAllowanceExtraMap) {
+        approvedAllowanceExtraMap = {};
+        (allAllowanceRequests || []).forEach(req => {
+            if (!req) return;
+            if (String(req.status || '').toLowerCase() !== 'approved') return;
+
+            const reqDate = String(req.requestDate || '').slice(0, 10);
+            if (!reqDate) return;
+
+            const key = `${String(req.employeeId || '')}|${String(req.siteId || '')}|${reqDate}`;
+            approvedAllowanceExtraMap[key] = (approvedAllowanceExtraMap[key] || 0) + toTransportNumber(req.amount);
+        });
+    }
+
+    const lookupKey = `${empIdStr}|${siteIdStr}|${dateStr}`;
+    return approvedAllowanceExtraMap[lookupKey] || 0;
+}
+
 function getCurrentTransportPrice(record) {
     const allowance = currentUser && currentUser.siteAllowances ? 
         currentUser.siteAllowances.find(a => String(a.siteId) === String(record.siteId)) : null;
     
-    const hierarchyPrice = allowance ? parseFloat(allowance.transportPrice || 0) : 0;
     const recordPrice = toTransportNumber(record.transportPrice);
     
-    // 🚀 Respect the higher value to allow one-time approved increases to reflect correctly
-    return Math.max(recordPrice, hierarchyPrice);
+    // No site override -> use stored value (already includes any approved increases).
+    if (!allowance) return recordPrice;
+
+    // Site override (including 0) -> use latest allowance + any approved "extra" allowance requests.
+    const basePrice = toTransportNumber(allowance.transportPrice);
+    const dateKey = record && record.checkIn ? String(record.checkIn).slice(0, 10) : '';
+    const extra = getApprovedAllowanceExtra(record.employeeId, record.siteId, dateKey);
+    return basePrice + extra;
 }
 
 function getWeekendDaysFromSettings() {
