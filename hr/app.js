@@ -663,6 +663,45 @@ async function settleEmployeeAllowancesForPeriod() {
     }
 }
 
+async function rollbackEmployeeAllowancesForPeriod() {
+    const employeeSelect = document.getElementById('employeeDetailEmployee');
+    const employeeId = employeeSelect.value;
+    const startStr = document.getElementById('employeeReportStartDate').value;
+    const endStr = document.getElementById('employeeReportEndDate').value;
+
+    if (!employeeId || !startStr || !endStr) {
+        return alert("الرجاء تحديد الموظف والفترة الزمنية أولاً");
+    }
+
+    if (!confirm(`هل أنت متأكد من إلغاء تسجيل سداد كافة البدلات المسددة لهذا الموظف خلال الفترة من ${startStr} إلى ${endStr} وإعادتها للحالة غير المسددة؟`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/exec', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'rollbackAttendanceAllowancePeriod',
+                employeeId,
+                startDate: startStr,
+                endDate: endStr
+            })
+        });
+        const result = await response.json();
+        if (result.success) {
+            alert(result.message);
+            await fetchAttendance(true); // force reload
+            await generateEmployeeDetailedReport();
+        } else {
+            alert("فشل إلغاء السداد: " + result.message);
+        }
+    } catch (err) {
+        console.error(err);
+        alert("حدث خطأ أثناء الاتصال بالخادم");
+    }
+}
+
 async function generateEmployeeDetailedReport() {
     const employeeSelect = document.getElementById('employeeDetailEmployee');
     const employeeId = employeeSelect.value;
@@ -799,6 +838,15 @@ async function generateEmployeeDetailedReport() {
             btnSettlePeriod.style.display = 'inline-block';
         } else {
             btnSettlePeriod.style.display = 'none';
+        }
+    }
+
+    const btnRollbackPeriod = document.getElementById('btnRollbackPeriod');
+    if (btnRollbackPeriod) {
+        if (paidAllowances > 0) {
+            btnRollbackPeriod.style.display = 'inline-block';
+        } else {
+            btnRollbackPeriod.style.display = 'none';
         }
     }
 

@@ -677,7 +677,7 @@ export default async function handler(req, res) {
             "addLeaveRequest", "approveLeaveRequest", "rejectLeaveRequest",
             "markNotificationAsRead", "markAllNotificationsAsRead",
             "addOfficialHoliday", "deleteOfficialHoliday",
-            "payAttendanceAllowance", "payAttendanceAllowancePeriod", "rollbackAttendanceAllowance"
+            "payAttendanceAllowance", "payAttendanceAllowancePeriod", "rollbackAttendanceAllowance", "rollbackAttendanceAllowancePeriod"
         ];
         if (writeActions.includes(action)) {
             syncToGoogleSheet(data);
@@ -2131,6 +2131,49 @@ if (action === "updateEmployee") {
                 success: true, 
                 message: `تم تسجيل سداد عدد ${recordsToPay.length} بدل بنجاح`, 
                 count: recordsToPay.length 
+            });
+        }
+
+        if (action === "rollbackAttendanceAllowancePeriod") {
+            const { employeeId, startDate, endDate } = data;
+            if (!employeeId || !startDate || !endDate) {
+                return res.status(200).json({ success: false, message: "البيانات المطلوبة ناقصة" });
+            }
+
+            // 1. Fetch all attendance records for this period
+            const { data: records, error: fetchErr } = await supabase.from('attendance')
+                .select('*')
+                .eq('employeeId', employeeId)
+                .gte('checkIn', startDate + 'T00:00:00')
+                .lte('checkIn', endDate + 'T23:59:59');
+
+            if (fetchErr) throw fetchErr;
+
+            // Filter locally for records that are paid
+            const recordsToRollback = (records || []).filter(r => r.isPaid);
+
+            if (recordsToRollback.length === 0) {
+                return res.status(200).json({ success: true, message: "لا توجد بدلات مسددة في هذه الفترة لإلغائها", count: 0 });
+            }
+
+            // 2. Perform bulk update
+            const promises = recordsToRollback.map(r => {
+                return supabase.from('attendance')
+                    .update({
+                        isPaid: false,
+                        paidAmount: 0,
+                        paidAt: null,
+                        paidBy: null
+                    })
+                    .eq('id', r.id);
+            });
+
+            await Promise.all(promises);
+
+            return res.status(200).json({ 
+                success: true, 
+                message: `تم إلغاء سداد عدد ${recordsToRollback.length} بدل بنجاح`, 
+                count: recordsToRollback.length 
             });
         }
 
