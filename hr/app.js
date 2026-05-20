@@ -572,7 +572,7 @@ async function initEmployeeDetailedTab() {
 async function settleSingleAllowance(attendanceId, amount) {
     if (!confirm("هل أنت متأكد من تسجيل سداد هذا البدل؟")) return;
     try {
-        const adminName = currentUser ? currentUser.name : 'HR Admin';
+        const adminName = hrSession ? hrSession.name : 'HR Admin';
         const response = await fetch('/api/exec', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -637,7 +637,7 @@ async function settleEmployeeAllowancesForPeriod() {
     }
 
     try {
-        const adminName = currentUser ? currentUser.name : 'HR Admin';
+        const adminName = hrSession ? hrSession.name : 'HR Admin';
         const response = await fetch('/api/exec', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
