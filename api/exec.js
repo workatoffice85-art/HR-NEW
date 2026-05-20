@@ -676,7 +676,8 @@ export default async function handler(req, res) {
             "addAllowanceRequest", "handleAllowanceRequest",
             "addLeaveRequest", "approveLeaveRequest", "rejectLeaveRequest",
             "markNotificationAsRead", "markAllNotificationsAsRead",
-            "addOfficialHoliday", "deleteOfficialHoliday"
+            "addOfficialHoliday", "deleteOfficialHoliday",
+            "payAttendanceAllowance", "payAttendanceAllowancePeriod"
         ];
         if (writeActions.includes(action)) {
             syncToGoogleSheet(data);
@@ -2060,6 +2061,70 @@ if (action === "updateEmployee") {
             await Promise.all(promises);
             invalidateCache('settings');
             return res.status(200).json({ success: true, message: "تم تحديث الإعدادات بنجاح" });
+        }
+
+        // --- PAYMENT OF ALLOWANCES ---
+        if (action === "payAttendanceAllowance") {
+            const { attendanceId, adminName, amount } = data;
+            if (!attendanceId) {
+                return res.status(200).json({ success: false, message: "معرف السجل مطلوب" });
+            }
+            const { error } = await supabase.from('attendance')
+                .update({
+                    isPaid: true,
+                    paidAmount: parseFloat(amount || 0),
+                    paidAt: getCairoISOString(new Date()),
+                    paidBy: adminName || 'System Admin'
+                })
+                .eq('id', attendanceId);
+
+            if (error) throw error;
+            return res.status(200).json({ success: true, message: "تم تسجيل سداد البدل بنجاح" });
+        }
+
+        if (action === "payAttendanceAllowancePeriod") {
+            const { employeeId, startDate, endDate, adminName } = data;
+            if (!employeeId || !startDate || !endDate) {
+                return res.status(200).json({ success: false, message: "البيانات المطلوبة ناقصة" });
+            }
+
+            // 1. Fetch all attendance records for this period
+            const { data: unpaidRecords, error: fetchErr } = await supabase.from('attendance')
+                .select('*')
+                .eq('employeeId', employeeId)
+                .gte('checkIn', startDate + 'T00:00:00')
+                .lte('checkIn', endDate + 'T23:59:59');
+
+            if (fetchErr) throw fetchErr;
+
+            // Filter locally for records that are not paid
+            const recordsToPay = (unpaidRecords || []).filter(r => !r.isPaid);
+
+            if (recordsToPay.length === 0) {
+                return res.status(200).json({ success: true, message: "لا توجد بدلات غير مسددة في هذه الفترة", count: 0 });
+            }
+
+            // 2. Perform bulk update
+            const nowStr = getCairoISOString(new Date());
+            const promises = recordsToPay.map(r => {
+                const amount = parseFloat(r.transportPrice || 0);
+                return supabase.from('attendance')
+                    .update({
+                        isPaid: true,
+                        paidAmount: amount,
+                        paidAt: nowStr,
+                        paidBy: adminName || 'System Admin'
+                    })
+                    .eq('id', r.id);
+            });
+
+            await Promise.all(promises);
+
+            return res.status(200).json({ 
+                success: true, 
+                message: `تم تسجيل سداد عدد ${recordsToPay.length} بدل بنجاح`, 
+                count: recordsToPay.length 
+            });
         }
 
         // --- DATABASE MONITORING ---

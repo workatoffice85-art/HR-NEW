@@ -510,6 +510,8 @@
                         onclick="sendEmployeeDetailedReport()">إرسال للإيميل 📧</button>
                     <button class="btn-primary" style="width:auto; padding:8px 15px; background:#217346;"
                         onclick="exportEmployeeDetailedToExcel()">📥 Excel</button>
+                    <button id="btnSettlePeriod" class="btn-primary" style="width:auto; padding:8px 15px; background:var(--secondary); display: none;"
+                        onclick="settleEmployeeAllowancesForPeriod()">تسجيل سداد الفترة 💸</button>
                 </div>
                 <div id="employeeDetailMeta" class="employee-report-meta">اختر موظفًا وحدد الفترة الزمنية ثم اضغط "عرض
                     التقرير".</div>
@@ -543,9 +545,17 @@
                         <h3>مبلغ العمل الإضافي</h3>
                         <div class="kpi-value" id="employeeDetailOvertimePay">0.00</div>
                     </div>
-                    <div class="kpi-card">
+                    <div class="kpi-card" style="border-left: 4px solid var(--text-main);">
                         <h3>إجمالي البدلات</h3>
                         <div class="kpi-value" id="employeeDetailTransport">0.00</div>
+                    </div>
+                    <div class="kpi-card" style="border-left: 4px solid var(--secondary);">
+                        <h3>البدلات المسددة</h3>
+                        <div class="kpi-value" id="employeeDetailPaidAllowances" style="color: var(--secondary);">0.00</div>
+                    </div>
+                    <div class="kpi-card" style="border-left: 4px solid var(--danger);">
+                        <h3>البدلات المتبقية</h3>
+                        <div class="kpi-value" id="employeeDetailRemainingAllowances" style="color: var(--danger);">0.00</div>
                     </div>
                 </div>
 
@@ -559,6 +569,7 @@
                                 <th>وقت الانصراف</th>
                                 <th>الحالة</th>
                                 <th>البدل</th>
+                                <th>حالة السداد</th>
                             </tr>
                         </thead>
                         <tbody id="employeeDetailTableBody">

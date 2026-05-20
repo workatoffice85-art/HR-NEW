@@ -535,6 +535,75 @@ async function initEmployeeDetailedTab() {
     }
 }
 
+async function settleSingleAllowance(attendanceId, amount) {
+    if (!confirm("هل أنت متأكد من تسجيل سداد هذا البدل؟")) return;
+    try {
+        const adminName = currentUser ? currentUser.name : 'HR Admin';
+        const response = await fetch('/api/exec', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'payAttendanceAllowance',
+                attendanceId,
+                amount,
+                adminName
+            })
+        });
+        const result = await response.json();
+        if (result.success) {
+            alert("تم تسجيل سداد البدل بنجاح");
+            await fetchAttendance(true); // force reload
+            await generateEmployeeDetailedReport();
+        } else {
+            alert("فشل تسجيل السداد: " + result.message);
+        }
+    } catch (err) {
+        console.error(err);
+        alert("حدث خطأ أثناء الاتصال بالخادم");
+    }
+}
+
+async function settleEmployeeAllowancesForPeriod() {
+    const employeeSelect = document.getElementById('employeeDetailEmployee');
+    const employeeId = employeeSelect.value;
+    const startStr = document.getElementById('employeeReportStartDate').value;
+    const endStr = document.getElementById('employeeReportEndDate').value;
+
+    if (!employeeId || !startStr || !endStr) {
+        return alert("الرجاء تحديد الموظف والفترة الزمنية أولاً");
+    }
+
+    if (!confirm(`هل أنت متأكد من تسجيل سداد كافة البدلات غير المسددة لهذا الموظف خلال الفترة من ${startStr} إلى ${endStr}؟`)) {
+        return;
+    }
+
+    try {
+        const adminName = currentUser ? currentUser.name : 'HR Admin';
+        const response = await fetch('/api/exec', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'payAttendanceAllowancePeriod',
+                employeeId,
+                startDate: startStr,
+                endDate: endStr,
+                adminName
+            })
+        });
+        const result = await response.json();
+        if (result.success) {
+            alert(result.message);
+            await fetchAttendance(true); // force reload
+            await generateEmployeeDetailedReport();
+        } else {
+            alert("فشل تسجيل السداد: " + result.message);
+        }
+    } catch (err) {
+        console.error(err);
+        alert("حدث خطأ أثناء الاتصال بالخادم");
+    }
+}
+
 async function generateEmployeeDetailedReport() {
     const employeeSelect = document.getElementById('employeeDetailEmployee');
     const employeeId = employeeSelect.value;
@@ -627,6 +696,33 @@ async function generateEmployeeDetailedReport() {
     });
     const leaveRequestsCount = employeeLeaveRequests.length;
 
+    // Calculate paid allowances per unique day (maximum paidAmount/transportPrice for the day if isPaid is true)
+    const dailyPaidTransport = {};
+    const dailyTotalTransport = {};
+    
+    sortedRecords.forEach(record => {
+        const dateStr = record.checkIn ? record.checkIn.slice(0, 10) : '';
+        if (!dateStr) return;
+
+        const dayKey = `${String(record.employeeId || '')}|${dateStr}`;
+        const transportValue = getCurrentTransportPrice(record);
+        
+        if (!(dayKey in dailyTotalTransport) || transportValue > dailyTotalTransport[dayKey]) {
+            dailyTotalTransport[dayKey] = transportValue;
+        }
+        
+        if (record.isPaid) {
+            const paidValue = parseFloat(record.paidAmount || record.transportPrice || 0);
+            if (!(dayKey in dailyPaidTransport) || paidValue > dailyPaidTransport[dayKey]) {
+                dailyPaidTransport[dayKey] = paidValue;
+            }
+        }
+    });
+
+    const paidAllowances = Object.values(dailyPaidTransport).reduce((sum, val) => sum + val, 0);
+    const calculatedTotalTransport = Object.values(dailyTotalTransport).reduce((sum, val) => sum + val, 0);
+    const remainingAllowances = Math.max(calculatedTotalTransport - paidAllowances, 0);
+
     document.getElementById('employeeDetailPresent').innerText = String(daysPresent);
     document.getElementById('employeeDetailAbsent').innerText = String(daysAbsent);
     document.getElementById('employeeDetailLate').innerText = String(lateDates.size);
@@ -634,7 +730,18 @@ async function generateEmployeeDetailedReport() {
     document.getElementById('employeeDetailNoCheckout').innerText = String(noCheckoutDates.size);
     document.getElementById('employeeDetailLeaveRequests').innerText = String(leaveRequestsCount);
     document.getElementById('employeeDetailOvertimePay').innerText = overtimePay.toFixed(2);
-    document.getElementById('employeeDetailTransport').innerText = totalTransport.toFixed(2);
+    document.getElementById('employeeDetailTransport').innerText = calculatedTotalTransport.toFixed(2);
+    document.getElementById('employeeDetailPaidAllowances').innerText = paidAllowances.toFixed(2);
+    document.getElementById('employeeDetailRemainingAllowances').innerText = remainingAllowances.toFixed(2);
+
+    const btnSettlePeriod = document.getElementById('btnSettlePeriod');
+    if (btnSettlePeriod) {
+        if (remainingAllowances > 0) {
+            btnSettlePeriod.style.display = 'inline-block';
+        } else {
+            btnSettlePeriod.style.display = 'none';
+        }
+    }
 
     const selectedLabel = employeeSelect.options[employeeSelect.selectedIndex]
         ? employeeSelect.options[employeeSelect.selectedIndex].textContent
@@ -707,6 +814,15 @@ async function generateEmployeeDetailedReport() {
                 const statusMeta = getStatusMeta(record.status, dateKey);
                 const currentTransport = getCurrentTransportPrice(record);
                 
+                let paymentStatusHtml = '';
+                if (record.isPaid) {
+                    paymentStatusHtml = `<span class="badge" style="background-color: var(--secondary); color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 0.8rem;">تم السداد ✓</span>`;
+                } else if (currentTransport > 0) {
+                    paymentStatusHtml = `<button class="btn-primary" style="padding: 4px 8px; font-size: 0.8rem; width: auto; background-color: var(--secondary);" onclick="settleSingleAllowance('${record.id}', ${currentTransport})">سداد 💸</button>`;
+                } else {
+                    paymentStatusHtml = `<span style="color: var(--text-muted); font-size: 0.8rem;">-</span>`;
+                }
+
                 tbody.innerHTML += `
                     <tr>
                         <td data-label="التاريخ">${displayDate}</td>
@@ -715,6 +831,7 @@ async function generateEmployeeDetailedReport() {
                         <td data-label="وقت الانصراف" dir="ltr">${checkOutText}</td>
                         <td data-label="الحالة"><span style="color:${statusMeta.color}">${statusMeta.text}</span></td>
                         <td data-label="البدل">${currentTransport.toFixed(2)} ج.م</td>
+                        <td data-label="حالة السداد">${paymentStatusHtml}</td>
                     </tr>
                 `;
             });
@@ -734,6 +851,7 @@ async function generateEmployeeDetailedReport() {
                         <td data-label="وقت الانصراف">-</td>
                         <td data-label="الحالة"><span style="color:#10b981; font-weight:bold;">إجازة معتمدة</span></td>
                         <td data-label="البدل">0.00 ج.م</td>
+                        <td data-label="حالة السداد">-</td>
                     </tr>
                 `;
             } else if (!isWeekend && !isHoliday) {
@@ -746,6 +864,7 @@ async function generateEmployeeDetailedReport() {
                         <td data-label="وقت الانصراف">-</td>
                         <td data-label="الحالة"><span style="color:var(--danger); font-weight:bold;">غائب</span></td>
                         <td data-label="البدل">0.00 ج.م</td>
+                        <td data-label="حالة السداد">-</td>
                     </tr>
                 `;
             }

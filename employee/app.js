@@ -1896,6 +1896,7 @@ function renderMyReports(data, monthStr) {
             siteName: record.siteName || '-',
             status: record.status, // 'present' or 'late'
             transport: getCurrentTransportPrice(record),
+            isPaid: record.isPaid || false,
             type: 'entry'
         });
     });
@@ -1949,13 +1950,22 @@ function renderMyReports(data, monthStr) {
                 checkOutDisplay = formatCairoTime(item.checkOut);
             }
 
+            let transportDisplay = `${item.transport.toFixed(2)} ج.م`;
+            if (item.isPaid) {
+                transportDisplay = `<span style="color:var(--secondary); font-weight:bold;">تم السداد ✓ (${item.transport.toFixed(2)} ج.م)</span><br><span style="font-size:0.7rem; color:var(--text-muted);">في حال وجود أي مشكلة يرجى مراجعة الإدارة</span>`;
+            } else if (item.transport > 0) {
+                transportDisplay = `${item.transport.toFixed(2)} ج.م`;
+            } else {
+                transportDisplay = `0.00 ج.م`;
+            }
+
             tbody.innerHTML += `
                 <tr style="border-bottom: 1px solid var(--card-border);">
                     <td data-label="التاريخ" style="padding: 8px 5px;">${formatCairoDate(item.checkIn)}</td>
                     <td data-label="الحضور" style="padding: 8px 5px; font-family: monospace;">${formatCairoTime(item.checkIn)}</td>
                     <td data-label="الانصراف" style="padding: 8px 5px; font-family: monospace;">${checkOutDisplay}</td>
                     <td data-label="الموقع" style="padding: 8px 5px; font-size: 0.8rem;">${item.siteName || '-'}</td>
-                    <td data-label="البدل" style="padding: 8px 5px;">${item.transport} ج.م</td>
+                    <td data-label="البدل" style="padding: 8px 5px;">${transportDisplay}</td>
                     <td data-label="الحالة" style="padding: 8px 5px;"><span style="color:${statusColor}; font-weight: bold;">${statusText}</span></td>
                 </tr>
             `;

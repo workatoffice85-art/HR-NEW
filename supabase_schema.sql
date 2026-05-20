@@ -72,7 +72,11 @@ CREATE TABLE IF NOT EXISTS attendance (
     longitude NUMERIC,
     status TEXT,
     "totalHours" NUMERIC,
-    "transportPrice" NUMERIC
+    "transportPrice" NUMERIC,
+    "isPaid" BOOLEAN DEFAULT FALSE,
+    "paidAmount" NUMERIC DEFAULT 0,
+    "paidAt" TEXT,
+    "paidBy" TEXT
 );
 
 -- Table: settings
