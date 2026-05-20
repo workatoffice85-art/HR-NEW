@@ -228,10 +228,12 @@ CREATE TABLE IF NOT EXISTS devices (
 -- RLS Policies for devices
 ALTER TABLE devices ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can see their own devices" ON devices;
 CREATE POLICY "Users can see their own devices" 
 ON devices FOR SELECT 
 USING (auth.uid()::text = user_id);
 
+DROP POLICY IF EXISTS "Admins can see all devices" ON devices;
 CREATE POLICY "Admins can see all devices" 
 ON devices FOR SELECT 
 USING (EXISTS (SELECT 1 FROM employees WHERE id = auth.uid()::text AND role = 'hr'));
@@ -260,18 +262,22 @@ CREATE TABLE IF NOT EXISTS device_change_requests (
 -- RLS Policies for device_change_requests
 ALTER TABLE device_change_requests ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can see their own requests" ON device_change_requests;
 CREATE POLICY "Users can see their own requests" 
 ON device_change_requests FOR SELECT 
 USING (auth.uid()::text = user_id);
 
+DROP POLICY IF EXISTS "Admins can see all requests" ON device_change_requests;
 CREATE POLICY "Admins can see all requests" 
 ON device_change_requests FOR SELECT 
 USING (EXISTS (SELECT 1 FROM employees WHERE id = auth.uid()::text AND role = 'hr'));
 
+DROP POLICY IF EXISTS "Users can insert their own requests" ON device_change_requests;
 CREATE POLICY "Users can insert their own requests" 
 ON device_change_requests FOR INSERT 
 WITH CHECK (auth.uid()::text = user_id);
 
+DROP POLICY IF EXISTS "Admins can update requests" ON device_change_requests;
 CREATE POLICY "Admins can update requests" 
 ON device_change_requests FOR UPDATE 
 USING (EXISTS (SELECT 1 FROM employees WHERE id = auth.uid()::text AND role = 'hr'));

@@ -597,6 +597,31 @@ async function settleSingleAllowance(attendanceId, amount) {
     }
 }
 
+async function rollbackSingleAllowance(attendanceId) {
+    if (!confirm("هل أنت متأكد من إلغاء تسجيل سداد هذا البدل وإعادته للحالة غير المسددة؟")) return;
+    try {
+        const response = await fetch('/api/exec', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'rollbackAttendanceAllowance',
+                attendanceId
+            })
+        });
+        const result = await response.json();
+        if (result.success) {
+            alert("تم إلغاء سداد البدل بنجاح");
+            await fetchAttendance(true); // force reload
+            await generateEmployeeDetailedReport();
+        } else {
+            alert("فشل إلغاء السداد: " + result.message);
+        }
+    } catch (err) {
+        console.error(err);
+        alert("حدث خطأ أثناء الاتصال بالخادم");
+    }
+}
+
 async function settleEmployeeAllowancesForPeriod() {
     const employeeSelect = document.getElementById('employeeDetailEmployee');
     const employeeId = employeeSelect.value;
@@ -850,7 +875,12 @@ async function generateEmployeeDetailedReport() {
                 
                 let paymentStatusHtml = '';
                 if (record.isPaid) {
-                    paymentStatusHtml = `<span class="badge" style="background-color: var(--secondary); color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 0.8rem;">تم السداد ✓</span>`;
+                    paymentStatusHtml = `
+                        <div style="display: flex; align-items: center; gap: 6px; justify-content: center;">
+                            <span class="badge" style="background-color: var(--secondary); color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 0.8rem;">تم السداد ✓</span>
+                            <button class="btn-primary" style="padding: 4px 8px; font-size: 0.75rem; width: auto; background-color: var(--danger);" onclick="rollbackSingleAllowance('${record.id}')" title="إلغاء السداد">تراجع ↩</button>
+                        </div>
+                    `;
                 } else if (currentTransport > 0) {
                     paymentStatusHtml = `<button class="btn-primary" style="padding: 4px 8px; font-size: 0.8rem; width: auto; background-color: var(--secondary);" onclick="settleSingleAllowance('${record.id}', ${currentTransport})">سداد 💸</button>`;
                 } else {

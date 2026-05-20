@@ -677,7 +677,7 @@ export default async function handler(req, res) {
             "addLeaveRequest", "approveLeaveRequest", "rejectLeaveRequest",
             "markNotificationAsRead", "markAllNotificationsAsRead",
             "addOfficialHoliday", "deleteOfficialHoliday",
-            "payAttendanceAllowance", "payAttendanceAllowancePeriod"
+            "payAttendanceAllowance", "payAttendanceAllowancePeriod", "rollbackAttendanceAllowance"
         ];
         if (writeActions.includes(action)) {
             syncToGoogleSheet(data);
@@ -2132,6 +2132,24 @@ if (action === "updateEmployee") {
                 message: `تم تسجيل سداد عدد ${recordsToPay.length} بدل بنجاح`, 
                 count: recordsToPay.length 
             });
+        }
+
+        if (action === "rollbackAttendanceAllowance") {
+            const { attendanceId } = data;
+            if (!attendanceId) {
+                return res.status(200).json({ success: false, message: "معرف السجل مطلوب" });
+            }
+            const { error } = await supabase.from('attendance')
+                .update({
+                    isPaid: false,
+                    paidAmount: 0,
+                    paidAt: null,
+                    paidBy: null
+                })
+                .eq('id', attendanceId);
+
+            if (error) throw error;
+            return res.status(200).json({ success: true, message: "تم إلغاء تسجيل سداد البدل بنجاح" });
         }
 
         // --- DATABASE MONITORING ---
