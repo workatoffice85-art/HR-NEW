@@ -1437,15 +1437,26 @@ async function handleCheckOut() {
 
 // ------ SITE REQUEST LOGIC ------ //
 function openRequestModal() {
-    document.getElementById('requestSiteModal').classList.remove('hidden');
-    document.getElementById('requestSiteCard').classList.remove('hidden'); // Ensure inner card is visible
+    const modal = document.getElementById('requestSiteModal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.style.display = 'flex';
+    }
+    const card = document.getElementById('requestSiteCard');
+    if (card) {
+        card.classList.remove('hidden');
+    }
     document.getElementById('suggestedSiteName').value = '';
     document.getElementById('suggestedSiteLink').value = '';
     document.getElementById('suggestedSiteNote').value = '';
 }
 
 function closeRequestModal() {
-    document.getElementById('requestSiteModal').classList.add('hidden');
+    const modal = document.getElementById('requestSiteModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.style.display = 'none';
+    }
 }
 
 async function submitSiteRequest() {
@@ -2090,12 +2101,18 @@ function openBiometricUpdateModal() {
     bioUpdateType = null;
     bioUpdateData = null;
     
-    modal.classList.remove('hidden');
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.style.display = 'flex';
+    }
 }
 
 function closeBiometricUpdateModal() {
     const modal = document.getElementById('biometricUpdateModal');
-    modal.classList.add('hidden');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.style.display = 'none';
+    }
     
     // Stop any active video stream
     if (bioUpdateVideoStream) {
