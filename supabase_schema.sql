@@ -1,6 +1,10 @@
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- ============================================
+-- DATABASE TABLES
+-- ============================================
+
 -- Table: employees
 CREATE TABLE IF NOT EXISTS employees (
     id TEXT PRIMARY KEY,
@@ -39,7 +43,7 @@ CREATE TABLE IF NOT EXISTS "siteAllowances" (
 
 -- Table: siteRequests
 CREATE TABLE IF NOT EXISTS "siteRequests" (
-    id TEXT PRIMARY KEY,
+    id TEXT PRIMARY KEY DEFAULT ('REQ'::text || upper(substr(md5(random()::text), 1, 8))),
     "employeeId" TEXT REFERENCES employees(id) ON DELETE CASCADE,
     "employeeName" TEXT,
     latitude NUMERIC,
@@ -76,7 +80,8 @@ CREATE TABLE IF NOT EXISTS attendance (
     "isPaid" BOOLEAN DEFAULT FALSE,
     "paidAmount" NUMERIC DEFAULT 0,
     "paidAt" TEXT,
-    "paidBy" TEXT
+    "paidBy" TEXT,
+    device_id TEXT
 );
 
 -- Table: settings
@@ -87,7 +92,7 @@ CREATE TABLE IF NOT EXISTS settings (
 
 -- Table: allowanceRequests
 CREATE TABLE IF NOT EXISTS "allowanceRequests" (
-    id TEXT PRIMARY KEY,                           -- Format: ALLOW12345
+    id TEXT PRIMARY KEY DEFAULT ('ALLOW'::text || upper(substr(md5(random()::text), 1, 8))), -- Format: ALLOW12345
     "employeeId" TEXT REFERENCES employees(id) ON DELETE CASCADE,
     "employeeName" TEXT,
     "attendanceId" TEXT,                           -- Related attendance record
@@ -100,12 +105,13 @@ CREATE TABLE IF NOT EXISTS "allowanceRequests" (
     "createdAt" TEXT DEFAULT NOW(),
     "approvedAt" TEXT,                             -- When approved
     "approvedBy" TEXT,                             -- HR admin name
-    "rejectionReason" TEXT                         -- Reason for rejection
+    "rejectionReason" TEXT,                        -- Reason for rejection
+    "adminNote" TEXT                               -- Admin note / decision comments
 );
 
 -- Table: approvalLogs
 CREATE TABLE IF NOT EXISTS "approvalLogs" (
-    id TEXT PRIMARY KEY,                           -- Format: LOG12345
+    id TEXT PRIMARY KEY DEFAULT ('LOG'::text || upper(substr(md5(random()::text), 1, 8))), -- Format: LOG12345
     "requestId" TEXT REFERENCES "allowanceRequests"(id) ON DELETE CASCADE,
     "adminId" TEXT,
     "adminName" TEXT,
@@ -124,7 +130,7 @@ CREATE TABLE IF NOT EXISTS official_holidays (
 
 -- Table: leaveRequests
 CREATE TABLE IF NOT EXISTS "leaveRequests" (
-    id TEXT PRIMARY KEY,                           -- Format: LEAVE12345
+    id TEXT PRIMARY KEY DEFAULT ('LEAVE'::text || upper(substr(md5(random()::text), 1, 8))), -- Format: LEAVE12345
     "employeeId" TEXT REFERENCES employees(id) ON DELETE CASCADE,
     "employeeName" TEXT NOT NULL,
     "leaveDate" DATE NOT NULL,                     -- Date of leave
@@ -138,7 +144,7 @@ CREATE TABLE IF NOT EXISTS "leaveRequests" (
 
 -- Table: notifications
 CREATE TABLE IF NOT EXISTS "notifications" (
-    id TEXT PRIMARY KEY,                           -- Format: NOTIF12345
+    id TEXT PRIMARY KEY DEFAULT ('NOTIF'::text || upper(substr(md5(random()::text), 1, 8))), -- Format: NOTIF12345
     "userId" TEXT,                                 -- Target user ID (for specific users)
     "userRole" TEXT,                               -- Target role (hr, employee, etc.)
     "title" TEXT NOT NULL,                         -- Notification title
@@ -150,6 +156,38 @@ CREATE TABLE IF NOT EXISTS "notifications" (
     "readAt" TEXT                                  -- When marked as read
 );
 
+-- Table: devices
+CREATE TABLE IF NOT EXISTS devices (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id TEXT REFERENCES employees(id) ON DELETE CASCADE,
+    device_id TEXT NOT NULL,
+    device_model TEXT,
+    os_type TEXT,
+    browser_info TEXT,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(user_id, device_id)
+);
+
+-- Table: device_change_requests
+CREATE TABLE IF NOT EXISTS device_change_requests (
+    id TEXT PRIMARY KEY DEFAULT ('DEV'::text || upper(substr(md5(random()::text), 1, 8))),
+    user_id TEXT REFERENCES employees(id) ON DELETE CASCADE,
+    user_name TEXT,
+    old_device_id TEXT,
+    new_device_id TEXT,
+    new_device_model TEXT,
+    new_os_type TEXT,
+    new_browser_info TEXT,
+    reason TEXT,
+    status TEXT DEFAULT 'pending', -- 'pending', 'approved', 'rejected'
+    admin_note TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    processed_at TEXT,
+    processed_by TEXT
+);
+
 -- ============================================
 -- PERFORMANCE INDEXES
 -- ============================================
@@ -159,6 +197,7 @@ CREATE TABLE IF NOT EXISTS "notifications" (
 CREATE INDEX IF NOT EXISTS idx_attendance_employeeId ON attendance("employeeId");
 CREATE INDEX IF NOT EXISTS idx_attendance_checkIn ON attendance("checkIn");
 CREATE INDEX IF NOT EXISTS idx_attendance_employee_checkIn ON attendance("employeeId", "checkIn");
+CREATE INDEX IF NOT EXISTS idx_attendance_device_id ON attendance(device_id);
 
 -- Employee indexes
 CREATE INDEX IF NOT EXISTS idx_employees_email ON employees(email);
@@ -192,6 +231,16 @@ CREATE INDEX IF NOT EXISTS idx_notifications_type ON "notifications"("type");
 CREATE INDEX IF NOT EXISTS idx_notifications_createdAt ON "notifications"("createdAt");
 CREATE INDEX IF NOT EXISTS idx_notifications_relatedId ON "notifications"("relatedId");
 
+-- Device indexes
+CREATE INDEX IF NOT EXISTS idx_devices_user_id ON devices(user_id);
+CREATE INDEX IF NOT EXISTS idx_devices_device_id ON devices(device_id);
+CREATE INDEX IF NOT EXISTS idx_devices_is_active ON devices(is_active);
+
+-- Device change request indexes
+CREATE INDEX IF NOT EXISTS idx_device_change_requests_user_id ON device_change_requests(user_id);
+CREATE INDEX IF NOT EXISTS idx_device_change_requests_status ON device_change_requests(status);
+CREATE INDEX IF NOT EXISTS idx_device_change_requests_created_at ON device_change_requests(created_at);
+
 -- ============================================
 -- DATABASE SIZE MONITORING FUNCTION
 -- ============================================
@@ -209,21 +258,8 @@ GRANT EXECUTE ON FUNCTION get_database_size() TO authenticated;
 GRANT EXECUTE ON FUNCTION get_database_size() TO anon;
 
 -- ============================================
--- DEVICES TABLE
+-- ROW LEVEL SECURITY (RLS) POLICIES
 -- ============================================
-
-CREATE TABLE IF NOT EXISTS devices (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id TEXT REFERENCES employees(id) ON DELETE CASCADE,
-    device_id TEXT NOT NULL,
-    device_model TEXT,
-    os_type TEXT,
-    browser_info TEXT,
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(user_id, device_id)
-);
 
 -- RLS Policies for devices
 ALTER TABLE devices ENABLE ROW LEVEL SECURITY;
@@ -237,27 +273,6 @@ DROP POLICY IF EXISTS "Admins can see all devices" ON devices;
 CREATE POLICY "Admins can see all devices" 
 ON devices FOR SELECT 
 USING (EXISTS (SELECT 1 FROM employees WHERE id = auth.uid()::text AND role = 'hr'));
-
--- ============================================
--- DEVICE CHANGE REQUESTS TABLE
--- ============================================
-
-CREATE TABLE IF NOT EXISTS device_change_requests (
-    id TEXT PRIMARY KEY,
-    user_id TEXT REFERENCES employees(id) ON DELETE CASCADE,
-    user_name TEXT,
-    old_device_id TEXT,
-    new_device_id TEXT,
-    new_device_model TEXT,
-    new_os_type TEXT,
-    new_browser_info TEXT,
-    reason TEXT,
-    status TEXT DEFAULT 'pending', -- 'pending', 'approved', 'rejected'
-    admin_id TEXT,
-    admin_name TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    reviewed_at TIMESTAMPTZ
-);
 
 -- RLS Policies for device_change_requests
 ALTER TABLE device_change_requests ENABLE ROW LEVEL SECURITY;
