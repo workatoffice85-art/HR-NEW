@@ -5,38 +5,236 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>بوابة الموظف | الحضور والانصراف</title>
-    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../assets/global.css?v=1.1">
     <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
     <script defer src="biometric-manager.js"></script>
     <style>
+        /* Premium Core Styling Overrides */
+        :root {
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --primary-glow: rgba(99, 102, 241, 0.35);
+            --secondary: #10b981;
+            --secondary-hover: #059669;
+            --secondary-glow: rgba(16, 185, 129, 0.35);
+            --danger: #ef4444;
+            --danger-hover: #dc2626;
+            --danger-glow: rgba(239, 68, 68, 0.35);
+            --warning: #f59e0b;
+            --warning-hover: #d97706;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --card-bg: rgba(22, 28, 45, 0.6);
+            --card-border: rgba(255, 255, 255, 0.08);
+            --glass-glow: rgba(255, 255, 255, 0.03);
+            --font-family: 'Cairo', 'Tajawal', sans-serif;
+        }
+
+        body {
+            background: #090d16;
+            color: var(--text-main);
+            font-family: var(--font-family);
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Ambient Dynamic Background Circles */
+        .bg-glow {
+            position: fixed;
+            width: 320px;
+            height: 320px;
+            border-radius: 50%;
+            filter: blur(110px);
+            opacity: 0.16;
+            pointer-events: none;
+            z-index: -1;
+            animation: pulse-glow 8s infinite alternate ease-in-out;
+        }
+
+        .bg-glow-1 {
+            background: #4f46e5;
+            top: -40px;
+            left: -40px;
+            animation-delay: 0s;
+        }
+
+        .bg-glow-2 {
+            background: #10b981;
+            bottom: -40px;
+            right: -40px;
+            animation-delay: 2.5s;
+        }
+
+        .bg-glow-3 {
+            background: #8b5cf6;
+            top: 40%;
+            left: 50%;
+            width: 260px;
+            height: 260px;
+            animation-delay: 5s;
+        }
+
+        @keyframes pulse-glow {
+            0% { transform: scale(1) translate(0, 0); opacity: 0.13; }
+            100% { transform: scale(1.2) translate(15px, 15px); opacity: 0.2; }
+        }
+
         .portal-container {
-            max-width: 500px;
+            max-width: 480px;
             width: 100%;
             margin: auto;
-            padding: 20px;
+            padding: 20px 16px;
+            box-sizing: border-box;
+            position: relative;
+            z-index: 1;
         }
 
         .header {
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 24px;
+        }
+        
+        .header h2 {
+            font-size: 1.6rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #a5b4fc, #38bdf8);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 8px;
         }
 
+        .glass-card {
+            background: var(--card-bg) !important;
+            backdrop-filter: blur(24px) !important;
+            -webkit-backdrop-filter: blur(24px) !important;
+            border: 1px solid var(--card-border) !important;
+            border-radius: 28px !important;
+            padding: 28px 24px !important;
+            box-shadow: 
+                0 15px 35px rgba(0, 0, 0, 0.3),
+                inset 0 1px 1px rgba(255, 255, 255, 0.08),
+                inset 0 0 20px var(--glass-glow) !important;
+            transition: all 0.3s ease !important;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+            text-align: right;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        /* iOS safe input font sizes and tall touch targets */
+        .input-group input, 
+        .input-group select, 
+        .input-group textarea {
+            width: 100% !important;
+            height: 50px !important; /* Large touch targets */
+            font-size: 16px !important; /* Critical: Prevent automatic iOS zoom */
+            border-radius: 14px !important;
+            background: rgba(15, 23, 42, 0.45) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            color: var(--text-main) !important;
+            padding: 12px 16px !important;
+            box-sizing: border-box !important;
+            transition: all 0.3s ease !important;
+            font-family: var(--font-family) !important;
+            outline: none !important;
+        }
+        
+        .input-group textarea {
+            height: auto !important;
+            min-height: 80px !important;
+        }
+
+        .input-group input:focus, 
+        .input-group select:focus, 
+        .input-group textarea:focus {
+            border-color: var(--primary) !important;
+            box-shadow: 0 0 0 3px var(--primary-glow) !important;
+            background: rgba(15, 23, 42, 0.6) !important;
+        }
+
+        /* Buttons Styling */
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), var(--primary-hover)) !important;
+            color: var(--text-main) !important;
+            border: none !important;
+            height: 50px !important;
+            border-radius: 14px !important;
+            font-size: 1.05rem !important;
+            font-weight: 700 !important;
+            cursor: pointer !important;
+            width: 100% !important;
+            transition: all 0.3s ease !important;
+            box-shadow: 0 4px 15px var(--primary-glow) !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            font-family: var(--font-family) !important;
+            outline: none !important;
+        }
+
+        .btn-primary:active {
+            transform: scale(0.98) !important;
+            opacity: 0.9 !important;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, var(--danger), var(--danger-hover)) !important;
+            color: var(--text-main) !important;
+            border: none !important;
+            height: 50px !important;
+            border-radius: 14px !important;
+            font-weight: 700 !important;
+            cursor: pointer !important;
+            transition: all 0.3s ease !important;
+            box-shadow: 0 4px 15px var(--danger-glow) !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            font-family: var(--font-family) !important;
+        }
+
+        .btn-danger:active {
+            transform: scale(0.98) !important;
+        }
+
+        /* Camera Frame and Container Styles */
         .camera-container {
             position: relative;
             width: 100%;
-            border-radius: 16px;
+            border-radius: 20px;
             overflow: hidden;
-            margin-bottom: 20px;
+            margin-bottom: 24px;
             background: #000;
             display: flex;
             justify-content: center;
+            align-items: center;
+            border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+            height: 250px;
         }
 
         #videoElement,
-        #regVideo {
+        #regVideo,
+        #bioUpdateVideo {
             width: 100%;
-            max-height: 350px;
+            height: 100%;
             object-fit: cover;
         }
 
@@ -47,44 +245,57 @@
             left: 0;
             width: 100%;
             height: 100%;
+            pointer-events: none;
         }
 
-        /* Face ID Style Circle Overlay */
+        /* Apple Face ID Orbital Scanner Ring Animation */
         .faceid-ring {
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 200px;
-            height: 200px;
+            width: 180px;
+            height: 180px;
             border-radius: 50%;
-            border: 3px solid rgba(255, 255, 255, 0.6);
+            border: 3px dashed rgba(255, 255, 255, 0.35);
             box-shadow: 
-                0 0 0 4px rgba(0, 0, 0, 0.3),
-                0 0 20px rgba(255, 255, 255, 0.3),
-                inset 0 0 20px rgba(255, 255, 255, 0.1);
-            transition: all 0.3s ease;
+                0 0 0 6px rgba(0, 0, 0, 0.4),
+                0 0 30px rgba(99, 102, 241, 0.25),
+                inset 0 0 20px rgba(99, 102, 241, 0.1);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
             pointer-events: none;
+            animation: rotate-ring 15s linear infinite;
+        }
+
+        @keyframes rotate-ring {
+            from { transform: translate(-50%, -50%) rotate(0deg); }
+            to { transform: translate(-50%, -50%) rotate(360deg); }
         }
 
         .faceid-ring.scanning {
-            animation: faceid-pulse 1.5s ease-in-out infinite;
+            border-color: var(--primary);
+            animation: 
+                rotate-ring 15s linear infinite,
+                faceid-pulse 1.8s ease-in-out infinite;
         }
 
         .faceid-ring.success {
-            border-color: #10B981;
+            border-style: solid;
+            border-color: var(--secondary);
             box-shadow: 
-                0 0 0 4px rgba(16, 185, 129, 0.3),
-                0 0 30px rgba(16, 185, 129, 0.6),
-                inset 0 0 20px rgba(16, 185, 129, 0.2);
+                0 0 0 6px rgba(16, 185, 129, 0.2),
+                0 0 35px rgba(16, 185, 129, 0.55),
+                inset 0 0 20px rgba(16, 185, 129, 0.25);
+            animation: faceid-pulse 1.8s ease-in-out infinite;
         }
 
         .faceid-ring.error {
-            border-color: #EF4444;
+            border-style: solid;
+            border-color: var(--danger);
             box-shadow: 
-                0 0 0 4px rgba(239, 68, 68, 0.3),
-                0 0 30px rgba(239, 68, 68, 0.6),
-                inset 0 0 20px rgba(239, 68, 68, 0.2);
+                0 0 0 6px rgba(239, 68, 68, 0.2),
+                0 0 35px rgba(239, 68, 68, 0.55),
+                inset 0 0 20px rgba(239, 68, 68, 0.25);
         }
 
         .faceid-ring::before {
@@ -95,72 +306,90 @@
             transform: translateX(-50%);
             width: 12px;
             height: 12px;
-            background: rgba(255, 255, 255, 0.8);
+            background: #ffffff;
             border-radius: 50%;
-            box-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+            box-shadow: 0 0 12px #ffffff;
         }
 
         .faceid-ring.success::before {
-            background: #10B981;
-            box-shadow: 0 0 15px rgba(16, 185, 129, 0.9);
+            background: var(--secondary);
+            box-shadow: 0 0 15px var(--secondary);
         }
 
         .faceid-ring.error::before {
-            background: #EF4444;
-            box-shadow: 0 0 15px rgba(239, 68, 68, 0.9);
+            background: var(--danger);
+            box-shadow: 0 0 15px var(--danger);
         }
 
         @keyframes faceid-pulse {
             0%, 100% {
-                transform: translate(-50%, -50%) scale(1);
                 opacity: 1;
             }
             50% {
-                transform: translate(-50%, -50%) scale(1.02);
-                opacity: 0.9;
+                opacity: 0.7;
             }
         }
 
         #statusMessage,
-        #regStatusMessage {
+        #regStatusMessage,
+        #fingerprintRegStatusMessage,
+        #bioUpdateFaceStatus,
+        #bioUpdateHardwareStatus {
             text-align: center;
             margin-top: 15px;
-            font-weight: bold;
-            padding: 10px;
-            border-radius: 8px;
+            font-weight: 700;
+            padding: 12px;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            backdrop-filter: blur(8px);
         }
 
         .success-text {
-            color: var(--secondary);
-            background: rgba(16, 185, 129, 0.1);
+            color: var(--secondary) !important;
+            background: rgba(16, 185, 129, 0.12) !important;
+            border: 1px solid rgba(16, 185, 129, 0.2) !important;
         }
 
         .error-text {
-            color: var(--danger);
-            background: rgba(239, 68, 68, 0.1);
+            color: var(--danger) !important;
+            background: rgba(239, 68, 68, 0.12) !important;
+            border: 1px solid rgba(239, 68, 68, 0.2) !important;
+        }
+
+        .text-muted {
+            color: var(--text-muted) !important;
         }
 
         .link-text {
-            color: var(--secondary);
+            color: #818cf8;
             cursor: pointer;
-            text-decoration: underline;
-            margin-top: 15px;
+            text-decoration: none;
+            margin-top: 20px;
             display: block;
             text-align: center;
+            font-weight: 600;
+            font-size: 0.95rem;
+            transition: all 0.2s ease;
         }
 
+        .link-text:hover {
+            color: var(--primary);
+            text-decoration: underline;
+        }
+
+        /* Action Buttons Grid */
         .action-buttons {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 15px;
+            gap: 16px;
             margin-top: 20px;
         }
 
         .action-btn {
-            padding: 15px;
-            border-radius: 12px;
+            height: 52px;
+            border-radius: 16px;
             font-size: 1.1rem;
-            font-weight: bold;
+            font-weight: 700;
             cursor: pointer;
             border: none;
             color: #fff;
@@ -168,47 +397,159 @@
             align-items: center;
             justify-content: center;
             gap: 8px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            font-family: var(--font-family);
         }
 
         .check-in-btn {
-            background: var(--secondary);
+            background: linear-gradient(135deg, #10b981, #059669);
         }
 
         .check-out-btn {
-            background: var(--danger);
+            background: linear-gradient(135deg, #ef4444, #dc2626);
         }
 
         .check-in-btn:disabled,
         .check-out-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            filter: grayscale(0.5);
+            opacity: 0.35 !important;
+            cursor: not-allowed !important;
+            filter: grayscale(0.8) !important;
+            box-shadow: none !important;
+            animation: none !important;
         }
 
         /* Glowing effect when button is enabled */
         .check-in-btn:not(:disabled) {
             animation: pulse-green 2s infinite;
-            box-shadow: 0 0 15px rgba(16, 185, 129, 0.5);
+            box-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
         }
 
         .check-out-btn:not(:disabled) {
             animation: pulse-red 2s infinite;
-            box-shadow: 0 0 15px rgba(239, 68, 68, 0.5);
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
         }
 
         @keyframes pulse-green {
-            0%, 100% { box-shadow: 0 0 15px rgba(16, 185, 129, 0.5); }
-            50% { box-shadow: 0 0 25px rgba(16, 185, 129, 0.8); }
+            0%, 100% { box-shadow: 0 0 15px rgba(16, 185, 129, 0.4); }
+            50% { box-shadow: 0 0 25px rgba(16, 185, 129, 0.7); }
         }
 
         @keyframes pulse-red {
-            0%, 100% { box-shadow: 0 0 15px rgba(239, 68, 68, 0.5); }
-            50% { box-shadow: 0 0 25px rgba(239, 68, 68, 0.8); }
+            0%, 100% { box-shadow: 0 0 15px rgba(239, 68, 68, 0.4); }
+            50% { box-shadow: 0 0 25px rgba(239, 68, 68, 0.7); }
+        }
+
+        /* Modal Overrides */
+        .modal {
+            backdrop-filter: blur(12px) !important;
+            -webkit-backdrop-filter: blur(12px) !important;
+            background: rgba(10, 15, 30, 0.8) !important;
+        }
+
+        .modal > .glass-card {
+            width: 92% !important;
+            max-width: 400px !important;
+            border-radius: 24px !important;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4) !important;
+            transform: scale(0.95);
+            animation: slide-up 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+
+        @keyframes slide-up {
+            to { transform: scale(1); }
+        }
+
+        /* KPI widgets grid overrides in reports section */
+        #myReportsSection > div[style*="display: grid"] {
+            grid-template-columns: 1fr 1fr !important;
+            gap: 12px !important;
+        }
+
+        #myReportsSection > div[style*="display: grid"] > div {
+            background: rgba(30, 41, 59, 0.4) !important;
+            border: 1px solid rgba(255, 255, 255, 0.05) !important;
+            border-radius: 16px !important;
+            padding: 14px 10px !important;
+            backdrop-filter: blur(10px) !important;
+            -webkit-backdrop-filter: blur(10px) !important;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1) !important;
+            transition: transform 0.25s ease !important;
+            box-sizing: border-box;
+        }
+
+        #myReportsSection > div[style*="display: grid"] > div:hover {
+            transform: translateY(-2px) !important;
+        }
+
+        #myReportsSection h4 {
+            font-size: 0.85rem !important;
+            font-weight: 600;
+        }
+
+        #myReportsSection h2 {
+            font-size: 1.4rem !important;
+            font-weight: 800 !important;
+        }
+
+        /* Stacked Reports Card Layout for Mobile Screens */
+        @media (max-width: 600px) {
+            #myReportsSection table,
+            #myReportsSection thead,
+            #myReportsSection tbody,
+            #myReportsSection th,
+            #myReportsSection td,
+            #myReportsSection tr {
+                display: block !important;
+                width: 100% !important;
+            }
+            #myReportsSection thead {
+                display: none !important; /* Hide original header */
+            }
+            #myReportsSection tr {
+                background: rgba(30, 41, 59, 0.35) !important;
+                border: 1px solid rgba(255, 255, 255, 0.06) !important;
+                border-radius: 16px !important;
+                margin-bottom: 14px !important;
+                padding: 12px 14px !important;
+                box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15) !important;
+                box-sizing: border-box;
+            }
+            #myReportsSection td {
+                border: none !important;
+                position: relative !important;
+                padding-right: 40% !important; /* reserve space on right for label */
+                padding-left: 8px !important;
+                text-align: left !important;
+                min-height: 38px !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: flex-start !important;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+                box-sizing: border-box;
+            }
+            #myReportsSection td:last-child {
+                border-bottom: none !important;
+            }
+            #myReportsSection td::before {
+                content: attr(data-label) !important;
+                position: absolute !important;
+                right: 12px !important;
+                width: 35% !important;
+                font-weight: 700 !important;
+                color: #818cf8 !important; /* Soft indigo for labels */
+                text-align: right !important;
+            }
         }
     </style>
 </head>
 
 <body>
+    <!-- Ambient Dynamic Background Circles -->
+    <div class="bg-glow bg-glow-1"></div>
+    <div class="bg-glow bg-glow-2"></div>
+    <div class="bg-glow bg-glow-3"></div>
+
     <div class="portal-container">
         <!-- 1. Login Section -->
         <div id="loginSection" class="glass-card fade-in">
@@ -293,7 +634,7 @@
                     <video id="regVideo" autoplay muted playsinline></video>
                     <canvas id="regCanvas"></canvas>
                 </div>
-                <button class="btn-primary" style="background:var(--secondary); width:80%"
+                <button class="btn-primary" style="background:var(--secondary); width:80%; margin: 0 auto 15px;"
                     onclick="captureFaceRegistration()">التقاط البصمة</button>
                 <p id="regStatusMessage" class="hidden"></p>
             </div>
@@ -358,8 +699,8 @@
 
             <!-- Timer Display -->
             <div id="timerContainer" class="hidden"
-                style="margin-bottom: 20px; background: rgba(59, 130, 246, 0.1); padding: 15px; border-radius: 12px; border: 1px solid rgba(59, 130, 246, 0.3);">
-                <div style="font-size: 0.9rem; color: var(--secondary); margin-bottom: 5px;">وقت العمل الحالي</div>
+                style="margin-bottom: 20px; background: rgba(99, 102, 241, 0.12); padding: 15px; border-radius: 16px; border: 1px solid rgba(99, 102, 241, 0.25);">
+                <div style="font-size: 0.9rem; color: #818cf8; margin-bottom: 5px;">وقت العمل الحالي</div>
                 <div id="workTimer"
                     style="font-size: 2.2rem; font-weight: bold; font-family: monospace; letter-spacing: 2px;">00:00:00
                 </div>
@@ -376,38 +717,39 @@
 
             <!-- Request Site Button (Hidden by default) -->
             <button id="btnAllowanceRequest" class="btn-primary"
-                style="margin-top:10px; background:#8b5cf6;" onclick="openAllowanceModal()">
+                style="margin-top:10px; background: linear-gradient(135deg, #8b5cf6, #7c3aed) !important; box-shadow: 0 4px 15px rgba(139, 92, 246, 0.35) !important;" onclick="openAllowanceModal()">
                 💰 طلب زيادة بدلات
             </button>
 
             <button id="btnLeaveRequest" class="btn-primary"
-                style="margin-top:10px; background:#f59e0b; color:#000;" onclick="openLeaveModal()">
+                style="margin-top:10px; background: linear-gradient(135deg, #f59e0b, #d97706) !important; color:#fff !important; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.35) !important;" onclick="openLeaveModal()">
                 📅 طلب إجازة
             </button>
 
             <!-- Update Biometric Button (Always visible) -->
             <button id="btnUpdateBiometric" class="btn-primary"
-                style="margin-top:10px; background:var(--secondary);" onclick="openBiometricUpdateModal()">
-                🔐  تحديث/تغيير لبصمة الاصبع لو الموقع بطئ
+                style="margin-top:10px;" onclick="openBiometricUpdateModal()">
+                🔐 تحديث/تغيير بصمة الإصبع
             </button>
 
             <!-- Request Site Button (Hidden by default, shown when outside range) -->
             <button id="btnRequestSite" class="btn-primary hidden"
-                style="margin-top:10px; background:var(--warning); color:#000;" onclick="openRequestModal()">
+                style="margin-top:10px; background: linear-gradient(135deg, #f59e0b, #d97706) !important; color:#fff !important; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.35) !important;" onclick="openRequestModal()">
                 📍 طلب تسجيل هذا الموقع كفرع عمل
             </button>
 
-            <button class="btn-primary" style="margin-top:20px; background:var(--primary);"
+            <button class="btn-primary" style="margin-top:20px;"
                 onclick="showMyReports()">تقارير الحضور الخاصة بي</button>
             <button class="btn-primary"
-                style="margin-top:10px; background:transparent; border:1px solid rgba(255,255,255,0.2)"
+                style="margin-top:10px; background:transparent !important; border:1px solid rgba(255,255,255,0.2) !important; box-shadow: none !important;"
                 onclick="logout()">تسجيل خروج</button>
         </div>
 
+        <!-- Allowance Modal -->
         <div id="allowanceRequestModal" class="modal hidden"
-            style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); display:flex; align-items:center; justify-content:center; z-index:1000;">
-            <div class="glass-card" style="width:90%; max-width:400px; padding:25px;">
-                <h3 style="margin-bottom:15px;">طلب زيادة بدلات</h3>
+            style="position:fixed; top:0; left:0; width:100%; height:100%; display:none; align-items:center; justify-content:center; z-index:1000;">
+            <div class="glass-card">
+                <h3 style="margin-bottom:15px; font-weight:800;">طلب زيادة بدلات</h3>
                 <div class="input-group">
                     <label>اختر اليوم</label>
                     <input type="date" id="allowanceDate" onchange="fetchEligibleSites()">
@@ -427,8 +769,8 @@
                     <textarea id="allowanceNote" placeholder="سبب الطلب..." rows="3"></textarea>
                 </div>
                 <div style="display:flex; gap:10px;">
-                    <button class="btn-primary" style="background:#8b5cf6;" onclick="submitAllowanceRequest()">إرسال الطلب</button>
-                    <button class="btn-danger" style="background:transparent; border:1px solid var(--danger);"
+                    <button class="btn-primary" style="flex:1; background: linear-gradient(135deg, #8b5cf6, #7c3aed) !important; box-shadow: 0 4px 15px rgba(139, 92, 246, 0.35) !important;" onclick="submitAllowanceRequest()">إرسال الطلب</button>
+                    <button class="btn-danger" style="background:transparent !important; border:1px solid var(--danger) !important; box-shadow:none !important;"
                         onclick="closeAllowanceModal()">إلغاء</button>
                 </div>
             </div>
@@ -436,9 +778,9 @@
 
         <!-- Leave Request Modal -->
         <div id="leaveRequestModal" class="modal hidden"
-            style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); display:flex; align-items:center; justify-content:center; z-index:1000;">
-            <div class="glass-card" style="width:90%; max-width:400px; padding:25px;">
-                <h3 style="margin-bottom:15px;">📅 طلب إجازة</h3>
+            style="position:fixed; top:0; left:0; width:100%; height:100%; display:none; align-items:center; justify-content:center; z-index:1000;">
+            <div class="glass-card">
+                <h3 style="margin-bottom:15px; font-weight:800;">📅 طلب إجازة</h3>
                 <div class="input-group">
                     <label>تاريخ الإجازة</label>
                     <input type="date" id="leaveDate">
@@ -448,8 +790,8 @@
                     <textarea id="leaveReason" placeholder="اكتب سبب طلب الإجازة..." rows="3"></textarea>
                 </div>
                 <div style="display:flex; gap:10px;">
-                    <button class="btn-primary" style="background:#f59e0b; color:#000;" onclick="submitLeaveRequest()">إرسال الطلب</button>
-                    <button class="btn-danger" style="background:transparent; border:1px solid var(--danger);"
+                    <button class="btn-primary" style="flex:1; background: linear-gradient(135deg, #f59e0b, #d97706) !important; color:#fff !important; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.35) !important;" onclick="submitLeaveRequest()">إرسال الطلب</button>
+                    <button class="btn-danger" style="background:transparent !important; border:1px solid var(--danger) !important; box-shadow:none !important;"
                         onclick="closeLeaveModal()">إلغاء</button>
                 </div>
             </div>
@@ -457,17 +799,17 @@
 
         <!-- Biometric Update Modal -->
         <div id="biometricUpdateModal" class="modal hidden"
-            style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); display:flex; align-items:center; justify-content:center; z-index:1001;">
-            <div class="glass-card" style="width:90%; max-width:400px; padding:25px; max-height:90vh; overflow-y:auto;">
-                <h3 style="margin-bottom:15px;">🔐 تحديث البصمة</h3>
+            style="position:fixed; top:0; left:0; width:100%; height:100%; display:none; align-items:center; justify-content:center; z-index:1001;">
+            <div class="glass-card" style="max-height:90vh; overflow-y:auto;">
+                <h3 style="margin-bottom:15px; font-weight:800;">🔐 تحديث البصمة</h3>
                 <p style="font-size:0.9rem; color:var(--text-muted); margin-bottom:15px;">
-                    اختر البصمة الأسرع لجهازك. البصمة الحالية: <strong id="currentBioType">-</strong>
+                    اختر البصمة الأسرع لجهازك. البصمة الحالية: <strong id="currentBioType" style="color: var(--secondary);">-</strong>
                 </p>
                 
                 <!-- Current Biometric Info -->
-                <div id="currentBioInfo" style="background:rgba(59,130,246,0.1); padding:10px; border-radius:8px; margin-bottom:15px; border:1px solid rgba(59,130,246,0.3);">
-                    <small style="color:var(--text-muted);">البصمة الحالية</small>
-                    <div id="currentBioDisplay" style="font-weight:bold; color:#3b82f6;">-</div>
+                <div id="currentBioInfo" style="background:rgba(99, 102, 241, 0.12); padding:12px; border-radius:14px; margin-bottom:15px; border:1px solid rgba(99, 102, 241, 0.2);">
+                    <small style="color:var(--text-muted); display: block; margin-bottom: 4px;">البصمة الحالية</small>
+                    <div id="currentBioDisplay" style="font-weight:bold; color:#818cf8;">-</div>
                 </div>
 
                 <!-- Available Options -->
@@ -486,7 +828,7 @@
 
                 <!-- Hardware Registration Section -->
                 <div id="bioUpdateHardwareSection" class="hidden" style="margin-bottom:15px; text-align:center;">
-                    <div style="padding:30px; background:rgba(255,255,255,0.05); border-radius:12px; border:2px dashed rgba(16,185,129,0.3);">
+                    <div style="padding:30px; background:rgba(255,255,255,0.03); border-radius:16px; border: 2px dashed rgba(16,185,129,0.25);">
                         <div id="bioUpdateHardwareIcon" style="font-size:3rem; margin-bottom:10px;">👆</div>
                         <p id="bioUpdateHardwareDesc" style="color:var(--text-muted);">اضغط الزر أدناه لتسجيل البصمة</p>
                     </div>
@@ -494,20 +836,20 @@
                     <p id="bioUpdateHardwareStatus" class="hidden" style="margin-top:10px; text-align:center;"></p>
                 </div>
 
-                <div style="display:flex; gap:10px;">
+                <div style="display:flex; gap:10px; margin-top: 15px;">
                     <button class="btn-primary" style="flex:1;" onclick="saveBiometricUpdate()">💾 حفظ البصمة الجديدة</button>
-                    <button class="btn-danger" style="background:transparent; border:1px solid var(--danger);"
+                    <button class="btn-danger" style="background:transparent !important; border:1px solid var(--danger) !important; box-shadow:none !important;"
                         onclick="closeBiometricUpdateModal()">إلغاء</button>
                 </div>
             </div>
         </div>
 
+        <!-- Request Site Modal -->
         <div id="requestSiteModal" class="modal hidden"
-            style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); display:flex; align-items:center; justify-content:center; z-index:1000;">
-            <div id="requestSiteCard" class="glass-card" style="width:90%; max-width:400px; padding:25px;">
-                <h3 style="margin-bottom:15px;">طلب تسجيل موقع جديد</h3>
-                <p style="font-size:0.9rem; color:var(--text-muted); margin-bottom:15px;">سيتم إرسال إحداثياتك الحالية
-                    للإدارة للمراجعة.</p>
+            style="position:fixed; top:0; left:0; width:100%; height:100%; display:none; align-items:center; justify-content:center; z-index:1000;">
+            <div id="requestSiteCard" class="glass-card">
+                <h3 style="margin-bottom:15px; font-weight:800;">طلب تسجيل موقع جديد</h3>
+                <p style="font-size:0.9rem; color:var(--text-muted); margin-bottom:15px;">سيتم إرسال إحداثياتك الحالية للإدارة للمراجعة.</p>
                 <div class="input-group">
                     <label>اسم الموقع المقترح (مثال: موقع العميل X)</label>
                     <input type="text" id="suggestedSiteName" placeholder="أدخل اسم الموقع...">
@@ -521,8 +863,8 @@
                     <textarea id="suggestedSiteNote" placeholder="اكتب تفاصيل الانتقالات أو سبب الطلب..." rows="3"></textarea>
                 </div>
                 <div style="display:flex; gap:10px;">
-                    <button class="btn-primary" onclick="submitSiteRequest()">إرسال الطلب</button>
-                    <button class="btn-danger" style="background:transparent; border:1px solid var(--danger);"
+                    <button class="btn-primary" style="flex: 1;" onclick="submitSiteRequest()">إرسال الطلب</button>
+                    <button class="btn-danger" style="background:transparent !important; border:1px solid var(--danger) !important; box-shadow:none !important;"
                         onclick="closeRequestModal()">إلغاء</button>
                 </div>
             </div>
@@ -533,11 +875,11 @@
             <div class="header">
                 <h2>تقارير الحضور الخاصة بي</h2>
             </div>
-            <div style="display:flex; justify-content:space-between; margin-bottom: 20px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom: 20px; align-items: center; gap: 10px;">
                 <input type="month" id="empReportMonth"
-                    style="padding: 8px; border-radius: 6px; background: rgba(0,0,0,0.2); color: #fff; border: 1px solid var(--card-border);"
+                    style="padding: 8px 12px; border-radius: 12px; background: rgba(0,0,0,0.3); color: #fff; border: 1px solid var(--card-border); font-size: 0.95rem; font-family: var(--font-family); outline: none; flex: 1; height: 42px;"
                     onchange="fetchMyReports()">
-                <button class="btn-primary" style="width: auto; padding: 8px 15px;"
+                <button class="btn-primary" style="width: auto; padding: 0 16px; height: 42px !important; font-size: 0.9rem !important; box-shadow: none !important;"
                     onclick="showSection('dashboardSection')">عودة للرئيسية</button>
             </div>
 
@@ -576,16 +918,16 @@
                 </div>
             </div>
 
-            <div style="max-height: 300px; overflow-y: auto; margin-top: 15px;">
+            <div style="max-height: 380px; overflow-y: auto; margin-top: 15px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.05);">
                 <table style="width: 100%; border-collapse: collapse; text-align: center; font-size: 0.85rem; direction: rtl;">
                     <thead>
-                        <tr style="border-bottom: 2px solid var(--card-border); background: rgba(0,0,0,0.2);">
-                            <th style="padding: 10px 5px; width: 18%;">التاريخ</th>
-                            <th style="padding: 10px 5px; width: 15%;">حضور</th>
-                            <th style="padding: 10px 5px; width: 15%;">انصراف</th>
-                            <th style="padding: 10px 5px; width: 22%;">الموقع</th>
-                            <th style="padding: 10px 5px; width: 12%;">البدل</th>
-                            <th style="padding: 10px 5px; width: 18%;">الحالة</th>
+                        <tr style="border-bottom: 2px solid var(--card-border); background: rgba(0,0,0,0.3);">
+                            <th style="padding: 12px 5px; width: 18%;">التاريخ</th>
+                            <th style="padding: 12px 5px; width: 15%;">حضور</th>
+                            <th style="padding: 12px 5px; width: 15%;">انصراف</th>
+                            <th style="padding: 12px 5px; width: 22%;">الموقع</th>
+                            <th style="padding: 12px 5px; width: 12%;">البدل</th>
+                            <th style="padding: 12px 5px; width: 18%;">الحالة</th>
                         </tr>
                     </thead>
                     <tbody id="myReportsTableBody"></tbody>
