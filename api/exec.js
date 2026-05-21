@@ -350,75 +350,168 @@ async function sendRequestNotificationEmail(supabase, requestData, host) {
     `.trim();
     
     const html = `
-<div dir="rtl" style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 20px auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.1); border: 1px solid #e2e8f0;">
-    <!-- Header -->
-    <div style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); padding: 35px 20px; text-align: center; color: white;">
-        <h1 style="margin: 0; font-size: 28px; font-weight: bold; letter-spacing: 1px;">${typeLabel}</h1>
-        <p style="margin: 10px 0 0; opacity: 0.9; font-size: 16px;">مقدم من الموظف: ${employeeName}</p>
-    </div>
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
     
-    <!-- Content Card -->
-    <div style="padding: 30px;">
-        <div style="background-color: #f8fafc; border-radius: 10px; padding: 25px; border: 1px solid #edf2f7;">
-            <table style="width: 100%; border-collapse: collapse;">
+    .btn-approve {
+        transition: all 0.3s ease;
+    }
+    .btn-approve:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(5, 150, 105, 0.4) !important;
+    }
+    
+    .btn-reject {
+        transition: all 0.3s ease;
+    }
+    .btn-reject:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(220, 38, 38, 0.4) !important;
+    }
+</style>
+<div dir="rtl" style="font-family: 'Cairo', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 30px auto; background-color: #fafafa; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.05); border: 1px solid #eef2f6; padding: 5px;">
+    <!-- Modern Premium Accent Bar -->
+    <div style="height: 6px; background: linear-gradient(90deg, #6366f1 0%, #a855f7 50%, #ec4899 100%); border-radius: 16px 16px 0 0;"></div>
+    
+    <!-- White Card Wrapper -->
+    <div style="background-color: #ffffff; padding: 35px 25px 25px 25px; border-radius: 0 0 12px 12px;">
+        
+        <!-- Header -->
+        <table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-bottom: 25px; direction: rtl;">
+            <tr>
+                <td align="right" width="60" style="vertical-align: middle;">
+                    <div style="background: #f5f3ff; width: 48px; height: 48px; border-radius: 12px; text-align: center; line-height: 48px; font-size: 24px; color: #6366f1;">
+                        🏢
+                    </div>
+                </td>
+                <td align="right" style="padding-right: 15px; vertical-align: middle;">
+                    <span style="color: #6366f1; font-weight: bold; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 2px;">نظام الموارد البشرية الذكي</span>
+                    <h2 style="margin: 0; font-size: 20px; font-weight: 700; color: #0f172a;">${typeLabel} جديد</h2>
+                </td>
+            </tr>
+        </table>
+        
+        <!-- Welcome banner -->
+        <div style="background-color: #f8fafc; border-right: 4px solid #6366f1; border-radius: 4px 8px 8px 4px; padding: 15px 20px; margin-bottom: 25px;">
+            <p style="margin: 0; font-size: 15px; color: #334155; line-height: 1.6; text-align: right;">
+                تم استلام طلب جديد قيد المراجعة والاعتماد. يمكنك اتخاذ الإجراء المباشر بنقرة واحدة أدناه.
+            </p>
+        </div>
+
+        <!-- Request Details Grid -->
+        <table cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse: collapse; margin-bottom: 25px; border: 1px solid #f1f5f9; border-radius: 12px; overflow: hidden; direction: rtl;">
+            <!-- Header Row -->
+            <tr style="background-color: #f8fafc;">
+                <td colspan="2" style="padding: 12px 16px; font-weight: 700; font-size: 14px; color: #475569; border-bottom: 1px solid #f1f5f9; text-align: right;">
+                    تفاصيل الطلب:
+                </td>
+            </tr>
+            <!-- Row 1: Employee -->
+            <tr>
+                <td width="30%" style="padding: 14px 16px; color: #64748b; font-size: 14px; border-bottom: 1px solid #f8fafc; vertical-align: middle; text-align: right;">
+                    👤 الموظف:
+                </td>
+                <td style="padding: 14px 16px; color: #0f172a; font-weight: 600; font-size: 15px; border-bottom: 1px solid #f8fafc; text-align: right;">
+                    ${employeeName}
+                </td>
+            </tr>
+            <!-- Row 2: Type -->
+            <tr>
+                <td style="padding: 14px 16px; color: #64748b; font-size: 14px; border-bottom: 1px solid #f8fafc; vertical-align: middle; text-align: right;">
+                    📝 نوع الطلب:
+                </td>
+                <td style="padding: 14px 16px; color: #6366f1; font-weight: 600; font-size: 15px; border-bottom: 1px solid #f8fafc; text-align: right;">
+                    ${typeLabel}
+                </td>
+            </tr>
+            <!-- Row 3: Date -->
+            <tr>
+                <td style="padding: 14px 16px; color: #64748b; font-size: 14px; border-bottom: 1px solid #f8fafc; vertical-align: middle; text-align: right;">
+                    📅 تاريخ الطلب:
+                </td>
+                <td style="padding: 14px 16px; color: #334155; font-size: 14px; border-bottom: 1px solid #f8fafc; text-align: right;">
+                    ${new Date().toLocaleDateString('ar-EG')}
+                </td>
+            </tr>
+            <!-- Row 4: ID -->
+            <tr>
+                <td style="padding: 14px 16px; color: #64748b; font-size: 14px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; text-align: right;">
+                    🔑 رقم الطلب:
+                </td>
+                <td style="padding: 14px 16px; color: #475569; font-family: monospace; font-weight: bold; font-size: 14px; border-bottom: 1px solid #f1f5f9; text-align: right;">
+                    ${requestId || 'N/A'}
+                </td>
+            </tr>
+            <!-- Row 5: Details/Notes -->
+            <tr>
+                <td colspan="2" style="padding: 18px 16px; background-color: #faf5ff; text-align: right;">
+                    <span style="color: #6b21a8; font-weight: bold; font-size: 13px; display: block; margin-bottom: 8px;">💬 الملاحظات / التفاصيل:</span>
+                    <div style="color: #3b0764; font-size: 14px; line-height: 1.6; font-weight: 500;">
+                        ${details}
+                    </div>
+                </td>
+            </tr>
+        </table>
+        
+        <!-- Decision Section Header -->
+        <div style="text-align: center; margin-bottom: 20px;">
+            <p style="margin: 0; font-size: 14px; font-weight: 600; color: #475569;">اتخاذ قرار سريع ومباشر:</p>
+        </div>
+
+        <!-- Action Buttons -->
+        <table cellpadding="0" cellspacing="0" border="0" width="100%" style="direction: rtl; margin-bottom: 30px;">
+            <tr>
+                <td align="center">
+                    <table cellpadding="0" cellspacing="0" border="0" style="margin: 0 auto; width: 100%;">
+                        <tr>
+                            <!-- Approve Button -->
+                            <td align="center" width="50%" style="padding: 5px;">
+                                <a href="${approveLink}" class="btn-approve" target="_blank" style="display: block; padding: 14px 20px; background: linear-gradient(135deg, #059669 0%, #10b981 100%); background-color: #059669; color: #ffffff; font-family: 'Segoe UI', Tahoma, sans-serif; font-size: 15px; font-weight: bold; text-decoration: none; border-radius: 12px; box-shadow: 0 4px 12px rgba(5, 150, 105, 0.25); text-align: center; border: 1px solid #047857;">
+                                    ✔️ موافقة واعتماد
+                                </a>
+                            </td>
+                            <!-- Reject Button -->
+                            <td align="center" width="50%" style="padding: 5px;">
+                                <a href="${rejectLink}" class="btn-reject" target="_blank" style="display: block; padding: 14px 20px; background: linear-gradient(135deg, #dc2626 0%, #f43f5e 100%); background-color: #dc2626; color: #ffffff; font-family: 'Segoe UI', Tahoma, sans-serif; font-size: 15px; font-weight: bold; text-decoration: none; border-radius: 12px; box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25); text-align: center; border: 1px solid #b91c1c;">
+                                    ❌ رفض الطلب
+                                </a>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+        
+        <!-- Secure/Expiration Warning Callout -->
+        <div style="background-color: #fffbeb; border: 1px solid #fef3c7; border-radius: 12px; padding: 15px; margin-bottom: 20px; direction: rtl; text-align: right;">
+            <table cellpadding="0" cellspacing="0" border="0" width="100%">
                 <tr>
-                    <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0;">
-                        <span style="color: #64748b; font-size: 13px; display: block; margin-bottom: 4px;">نوع الطلب:</span>
-                        <span style="color: #1e293b; font-size: 16px; font-weight: bold;">${typeLabel}</span>
+                    <td width="24" style="vertical-align: top; font-size: 16px; line-height: 20px; text-align: right;">
+                        ⚠️
                     </td>
-                </tr>
-                <tr>
-                    <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0;">
-                        <span style="color: #64748b; font-size: 13px; display: block; margin-bottom: 4px;">الموظف:</span>
-                        <span style="color: #1e293b; font-size: 16px; font-weight: 600;">${employeeName}</span>
-                    </td>
-                </tr>
-                <tr>
-                    <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0;">
-                        <span style="color: #64748b; font-size: 13px; display: block; margin-bottom: 4px;">التاريخ:</span>
-                        <span style="color: #1e293b; font-size: 16px;">${new Date().toLocaleDateString('ar-EG')}</span>
-                    </td>
-                </tr>
-                <tr>
-                    <td style="padding: 15px 0 0;">
-                        <span style="color: #64748b; font-size: 13px; display: block; margin-bottom: 8px;">الملاحظات/السبب:</span>
-                        <div style="color: #1e293b; font-size: 15px; line-height: 1.6; background: #ffffff; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; min-height: 60px;">
-                            ${details}
-                        </div>
+                    <td style="padding-right: 8px; font-size: 12px; color: #b45309; line-height: 1.6; text-align: right;">
+                        <strong>إشعار أمان:</strong> هذه روابط معالجة مشفرة وآمنة وصالحة للاستخدام مرة واحدة فقط. تنتهي صلاحية هذه الروابط تلقائياً بعد مرور <strong>48 ساعة</strong> من تاريخ الإرسال.
                     </td>
                 </tr>
             </table>
         </div>
-        
-        <!-- Interactive Decision Buttons -->
-        <div style="margin-top: 30px; margin-bottom: 20px;">
-            <table cellpadding="0" cellspacing="0" border="0" width="100%" style="direction: rtl;">
-                <tr>
-                    <td align="center">
-                        <table cellpadding="0" cellspacing="0" border="0" style="margin: 0 auto;">
-                            <tr>
-                                <td style="padding: 10px;">
-                                    <a href="${approveLink}" target="_blank" style="display: inline-block; padding: 12px 28px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); background-color: #10b981; color: #ffffff; font-family: 'Segoe UI', Tahoma, sans-serif; font-size: 15px; font-weight: bold; text-decoration: none; border-radius: 8px; box-shadow: 0 4px 10px rgba(16,185,129,0.3); text-align: center; min-width: 140px;">✔️ موافقة</a>
-                                </td>
-                                <td style="padding: 10px;">
-                                    <a href="${rejectLink}" target="_blank" style="display: inline-block; padding: 12px 28px; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); background-color: #ef4444; color: #ffffff; font-family: 'Segoe UI', Tahoma, sans-serif; font-size: 15px; font-weight: bold; text-decoration: none; border-radius: 8px; box-shadow: 0 4px 10px rgba(239,68,68,0.3); text-align: center; min-width: 140px;">❌ رفض</a>
-                                </td>
-                            </tr>
-                        </table>
-                    </td>
-                </tr>
-            </table>
-        </div>
-        
-        <div style="margin-top: 20px; text-align: center;">
-            <p style="color: #475569; font-size: 14px; margin-bottom: 25px;">يمكنك اتخاذ القرار مباشرة بالضغط على الأزرار أعلاه، أو مراجعة الطلب بالتفصيل من لوحة تحكم الموارد البشرية.</p>
-            <p style="color: #94a3b8; font-size: 12px; margin: 0;">هذا إشعار تلقائي من نظام الموارد البشرية.</p>
+
+        <div style="text-align: center; border-top: 1px solid #f1f5f9; padding-top: 20px;">
+            <p style="color: #64748b; font-size: 13px; line-height: 1.5; margin: 0 0 10px 0;">
+                يمكنك أيضاً مراجعة الطلبات المعلقة وتفاصيلها الكاملة عن طريق تسجيل الدخول إلى 
+                <a href="${baseUrl}" target="_blank" style="color: #6366f1; text-decoration: none; font-weight: bold;">لوحة تحكم نظام الموارد البشرية</a>.
+            </p>
         </div>
     </div>
     
     <!-- Footer -->
-    <div style="background-color: #f1f5f9; padding: 15px; text-align: center; border-top: 1px solid #e2e8f0;">
-        <p style="margin: 0; color: #64748b; font-size: 12px;">&copy; 2026 جميع الحقوق محفوظة - نظام الموارد البشرية</p>
+    <div style="background-color: #f8fafc; padding: 20px; text-align: center; border-top: 1px solid #f1f5f9; border-radius: 0 0 16px 16px;">
+        <p style="margin: 0 0 5px 0; color: #475569; font-size: 12px; font-weight: 600;">
+            🏢 نظام الموارد البشرية التابع لـ Demo Company
+        </p>
+        <p style="margin: 0; color: #94a3b8; font-size: 11px;">
+            &copy; 2026 جميع الحقوق محفوظة. تم إرسال هذا البريد التلقائي لمديري النظام.
+        </p>
     </div>
 </div>
     `.trim();
