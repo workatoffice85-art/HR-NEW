@@ -803,9 +803,15 @@
             style="position:fixed; top:0; left:0; width:100%; height:100%; display:none; align-items:center; justify-content:center; z-index:1000;">
             <div class="glass-card">
                 <h3 style="margin-bottom:15px; font-weight:800;">📅 طلب إجازة</h3>
-                <div class="input-group">
-                    <label>تاريخ الإجازة</label>
-                    <input type="date" id="leaveDate">
+                <div style="display:flex; gap:10px; width:100%;">
+                    <div class="input-group" style="flex:1;">
+                        <label>تاريخ البدء</label>
+                        <input type="date" id="leaveStartDate" onchange="document.getElementById('leaveEndDate').value = this.value">
+                    </div>
+                    <div class="input-group" style="flex:1;">
+                        <label>تاريخ الانتهاء</label>
+                        <input type="date" id="leaveEndDate">
+                    </div>
                 </div>
                 <div class="input-group">
                     <label>نوع الإجازة</label>
@@ -814,6 +820,7 @@
                         <option value="إجازة مرضية">إجازة مرضية</option>
                         <option value="إجازة اعتيادي">إجازة اعتيادي</option>
                         <option value="إجازة طارئة">إجازة طارئة</option>
+                        <option value="إجازة امتحانات">إجازة امتحانات</option>
                     </select>
                 </div>
                 <div style="display:flex; gap:10px;">

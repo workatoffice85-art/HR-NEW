@@ -879,7 +879,7 @@ export default async function handler(req, res) {
             "addSiteRequest", "approveSiteRequest", "rejectSiteRequest",
             "updateSettings",
             "addAllowanceRequest", "handleAllowanceRequest",
-            "addLeaveRequest", "approveLeaveRequest", "rejectLeaveRequest",
+            "approveLeaveRequest", "rejectLeaveRequest",
             "markNotificationAsRead", "markAllNotificationsAsRead",
             "addOfficialHoliday", "deleteOfficialHoliday",
             "payAttendanceAllowance", "payAttendanceAllowancePeriod", "rollbackAttendanceAllowance", "rollbackAttendanceAllowancePeriod"
@@ -2300,48 +2300,84 @@ if (action === "updateEmployee") {
         // --- LEAVE REQUESTS ---
         if (action === "addLeaveRequest") {
             const { employeeId, employeeName, leaveDate, reason } = data;
+            const startDate = data.startDate || leaveDate;
+            const endDate = data.endDate || leaveDate;
             
-            if (!leaveDate) return res.status(200).json({ success: false, message: "تاريخ الإجازة مطلوب" });
+            if (!startDate || !endDate) return res.status(200).json({ success: false, message: "تاريخ البدء والانتهاء مطلوبان" });
             if (!reason) return res.status(200).json({ success: false, message: "سبب الإجازة مطلوب" });
             
-            // Check for duplicate pending/approved request for this date
-            const { data: existing, error: checkErr } = await supabase
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            
+            if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+                return res.status(200).json({ success: false, message: "صيغة التاريخ غير صالحة" });
+            }
+            
+            if (end < start) {
+                return res.status(200).json({ success: false, message: "تاريخ البدء يجب أن يكون قبل أو يساوي تاريخ الانتهاء" });
+            }
+            
+            // Calculate days diff (inclusive)
+            const diffTime = Math.abs(end - start);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+            if (diffDays > 30) {
+                return res.status(200).json({ success: false, message: "لا يمكن تقديم طلب إجازة لأكثر من 30 يوماً دفعة واحدة" });
+            }
+            
+            // Generate list of ISO date strings for the range
+            const dates = [];
+            let current = new Date(startDate);
+            while (current <= end) {
+                dates.push(current.toISOString().split('T')[0]);
+                current.setDate(current.getDate() + 1);
+            }
+            
+            // Fetch existing pending/approved requests for this employee in this range
+            const { data: existingRequests, error: checkErr } = await supabase
                 .from('leaveRequests')
-                .select('*')
+                .select('leaveDate')
                 .eq('employeeId', employeeId)
-                .eq('leaveDate', leaveDate)
-                .in('status', ['pending', 'approved'])
-                .single();
+                .in('leaveDate', dates)
+                .in('status', ['pending', 'approved']);
             
-            if (checkErr && checkErr.code !== 'PGRST116') { // Not found is ok
-                throw checkErr;
+            if (checkErr) throw checkErr;
+            
+            const existingDates = new Set(existingRequests.map(r => r.leaveDate.split('T')[0]));
+            
+            // Filter dates to insert (only those that do not already have a pending/approved request)
+            const datesToInsert = dates.filter(d => !existingDates.has(d));
+            
+            if (datesToInsert.length === 0) {
+                return res.status(200).json({ success: false, message: "لديك طلبات إجازة موجودة بالفعل لجميع التواريخ المحددة" });
             }
             
-            if (existing) {
-                return res.status(200).json({ success: false, message: "لديك طلب إجازة موجود بالفعل لهذا التاريخ" });
-            }
-            
-            const payload = {
+            const payloads = datesToInsert.map(d => ({
                 id: "LEAVE" + Math.floor(10000 + Math.random() * 90000),
                 employeeId,
                 employeeName,
-                leaveDate,
+                leaveDate: d,
                 reason,
                 status: 'pending',
                 createdAt: new Date().toISOString()
-            };
+            }));
             
-            const { error } = await supabase.from('leaveRequests').insert([payload]);
+            const { error } = await supabase.from('leaveRequests').insert(payloads);
             if (error) throw error;
             
-            // Create notification for HR
+            // Create a single combined notification/email for the HR to avoid spamming
+            const displayDateText = diffDays === 1 
+                ? `بتاريخ ${startDate}` 
+                : `من تاريخ ${startDate} إلى ${endDate} (${payloads.length} يوم عمل فعلي)`;
+            
+            const mainRequestId = payloads[0].id;
+            
             await supabase.from('notifications').insert([{
                 id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
                 userRole: 'hr',
                 title: 'طلب إجازة جديد',
-                message: `قام الموظف ${employeeName} بطلب إجازة بتاريخ ${leaveDate}`,
+                message: `قام الموظف ${employeeName} بطلب إجازة ${displayDateText}`,
                 type: 'leave_request',
-                relatedId: payload.id,
+                relatedId: mainRequestId,
                 isRead: false,
                 createdAt: new Date().toISOString()
             }]);
@@ -2350,11 +2386,26 @@ if (action === "updateEmployee") {
             await sendRequestNotificationEmail(supabase, {
                 type: 'leave',
                 employeeName,
-                details: `تاريخ الإجازة: ${leaveDate} - السبب: ${reason}`,
-                requestId: payload.id
+                details: `فترة الإجازة: ${displayDateText} - نوع الإجازة: ${reason}`,
+                requestId: mainRequestId
             }, req.headers.host);
             
-            return res.status(200).json({ success: true, message: "تم إرسال طلب الإجازة بنجاح للمراجعة" });
+            // Sync to Google Sheets for each date individually
+            for (const d of datesToInsert) {
+                syncToGoogleSheet({
+                    action: 'addLeaveRequest',
+                    employeeId,
+                    employeeName,
+                    leaveDate: d,
+                    reason
+                });
+            }
+            
+            const resultMsg = diffDays === 1 
+                ? "تم تقديم طلب الإجازة بنجاح" 
+                : `تم تقديم طلب الإجازة لعدد ${payloads.length} أيام بنجاح. (تم تجاهل الأيام المسجلة مسبقاً إن وجدت)`;
+            
+            return res.status(200).json({ success: true, message: resultMsg });
         }
 
         if (action === "getLeaveRequests") {

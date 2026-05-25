@@ -1893,16 +1893,19 @@ async function submitAllowanceRequest() {
 function openLeaveModal() {
     try {
         const modal = document.getElementById('leaveRequestModal');
-        const dateInput = document.getElementById('leaveDate');
+        const startDateInput = document.getElementById('leaveStartDate');
+        const endDateInput = document.getElementById('leaveEndDate');
         if (modal) {
             modal.classList.remove('hidden');
             modal.style.display = 'flex';
         }
-        if (dateInput) {
+        if (startDateInput) {
             // Set default to tomorrow
             const tomorrow = new Date();
             tomorrow.setDate(tomorrow.getDate() + 1);
-            dateInput.value = tomorrow.toISOString().split('T')[0];
+            const tomorrowStr = tomorrow.toISOString().split('T')[0];
+            startDateInput.value = tomorrowStr;
+            if (endDateInput) endDateInput.value = tomorrowStr;
         }
         // Clear reason
         const reasonInput = document.getElementById('leaveReason');
@@ -1922,17 +1925,19 @@ function closeLeaveModal() {
 }
 
 async function submitLeaveRequest() {
-    const leaveDate = document.getElementById('leaveDate').value;
+    const startDate = document.getElementById('leaveStartDate').value;
+    const endDate = document.getElementById('leaveEndDate').value || startDate;
     const reason = document.getElementById('leaveReason').value.trim();
 
-    if (!leaveDate) return showStatusDialog("خطأ التحقق", "يجب اختيار تاريخ الإجازة", false);
+    if (!startDate) return showStatusDialog("خطأ التحقق", "يجب اختيار تاريخ البدء", false);
     if (!reason) return showStatusDialog("خطأ التحقق", "يجب اختيار نوع الإجازة", false);
 
     const payload = {
         action: 'addLeaveRequest',
         employeeId: currentUser.id,
         employeeName: currentUser.name,
-        leaveDate: leaveDate,
+        startDate: startDate,
+        endDate: endDate,
         reason: reason
     };
 
