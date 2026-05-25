@@ -1678,7 +1678,8 @@ function exportEmployeeDetailedToExcel() {
     const finalData = [
         ['التقرير التفصيلي للموظف - نظام HR'],
         [`الموظف: ${employeeName} | الفترة: ${startStr} إلى ${endStr}`],
-        [`ملخص التقرير:  أيام الحضور: ${present}  |  أيام الغياب: ${absent}  |  أيام العمل الإضافي: ${overtime}  |  مبلغ العمل الإضافي: ${overtimePay} ج.م  |  أيام التأخير: ${late}  |  إجمالي البدلات: ${transport} ج.م`, '', '', '', '', ''],
+        [`أيام الحضور: ${present}  |  أيام الغياب: ${absent}  |  أيام التأخير: ${late}`, '', '', '', '', ''],
+        [`أيام العمل الإضافي: ${overtime}  |  مبلغ العمل الإضافي: ${overtimePay} ج.م  |  إجمالي البدلات: ${transport} ج.م`, '', '', '', '', ''],
         [''],
         headers,
         ...data.map(row => [
@@ -1702,7 +1703,7 @@ function exportEmployeeDetailedToExcel() {
         { wch: 15 }  // Allowance
     ];
 
-    ws['!freeze'] = { xSplit: 0, ySplit: 5 };
+    ws['!freeze'] = { xSplit: 0, ySplit: 6 };
 
     const borderStyle = {
         top: { style: "thin", color: { rgb: "B4B4B4" } },
@@ -1754,10 +1755,10 @@ function exportEmployeeDetailedToExcel() {
 
             if (R === 0) ws[cellAddress].s = titleStyle;
             else if (R === 1) ws[cellAddress].s = subtitleStyle;
-            else if (R === 2) ws[cellAddress].s = summaryStyle;
-            else if (R === 4) ws[cellAddress].s = headerStyle;
-            else if (R > 4) {
-                const isEven = (R - 5) % 2 === 0;
+            else if (R === 2 || R === 3) ws[cellAddress].s = summaryStyle;
+            else if (R === 5) ws[cellAddress].s = headerStyle;
+            else if (R > 5) {
+                const isEven = (R - 6) % 2 === 0;
                 ws[cellAddress].s = isEven ? { ...cellStyle, ...zebraStyle } : cellStyle;
             }
         }
@@ -1766,7 +1767,8 @@ function exportEmployeeDetailedToExcel() {
     ws['!merges'] = [
         { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } },
         { s: { r: 1, c: 0 }, e: { r: 1, c: 5 } },
-        { s: { r: 2, c: 0 }, e: { r: 2, c: 5 } }
+        { s: { r: 2, c: 0 }, e: { r: 2, c: 5 } },
+        { s: { r: 3, c: 0 }, e: { r: 3, c: 5 } }
     ];
 
     const wb = XLSX.utils.book_new();
