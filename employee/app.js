@@ -1558,14 +1558,147 @@ function closeRequestModal() {
     }
 }
 
+function showStatusDialog(title, message, isSuccess) {
+    const existing = document.getElementById('statusDialogOverlay');
+    if (existing) existing.remove();
+    
+    if (!document.getElementById('statusDialogStyles')) {
+        const style = document.createElement('style');
+        style.id = 'statusDialogStyles';
+        style.innerHTML = `
+            @keyframes statusPop {
+                0% { transform: scale(0.85); opacity: 0; }
+                100% { transform: scale(1); opacity: 1; }
+            }
+            @keyframes statusPulseGlow {
+                0%, 100% { box-shadow: 0 0 15px rgba(16, 185, 129, 0.4); }
+                50% { box-shadow: 0 0 30px rgba(16, 185, 129, 0.7); }
+            }
+            @keyframes statusErrorPulse {
+                0%, 100% { box-shadow: 0 0 15px rgba(239, 68, 68, 0.4); }
+                50% { box-shadow: 0 0 30px rgba(239, 68, 68, 0.7); }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+    
+    const overlay = document.createElement('div');
+    overlay.id = 'statusDialogOverlay';
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(10, 15, 30, 0.82);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 11000;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        direction: rtl;
+    `;
+    
+    const card = document.createElement('div');
+    card.style.cssText = `
+        background: rgba(22, 28, 45, 0.85);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 28px;
+        padding: 30px 24px;
+        max-width: 380px;
+        width: 90%;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+        text-align: center;
+        animation: statusPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    `;
+    
+    const iconContainer = document.createElement('div');
+    const glowAnim = isSuccess ? 'statusPulseGlow 2s infinite alternate ease-in-out' : 'statusErrorPulse 2s infinite alternate ease-in-out';
+    const glowColor = isSuccess ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)';
+    const borderColor = isSuccess ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)';
+    
+    iconContainer.style.cssText = `
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        background: ${glowColor};
+        border: 2px solid ${borderColor};
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 20px;
+        font-size: 2.5rem;
+        animation: ${glowAnim};
+    `;
+    iconContainer.innerText = isSuccess ? '✓' : '✗';
+    iconContainer.style.color = isSuccess ? 'var(--secondary)' : 'var(--danger)';
+    
+    const titleEl = document.createElement('h3');
+    titleEl.innerText = title;
+    titleEl.style.cssText = `
+        margin: 0 0 10px 0;
+        font-size: 1.3rem;
+        font-weight: 800;
+        color: #fff;
+    `;
+    
+    const msgEl = document.createElement('p');
+    msgEl.innerText = message;
+    msgEl.style.cssText = `
+        margin: 0 0 24px 0;
+        font-size: 0.95rem;
+        color: var(--text-muted);
+        line-height: 1.5;
+    `;
+    
+    const btn = document.createElement('button');
+    btn.className = 'btn-primary';
+    btn.innerText = 'موافق';
+    btn.style.cssText = `
+        width: 100%;
+        height: 48px;
+        border-radius: 12px;
+        font-weight: bold;
+        background: ${isSuccess ? 'linear-gradient(135deg, var(--secondary), var(--secondary-hover)) !important' : 'linear-gradient(135deg, var(--danger), var(--danger-hover)) !important'};
+        box-shadow: ${isSuccess ? '0 4px 15px var(--secondary-glow) !important' : '0 4px 15px var(--danger-glow) !important'};
+    `;
+    
+    btn.onclick = () => {
+        overlay.style.opacity = '0';
+        setTimeout(() => {
+            overlay.remove();
+        }, 300);
+    };
+    
+    card.appendChild(iconContainer);
+    card.appendChild(titleEl);
+    card.appendChild(msgEl);
+    card.appendChild(btn);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    
+    setTimeout(() => {
+        overlay.style.opacity = '1';
+    }, 50);
+}
+
 async function submitSiteRequest() {
     const name = document.getElementById('suggestedSiteName').value.trim();
     const link = document.getElementById('suggestedSiteLink').value.trim();
     const note = document.getElementById('suggestedSiteNote').value.trim();
-    if (!name) return alert("يرجى إدخال اسم الموقع");
-    if (!lastLocation) return alert("يجب توفير إحداثيات الموقع");
+    if (!name) return showStatusDialog("خطأ التحقق", "يرجى إدخال اسم الموقع", false);
+    if (!lastLocation) return showStatusDialog("خطأ التحقق", "يجب توفير إحداثيات الموقع", false);
 
-    document.getElementById('loader').classList.remove('hidden');
+    const btnSubmit = document.getElementById('btnSubmitSiteRequest');
+    let originalHtml = '';
+    if (btnSubmit) {
+        btnSubmit.disabled = true;
+        originalHtml = btnSubmit.innerHTML;
+        btnSubmit.innerHTML = '🔄 جاري إرسال الطلب...';
+    }
     
     // Validate that the link matches the current location (within 700m)
     if (link) {
@@ -1577,8 +1710,11 @@ async function submitSiteRequest() {
             if (result.success && result.lat && result.lng) {
                 const dist = getDistanceFromLatLonInM(lastLocation.lat, lastLocation.lng, parseFloat(result.lat), parseFloat(result.lng));
                 if (dist > 700) {
-                    document.getElementById('loader').classList.add('hidden');
-                    return alert(`❌ خطأ: الرابط يشير لمكان يبعد عنك ${(dist/1000).toFixed(2)} كم. يجب أن يكون الرابط لمكانك الحالي (بحد أقصى 700 متر).`);
+                    if (btnSubmit) {
+                        btnSubmit.disabled = false;
+                        btnSubmit.innerHTML = originalHtml;
+                    }
+                    return showStatusDialog("خطأ المسافة", `الرابط يشير لمكان يبعد عنك ${(dist/1000).toFixed(2)} كم. يجب أن يكون الرابط لمكانك الحالي (بحد أقصى 700 متر).`, false);
                 }
             }
         } catch(e) { console.warn("Failed to validate link distance", e); }
@@ -1602,16 +1738,20 @@ async function submitSiteRequest() {
         });
         const result = await res.json();
         if (result.success) {
-            alert(result.message);
+            showStatusDialog("تم الإرسال بنجاح", result.message, true);
             closeRequestModal();
         } else {
-            alert("خطأ: " + result.message);
+            showStatusDialog("خطأ في الإرسال", result.message, false);
         }
     } catch (e) {
         console.error(e);
-        alert("فشل الاتصال بالسيرفر");
+        showStatusDialog("فشل الاتصال", "فشل الاتصال بالسيرفر", false);
+    } finally {
+        if (btnSubmit) {
+            btnSubmit.disabled = false;
+            btnSubmit.innerHTML = originalHtml;
+        }
     }
-    document.getElementById('loader').classList.add('hidden');
 }
 
 // ------ ALLOWANCE REQUEST LOGIC ------ //
@@ -1682,8 +1822,8 @@ async function submitAllowanceRequest() {
     const amount = document.getElementById('allowanceExtraAmount').value;
     const note = document.getElementById('allowanceNote').value;
 
-    if (!attId) return alert("يجب اختيار يوم به سجل حضور");
-    if (!amount || parseFloat(amount) <= 0) return alert("يرجى إدخال مبلغ صحيح");
+    if (!attId) return showStatusDialog("خطأ التحقق", "يجب اختيار يوم به سجل حضور", false);
+    if (!amount || parseFloat(amount) <= 0) return showStatusDialog("خطأ التحقق", "يرجى إدخال مبلغ صحيح", false);
 
     const selectedOption = document.getElementById('allowanceSiteSelect').selectedOptions[0];
     
@@ -1699,7 +1839,14 @@ async function submitAllowanceRequest() {
         note: note
     };
 
-    document.getElementById('loader').classList.remove('hidden');
+    const btnSubmit = document.getElementById('btnSubmitAllowanceRequest');
+    let originalHtml = '';
+    if (btnSubmit) {
+        btnSubmit.disabled = true;
+        originalHtml = btnSubmit.innerHTML;
+        btnSubmit.innerHTML = '🔄 جاري إرسال الطلب...';
+    }
+
     try {
         const res = await fetch(API_URL, {
             method: 'POST',
@@ -1709,16 +1856,20 @@ async function submitAllowanceRequest() {
         const result = await res.json();
         if (result.success) {
             AppCache.clearAll();
-            alert(result.message);
+            showStatusDialog("تم الإرسال بنجاح", result.message, true);
             closeAllowanceModal();
         } else {
-            alert("خطأ: " + result.message);
+            showStatusDialog("خطأ في الإرسال", result.message, false);
         }
     } catch (e) {
         console.error(e);
-        alert("فشل الاتصال بالسيرفر");
+        showStatusDialog("فشل الاتصال", "فشل الاتصال بالسيرفر", false);
+    } finally {
+        if (btnSubmit) {
+            btnSubmit.disabled = false;
+            btnSubmit.innerHTML = originalHtml;
+        }
     }
-    document.getElementById('loader').classList.add('hidden');
 }
 
 // ------ LEAVE REQUEST LOGIC ------ //
@@ -1757,8 +1908,8 @@ async function submitLeaveRequest() {
     const leaveDate = document.getElementById('leaveDate').value;
     const reason = document.getElementById('leaveReason').value.trim();
 
-    if (!leaveDate) return alert("يجب اختيار تاريخ الإجازة");
-    if (!reason) return alert("يجب اختيار نوع الإجازة");
+    if (!leaveDate) return showStatusDialog("خطأ التحقق", "يجب اختيار تاريخ الإجازة", false);
+    if (!reason) return showStatusDialog("خطأ التحقق", "يجب اختيار نوع الإجازة", false);
 
     const payload = {
         action: 'addLeaveRequest',
@@ -1768,7 +1919,14 @@ async function submitLeaveRequest() {
         reason: reason
     };
 
-    document.getElementById('loader').classList.remove('hidden');
+    const btnSubmit = document.getElementById('btnSubmitLeaveRequest');
+    let originalHtml = '';
+    if (btnSubmit) {
+        btnSubmit.disabled = true;
+        originalHtml = btnSubmit.innerHTML;
+        btnSubmit.innerHTML = '🔄 جاري إرسال الطلب...';
+    }
+
     try {
         const res = await fetch(API_URL, {
             method: 'POST',
@@ -1778,16 +1936,20 @@ async function submitLeaveRequest() {
         const result = await res.json();
         if (result.success) {
             AppCache.clearAll();
-            alert(result.message);
+            showStatusDialog("تم الإرسال بنجاح", result.message, true);
             closeLeaveModal();
         } else {
-            alert("خطأ: " + result.message);
+            showStatusDialog("خطأ في الإرسال", result.message, false);
         }
     } catch (e) {
         console.error(e);
-        alert("فشل الاتصال بالسيرفر");
+        showStatusDialog("فشل الاتصال", "فشل الاتصال بالسيرفر", false);
+    } finally {
+        if (btnSubmit) {
+            btnSubmit.disabled = false;
+            btnSubmit.innerHTML = originalHtml;
+        }
     }
-    document.getElementById('loader').classList.add('hidden');
 }
 
 // ------ MY REPORTS SYSTEM ------ //

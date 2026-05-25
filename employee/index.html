@@ -754,7 +754,7 @@
                     <textarea id="allowanceNote" placeholder="سبب الطلب..." rows="3"></textarea>
                 </div>
                 <div style="display:flex; gap:10px;">
-                    <button class="btn-primary" style="flex:1; background: linear-gradient(135deg, #8b5cf6, #7c3aed) !important; box-shadow: 0 4px 15px rgba(139, 92, 246, 0.35) !important;" onclick="submitAllowanceRequest()">إرسال الطلب</button>
+                    <button id="btnSubmitAllowanceRequest" class="btn-primary" style="flex:1; background: linear-gradient(135deg, #8b5cf6, #7c3aed) !important; box-shadow: 0 4px 15px rgba(139, 92, 246, 0.35) !important;" onclick="submitAllowanceRequest()">إرسال الطلب</button>
                     <button class="btn-danger" style="background:transparent !important; border:1px solid var(--danger) !important; box-shadow:none !important;"
                         onclick="closeAllowanceModal()">إلغاء</button>
                 </div>
@@ -780,7 +780,7 @@
                     </select>
                 </div>
                 <div style="display:flex; gap:10px;">
-                    <button class="btn-primary" style="flex:1; background: linear-gradient(135deg, #f59e0b, #d97706) !important; color:#fff !important; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.35) !important;" onclick="submitLeaveRequest()">إرسال الطلب</button>
+                    <button id="btnSubmitLeaveRequest" class="btn-primary" style="flex:1; background: linear-gradient(135deg, #f59e0b, #d97706) !important; color:#fff !important; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.35) !important;" onclick="submitLeaveRequest()">إرسال الطلب</button>
                     <button class="btn-danger" style="background:transparent !important; border:1px solid var(--danger) !important; box-shadow:none !important;"
                         onclick="closeLeaveModal()">إلغاء</button>
                 </div>
@@ -853,7 +853,7 @@
                     <textarea id="suggestedSiteNote" placeholder="اكتب تفاصيل الانتقالات أو سبب الطلب..." rows="3"></textarea>
                 </div>
                 <div style="display:flex; gap:10px;">
-                    <button class="btn-primary" style="flex: 1;" onclick="submitSiteRequest()">إرسال الطلب</button>
+                    <button id="btnSubmitSiteRequest" class="btn-primary" style="flex: 1;" onclick="submitSiteRequest()">إرسال الطلب</button>
                     <button class="btn-danger" style="background:transparent !important; border:1px solid var(--danger) !important; box-shadow:none !important;"
                         onclick="closeRequestModal()">إلغاء</button>
                 </div>
