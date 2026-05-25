@@ -1,5 +1,43 @@
 const API_URL = '/api/exec';
 // const OLD_BACKUP_API = 'https://script.google.com/macros/s/AKfycbwNhaRKDP-7M4dXSQend8RbYPkXRgs5nzN0-BmNzxEO8IkBN9lt6KDtJCdOqpovhJEY1Q/exec';
+
+// Local Cache Helper for HR Portal (SWR - Stale-While-Revalidate)
+const HrCache = {
+    get: (key) => {
+        try {
+            const cached = localStorage.getItem(key);
+            if (cached) {
+                const parsed = JSON.parse(cached);
+                // Cache valid if under 24 hours
+                if (Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000) {
+                    return parsed.data;
+                }
+            }
+        } catch (e) {
+            console.error('Error reading from HrCache:', e);
+        }
+        return null;
+    },
+    set: (key, data) => {
+        try {
+            localStorage.setItem(key, JSON.stringify({
+                timestamp: Date.now(),
+                data: data
+            }));
+        } catch (e) {
+            console.error('Error writing to HrCache:', e);
+        }
+    },
+    clearAll: () => {
+        try {
+            localStorage.removeItem('hr_dashboard_data');
+            localStorage.removeItem('hr_official_holidays');
+        } catch (e) {
+            console.error('Error clearing HrCache:', e);
+        }
+    }
+};
+
 let hrSession = null;
 let allAttendanceData = [];
 let allEmployees = [];
@@ -81,6 +119,7 @@ async function loginHR() {
 }
 
 function logout() {
+    HrCache.clearAll();
     localStorage.removeItem('hrSession');
     location.reload();
 }
@@ -142,7 +181,39 @@ function showTab(tabName) {
 async function initDashboard(forceRefresh = false) {
     if (isInitialDataLoaded && !forceRefresh) return;
 
-    document.getElementById('loader').classList.remove('hidden');
+    // Try loading from cache for instant rendering
+    const cachedData = HrCache.get('hr_dashboard_data');
+    const cachedHolidays = HrCache.get('hr_official_holidays');
+
+    let hasCache = false;
+    if (cachedData && cachedHolidays && !forceRefresh) {
+        allAttendanceData = cachedData.attendance || [];
+        allEmployees = cachedData.employees || [];
+        allSites = cachedData.sites || [];
+        allSiteRequests = cachedData.siteRequests || [];
+        allAllowanceRequests = cachedData.allowanceRequests || [];
+        approvedAllowanceExtraMap = null;
+        allLeaveRequests = cachedData.leaveRequests || [];
+        appSettings = cachedData.settings || {};
+        allOfficialHolidays = cachedHolidays || [];
+
+        isInitialDataLoaded = true;
+
+        // Render the current active tab instantly
+        const activeTab = localStorage.getItem('hrActiveTab') || 'attendance';
+        renderActiveTab(activeTab);
+
+        // Initialize notifications
+        initNotifications();
+        hasCache = true;
+    }
+
+    // If no cache or if we are forcing refresh, show loader. Otherwise, perform a silent update in the background.
+    if (!hasCache || forceRefresh) {
+        const loader = document.getElementById('loader');
+        if (loader) loader.classList.remove('hidden');
+    }
+
     try {
         // Fetch dashboard data and official holidays in parallel
         const [dashboardRes, holidaysRes] = await Promise.all([
@@ -163,14 +234,17 @@ async function initDashboard(forceRefresh = false) {
             allLeaveRequests = result.leaveRequests || [];
             appSettings = result.settings || {};
 
-            // Load official holidays
             if (holidaysResult.success) {
                 allOfficialHolidays = holidaysResult.data || [];
             }
 
+            // Save to cache for future instant loading
+            HrCache.set('hr_dashboard_data', result);
+            HrCache.set('hr_official_holidays', allOfficialHolidays);
+
             isInitialDataLoaded = true;
 
-            // Render the current active tab
+            // Render the active tab with fresh data
             const activeTab = localStorage.getItem('hrActiveTab') || 'attendance';
             renderActiveTab(activeTab);
 
@@ -180,7 +254,9 @@ async function initDashboard(forceRefresh = false) {
     } catch (e) {
         console.error("Initial load failed", e);
     }
-    document.getElementById('loader').classList.add('hidden');
+    
+    const loader = document.getElementById('loader');
+    if (loader) loader.classList.add('hidden');
 }
 
 function renderActiveTab(tabName) {
@@ -306,8 +382,9 @@ function renderAttendanceTable(data) {
 
     // Show absent employees view
     if (attendanceViewMode === 'absent') {
+        const html = [];
         employeeOnlyList.filter(emp => absentEmployeeIds.includes(String(emp.id))).forEach(emp => {
-            tbody.innerHTML += `
+            html.push(`
                 <tr style="background:rgba(239,68,68,0.05);">
                     <td data-label="الموظف">${emp.name}</td>
                     <td data-label="الموقع">-</td>
@@ -316,13 +393,13 @@ function renderAttendanceTable(data) {
                     <td data-label="بدل الانتقال">-</td>
                     <td data-label="الحالة"><span style="color:var(--danger)">غائب</span></td>
                 </tr>
-            `;
+            `);
         });
         
         // Also show employees on approved leave as a separate group or just informational?
         // Let's add them with a different style to be clear
         employeeOnlyList.filter(emp => approvedLeaveEmployeeIds.has(String(emp.id)) && !presentEmployeeIds.has(String(emp.id))).forEach(emp => {
-            tbody.innerHTML += `
+            html.push(`
                 <tr style="background:rgba(59,130,246,0.05);">
                     <td data-label="الموظف">${emp.name}</td>
                     <td data-label="الموقع">-</td>
@@ -331,12 +408,14 @@ function renderAttendanceTable(data) {
                     <td data-label="بدل الانتقال">-</td>
                     <td data-label="الحالة"><span style="color:#3b82f6">إجازة معتمدة</span></td>
                 </tr>
-            `;
+            `);
         });
+        tbody.innerHTML = html.join('');
         return;
     }
 
     // Show present employees (default view)
+    const html = [];
     [...filtered].reverse().forEach(record => {
         // Display time as-is (server sends Cairo time with offset)
         const checkInTime = formatCairoTime(record.checkIn);
@@ -351,7 +430,7 @@ function renderAttendanceTable(data) {
         
         const statusMeta = getStatusMeta(record.status, record.checkIn ? record.checkIn.slice(0, 10) : null);
         
-        tbody.innerHTML += `
+        html.push(`
             <tr>
                 <td data-label="الموظف">${record.employeeName}</td>
                 <td data-label="الموقع">${record.siteName}</td>
@@ -360,8 +439,9 @@ function renderAttendanceTable(data) {
                 <td data-label="بدل الانتقال">${getCurrentTransportPrice(record) || 0} ج.م</td>
                 <td data-label="الحالة"><span style="color:${statusMeta.color}">${statusMeta.text}</span></td>
             </tr>
-        `;
+        `);
     });
+    tbody.innerHTML = html.join('');
 }
 
 function toggleAttendanceView() {
@@ -896,7 +976,7 @@ async function generateEmployeeDetailedReport() {
         }
     });
 
-    tbody.innerHTML = '';
+    const detailedHtml = [];
     
     // Iterate from End Date back to Start Date
     let currentLoopDate = new Date(endDate);
@@ -935,7 +1015,7 @@ async function generateEmployeeDetailedReport() {
                     paymentStatusHtml = `<span style="color: var(--text-muted); font-size: 0.8rem;">-</span>`;
                 }
 
-                tbody.innerHTML += `
+                detailedHtml.push(`
                     <tr>
                         <td data-label="التاريخ">${displayDate}</td>
                         <td data-label="الموقع">${record.siteName || '-'}</td>
@@ -945,7 +1025,7 @@ async function generateEmployeeDetailedReport() {
                         <td data-label="البدل">${currentTransport.toFixed(2)} ج.م</td>
                         <td data-label="حالة السداد">${paymentStatusHtml}</td>
                     </tr>
-                `;
+                `);
             });
         } else {
             // No attendance record for this day
@@ -955,7 +1035,7 @@ async function generateEmployeeDetailedReport() {
 
             if (leaveReq) {
                 // Approved Leave
-                tbody.innerHTML += `
+                detailedHtml.push(`
                     <tr style="background:rgba(16,185,129,0.05);">
                         <td data-label="التاريخ">${displayDate}</td>
                         <td data-label="الموقع">-</td>
@@ -965,10 +1045,10 @@ async function generateEmployeeDetailedReport() {
                         <td data-label="البدل">0.00 ج.م</td>
                         <td data-label="حالة السداد">-</td>
                     </tr>
-                `;
+                `);
             } else if (!isWeekend && !isHoliday) {
                 // Working day with no attendance and no leave -> Absent
-                tbody.innerHTML += `
+                detailedHtml.push(`
                     <tr style="background:rgba(239,68,68,0.05);">
                         <td data-label="التاريخ">${displayDate}</td>
                         <td data-label="الموقع">-</td>
@@ -978,13 +1058,14 @@ async function generateEmployeeDetailedReport() {
                         <td data-label="البدل">0.00 ج.م</td>
                         <td data-label="حالة السداد">-</td>
                     </tr>
-                `;
+                `);
             }
             // Weekends and Holidays without attendance are not shown to keep the table clean
         }
         
         currentLoopDate.setDate(currentLoopDate.getDate() - 1);
     }
+    tbody.innerHTML = detailedHtml.join('');
 
     // Render leave requests table
     const leaveTbody = document.getElementById('employeeLeaveRequestsTableBody');
@@ -992,7 +1073,7 @@ async function generateEmployeeDetailedReport() {
         if (employeeLeaveRequests.length === 0) {
             leaveTbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--text-muted);">لا توجد طلبات إجازة</td></tr>';
         } else {
-            leaveTbody.innerHTML = '';
+            const leavesHtml = [];
             // Sort by leave date
             const sortedLeaves = [...employeeLeaveRequests].sort((a, b) => new Date(a.leaveDate) - new Date(b.leaveDate));
             sortedLeaves.forEach(req => {
@@ -1009,7 +1090,7 @@ async function generateEmployeeDetailedReport() {
                     statusColor = '#ef4444';
                 }
 
-                leaveTbody.innerHTML += `
+                leavesHtml.push(`
                     <tr>
                         <td>${req.leaveDate}</td>
                         <td>${req.reason}</td>
@@ -1017,8 +1098,9 @@ async function generateEmployeeDetailedReport() {
                         <td><span style="color:${statusColor}; font-weight:bold;">${statusText}</span></td>
                         <td>${req.approvedAt ? formatDate(req.approvedAt) : '-'}</td>
                     </tr>
-                `;
+                `);
             });
+            leaveTbody.innerHTML = leavesHtml.join('');
         }
     }
 }
@@ -1186,6 +1268,8 @@ function generateReport() {
     const tbody = document.getElementById('reportsTableBody');
     tbody.innerHTML = '';
 
+    const kpiHtml = [];
+
     for (let empId in reportAcc) {
         const data = reportAcc[empId];
         kpiTotalLates += data.lates;
@@ -1208,7 +1292,7 @@ function generateReport() {
         names.push(data.name);
         lates.push(data.lates);
 
-        tbody.innerHTML += `
+        kpiHtml.push(`
             <tr>
                 <td data-label="ID الموظف">${empId}</td>
                 <td data-label="اسم الموظف">${data.name}</td>
@@ -1220,8 +1304,10 @@ function generateReport() {
                 <td data-label="مبلغ العمل الإضافي"><span style="color:#3b82f6">${data.overtimePay.toFixed(2)} ج.م</span></td>
                 <td data-label="بدل الانتقال">${data.totalTransport.toFixed(2)} ج.م</td>
             </tr>
-        `;
+        `);
     }
+
+    tbody.innerHTML = kpiHtml.join('');
 
     document.getElementById('kpiTotalLates').innerText = kpiTotalLates;
     document.getElementById('kpiActiveEmp').innerText = kpiActiveEmp;
@@ -2564,6 +2650,8 @@ async function fetchSiteRequests(force = false) {
 function renderSiteRequestsTable(data) {
     const tbody = document.getElementById('siteRequestsTableBody');
     tbody.innerHTML = '';
+    
+    const html = [];
     [...data].reverse().forEach(req => {
         let statusText = 'قيد الانتظار';
         let statusColor = 'var(--warning)';
@@ -2600,7 +2688,7 @@ function renderSiteRequestsTable(data) {
         const approvedStr = req.approvedAt ? formatCairoDate(req.approvedAt) + ' ' + formatCairoTime(req.approvedAt) : '';
         const dateStr = approvedStr ? `${createdStr}<br><small style="color:var(--text-muted);">اعتماد: ${approvedStr}</small>` : createdStr;
 
-        tbody.innerHTML += `
+        html.push(`
             <tr>
                 <td data-label="الموظف">${req.employeeName}</td>
                 <td data-label="اسم الموقع المقترح">${req.suggestedName}</td>
@@ -2612,8 +2700,9 @@ function renderSiteRequestsTable(data) {
                 <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
                 <td data-label="الإجراءات">${actions}</td>
             </tr>
-        `;
+        `);
     });
+    tbody.innerHTML = html.join('');
 }
 async function approveRequest(id, suggestedName) {
     const matchedRequest = allSiteRequests.find(req => String(req.id) === String(id));
@@ -2727,6 +2816,7 @@ function renderAllowanceRequestsTable(data) {
     if (!tbody) return;
     tbody.innerHTML = '';
 
+    const html = [];
     [...data].forEach(req => {
         let statusText = 'قيد الانتظار';
         let statusColor = 'var(--warning)';
@@ -2757,7 +2847,7 @@ function renderAllowanceRequestsTable(data) {
 
         const createdAt = formatCairoDate(req.createdAt) + ' ' + formatCairoTime(req.createdAt);
 
-        tbody.innerHTML += `
+        html.push(`
             <tr>
                 <td data-label="الموظف">${req.employeeName}</td>
                 <td data-label="اليوم">${req.requestDate}</td>
@@ -2768,8 +2858,9 @@ function renderAllowanceRequestsTable(data) {
                 <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
                 <td data-label="الإجراءات" style="display:flex; gap:5px;">${actions}</td>
             </tr>
-        `;
+        `);
     });
+    tbody.innerHTML = html.join('');
 }
 
 async function handleAllowanceUpgrade(requestId, status) {
@@ -2891,6 +2982,7 @@ function renderLeaveRequestsTable(data) {
         return new Date(b.createdAt) - new Date(a.createdAt);
     });
 
+    const html = [];
     sorted.forEach(req => {
         let statusText = '';
         let statusColor = '';
@@ -2923,17 +3015,18 @@ function renderLeaveRequestsTable(data) {
             `;
         }
 
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td><strong>${req.employeeName}</strong></td>
-            <td>${req.leaveDate}</td>
-            <td>${req.reason}</td>
-            <td>${formatDate(req.createdAt)}</td>
-            <td><span style="color:${statusColor}; font-weight:bold;">${statusText}</span></td>
-            <td>${actions}</td>
-        `;
-        tbody.appendChild(tr);
+        html.push(`
+            <tr>
+                <td><strong>${req.employeeName}</strong></td>
+                <td>${req.leaveDate}</td>
+                <td>${req.reason}</td>
+                <td>${formatDate(req.createdAt)}</td>
+                <td><span style="color:${statusColor}; font-weight:bold;">${statusText}</span></td>
+                <td>${actions}</td>
+            </tr>
+        `);
     });
+    tbody.innerHTML = html.join('');
 }
 
 async function deleteLeaveRequest(id, employeeName) {
@@ -3066,6 +3159,7 @@ function renderDeviceChangeRequests(requests) {
         return;
     }
     
+    const html = [];
     requests.forEach(req => {
         let statusText = '';
         let statusColor = '';
@@ -3092,7 +3186,7 @@ function renderDeviceChangeRequests(requests) {
         const oldDeviceShort = req.old_device_id ? req.old_device_id.substring(0, 20) + '...' : 'لا يوجد';
         const newDeviceShort = req.new_device_id ? req.new_device_id.substring(0, 20) + '...' : 'غير معروف';
         
-        tbody.innerHTML += `
+        html.push(`
             <tr>
                 <td data-label="الموظف">${req.user_name || req.user_id}</td>
                 <td data-label="الجهاز القديم" title="${req.old_device_id || ''}">${oldDeviceShort}</td>
@@ -3102,8 +3196,9 @@ function renderDeviceChangeRequests(requests) {
                 <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
                 <td data-label="الإجراءات" style="display:flex; gap:5px;">${actions}</td>
             </tr>
-        `;
+        `);
     });
+    tbody.innerHTML = html.join('');
 }
 
 async function approveDeviceChangeRequest(requestId) {
@@ -3194,13 +3289,14 @@ function renderDevicesTable(devices) {
         return;
     }
     
+    const html = [];
     devices.forEach(device => {
         const statusText = device.is_active ? 'نشط' : 'غير نشط';
         const statusColor = device.is_active ? 'var(--secondary)' : 'var(--text-muted)';
         const createdAt = formatCairoDate(device.created_at) + ' ' + formatCairoTime(device.created_at);
         const deviceIdShort = device.device_id ? device.device_id.substring(0, 20) + '...' : '-';
         
-        tbody.innerHTML += `
+        html.push(`
             <tr>
                 <td data-label="الموظف">${device.userName || device.user_id}</td>
                 <td data-label="معرف الجهاز" title="${device.device_id || ''}">${deviceIdShort}</td>
@@ -3212,8 +3308,9 @@ function renderDevicesTable(devices) {
                     <button class="btn-danger" style="width:auto; padding:5px 10px; font-size:0.8rem;" onclick="deleteDevice('${device.id}', '${device.user_id}', '${device.device_id}')">حذف</button>
                 </td>
             </tr>
-        `;
+        `);
     });
+    tbody.innerHTML = html.join('');
 }
 
 async function deleteDevice(deviceId, userId, deviceIdString) {

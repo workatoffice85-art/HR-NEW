@@ -2538,8 +2538,14 @@ if (action === "updateEmployee") {
 
         // --- OFFICIAL HOLIDAYS ---
         if (action === "getOfficialHolidays") {
+            const cacheKey = 'holidays';
+            const cached = getCached(cacheKey);
+            if (cached) return res.status(200).json({ success: true, data: cached });
+
             const { data: holidays, error } = await supabase.from('official_holidays').select('*').order('holidayDate', { ascending: true });
             if (error) throw error;
+
+            setCached(cacheKey, holidays, CACHE_TTL.holidays);
             return res.status(200).json({ success: true, data: holidays || [] });
         }
 
@@ -2579,6 +2585,7 @@ if (action === "updateEmployee") {
                     .in('id', idsToUpdate);
             }
 
+            invalidateCache('holidays');
             return res.status(200).json({ success: true, message: "تم إضافة الإجازة الرسمية بنجاح وتحديث السجلات" });
         }
 
@@ -2643,6 +2650,7 @@ if (action === "updateEmployee") {
                 }
             }
 
+            invalidateCache('holidays');
             return res.status(200).json({ success: true, message: "تم حذف الإجازة الرسمية بنجاح وتحديث السجلات" });
         }
 
