@@ -519,67 +519,69 @@ async function initSystem() {
         });
     }
 
-    // Step 2: Fetch fresh data from API in background (Revalidation)
-    try {
-        const dataPromise = fetch(`${API_URL}?action=getPortalInitialData&employeeId=${encodeURIComponent(currentUser.id)}`).then(r => r.json());
-        const holidaysPromise = fetch(`${API_URL}?action=getOfficialHolidays`).then(r => r.json());
-        const settingsPromise = fetch(`${API_URL}?action=getSettings`).then(r => r.json());
+    // Step 2: Fetch fresh data from API in background (Non-blocking Revalidation)
+    (async () => {
+        try {
+            const dataPromise = fetch(`${API_URL}?action=getPortalInitialData&employeeId=${encodeURIComponent(currentUser.id)}`).then(r => r.json());
+            const holidaysPromise = fetch(`${API_URL}?action=getOfficialHolidays`).then(r => r.json());
+            const settingsPromise = fetch(`${API_URL}?action=getSettings`).then(r => r.json());
 
-        const [dataResult, holidaysResult, settingsResult] = await Promise.all([dataPromise, holidaysPromise, settingsPromise]);
+            const [dataResult, holidaysResult, settingsResult] = await Promise.all([dataPromise, holidaysPromise, settingsPromise]);
 
-        if (dataResult.success) {
-            sitesData = dataResult.sites || [];
-            allAttendanceData = dataResult.attendance || [];
-            allLeaveRequests = dataResult.leaveRequests || [];
-            
-            if (holidaysResult.success) {
-                allOfficialHolidays = holidaysResult.data || [];
-            }
-            
-            if (settingsResult.success) {
-                appSettings = settingsResult.data || {};
-            }
-
-            // Save fresh data to cache
-            AppCache.set(cacheKeyData, {
-                sites: sitesData,
-                attendance: allAttendanceData,
-                leaveRequests: allLeaveRequests
-            });
-            AppCache.set('official_holidays', allOfficialHolidays);
-            AppCache.set('app_settings', appSettings);
-
-            // Silently re-process and update UI
-            processAttendanceStatus(allAttendanceData);
-            
-            if (!hasCache) {
-                initNotifications();
-                setStatus(`📡 تم تحميل ${sitesData.length} موقع. النظام جاهز...`, 'text-muted');
+            if (dataResult.success) {
+                sitesData = dataResult.sites || [];
+                allAttendanceData = dataResult.attendance || [];
+                allLeaveRequests = dataResult.leaveRequests || [];
                 
-                await initBiometricSystem();
-                
-                if (userBioType === 'face') {
-                    startVideo();
-                } else {
-                    const cameraContainer = document.querySelector('.camera-container');
-                    if (cameraContainer) cameraContainer.classList.add('hidden');
+                if (holidaysResult.success) {
+                    allOfficialHolidays = holidaysResult.data || [];
                 }
-                getLocation();
+                
+                if (settingsResult.success) {
+                    appSettings = settingsResult.data || {};
+                }
+
+                // Save fresh data to cache
+                AppCache.set(cacheKeyData, {
+                    sites: sitesData,
+                    attendance: allAttendanceData,
+                    leaveRequests: allLeaveRequests
+                });
+                AppCache.set('official_holidays', allOfficialHolidays);
+                AppCache.set('app_settings', appSettings);
+
+                // Silently re-process and update UI
+                processAttendanceStatus(allAttendanceData);
+                
+                if (!hasCache) {
+                    initNotifications();
+                    setStatus(`📡 تم تحميل ${sitesData.length} موقع. النظام جاهز...`, 'text-muted');
+                    
+                    await initBiometricSystem();
+                    
+                    if (userBioType === 'face') {
+                        startVideo();
+                    } else {
+                        const cameraContainer = document.querySelector('.camera-container');
+                        if (cameraContainer) cameraContainer.classList.add('hidden');
+                    }
+                    getLocation();
+                } else {
+                    updateActionButtonsState();
+                }
             } else {
-                updateActionButtonsState();
+                console.error("Data load failed", dataResult);
+                if (!hasCache) {
+                    setStatus('⚠️ فشل في تحميل البيانات من السيرفر', 'error-text');
+                }
             }
-        } else {
-            console.error("Data load failed", dataResult);
+        } catch(e) {
+            console.error("Initial load error in background revalidation", e);
             if (!hasCache) {
-                setStatus('⚠️ فشل في تحميل البيانات من السيرفر', 'error-text');
+                setStatus('❌ خطأ في الاتصال بالخادم', 'error-text');
             }
         }
-    } catch(e) {
-        console.error("Initial load error", e);
-        if (!hasCache) {
-            setStatus('❌ خطأ في الاتصال بالخادم', 'error-text');
-        }
-    }
+    })();
 }
 
 function processAttendanceStatus(data) {
