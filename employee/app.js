@@ -2434,6 +2434,7 @@ window.addEventListener('beforeunload', () => {
 // ------ NOTIFICATIONS SYSTEM ------ //
 let notificationsData = [];
 let notificationsInterval = null;
+let hasShownStartNotifications = false;
 
 function initNotifications() {
     // Fetch notifications immediately
@@ -2454,10 +2455,155 @@ async function fetchNotifications() {
         if (result.success) {
             notificationsData = result.notifications || [];
             updateNotificationBadge();
+            
+            // Only show the pop-up modal on the first load of the dashboard
+            if (!hasShownStartNotifications && notificationsData.length > 0) {
+                hasShownStartNotifications = true;
+                showNotificationsPopupOnStart();
+            }
         }
     } catch (e) {
         console.error('Error fetching notifications:', e);
     }
+}
+
+function showNotificationsPopupOnStart() {
+    const importantNotifs = notificationsData.filter(notif => 
+        notif.type && (notif.type.includes('approved') || notif.type.includes('rejected'))
+    );
+    
+    if (importantNotifs.length === 0) return;
+    
+    // Inject keyframe animation if not already injected
+    if (!document.getElementById('notifStartStyles')) {
+        const style = document.createElement('style');
+        style.id = 'notifStartStyles';
+        style.innerHTML = `
+            @keyframes notifBounce {
+                0%, 100% { transform: translateY(0); }
+                50% { transform: translateY(-10px); }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+    
+    // Create overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'notifStartOverlay';
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(10, 15, 30, 0.85);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+        opacity: 0;
+        transition: opacity 0.4s ease;
+        direction: rtl;
+    `;
+    
+    // Create glass card
+    const card = document.createElement('div');
+    card.style.cssText = `
+        background: rgba(22, 28, 45, 0.8);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 28px;
+        padding: 30px 24px;
+        max-width: 400px;
+        width: 90%;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+        text-align: center;
+        transform: scale(0.9);
+        transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    `;
+    
+    // Header
+    const iconHeader = document.createElement('div');
+    iconHeader.innerText = '🔔';
+    iconHeader.style.cssText = 'font-size: 3.5rem; margin-bottom: 15px; display: inline-block; animation: notifBounce 2s infinite alternate ease-in-out;';
+    
+    const title = document.createElement('h3');
+    title.innerText = 'تحديثات هامة لطلباتك';
+    title.style.cssText = 'margin: 0 0 10px 0; font-size: 1.4rem; font-weight: 800; color: #fff;';
+    
+    const desc = document.createElement('p');
+    desc.innerText = 'لديك إشعارات جديدة بخصوص طلبات الإجازات أو البدلات:';
+    desc.style.cssText = 'margin: 0 0 20px 0; font-size: 0.9rem; color: var(--text-muted);';
+    
+    // List container
+    const listContainer = document.createElement('div');
+    listContainer.style.cssText = 'max-height: 240px; overflow-y: auto; margin-bottom: 25px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.05); background: rgba(0,0,0,0.2); padding: 8px;';
+    
+    importantNotifs.forEach(notif => {
+        const item = document.createElement('div');
+        const isApproved = notif.type.includes('approved');
+        const borderGlow = isApproved ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)';
+        const bgGlow = isApproved ? 'rgba(16, 185, 129, 0.05)' : 'rgba(239, 68, 68, 0.05)';
+        
+        item.style.cssText = `
+            padding: 12px 14px;
+            margin-bottom: 8px;
+            border-radius: 12px;
+            border: 1px solid ${borderGlow};
+            background: ${bgGlow};
+            text-align: right;
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+        `;
+        
+        const badge = isApproved ? '✅' : '❌';
+        
+        item.innerHTML = `
+            <span style="font-size: 20px; margin-top: 2px;">${badge}</span>
+            <div style="flex: 1;">
+                <div style="font-weight: 800; color: #fff; font-size: 0.95rem; margin-bottom: 4px;">${notif.title}</div>
+                <div style="font-size: 0.85rem; color: #cbd5e1; line-height: 1.4;">${notif.message}</div>
+            </div>
+        `;
+        listContainer.appendChild(item);
+    });
+    
+    // Got it Button
+    const btn = document.createElement('button');
+    btn.className = 'btn-primary';
+    btn.innerText = 'فهمت وتم القراءة';
+    btn.style.cssText = 'width: 100%; height: 50px; border-radius: 14px; font-weight: bold; background: linear-gradient(135deg, var(--primary), var(--primary-hover)) !important;';
+    
+    btn.onclick = async () => {
+        btn.disabled = true;
+        btn.innerText = 'جاري التأكيد...';
+        try {
+            await Promise.all(importantNotifs.map(notif => markNotificationAsRead(notif.id)));
+        } catch(e) {
+            console.error('Error marking start notifications as read:', e);
+        }
+        
+        overlay.style.opacity = '0';
+        card.style.transform = 'scale(0.9)';
+        setTimeout(() => {
+            overlay.remove();
+        }, 400);
+    };
+    
+    card.appendChild(iconHeader);
+    card.appendChild(title);
+    card.appendChild(desc);
+    card.appendChild(listContainer);
+    card.appendChild(btn);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    
+    setTimeout(() => {
+        overlay.style.opacity = '1';
+        card.style.transform = 'scale(1)';
+    }, 50);
 }
 
 function updateNotificationBadge() {
