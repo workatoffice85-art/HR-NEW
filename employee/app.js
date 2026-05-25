@@ -1,5 +1,51 @@
 const API_URL = '/api/exec';
 // const OLD_BACKUP_API = 'https://script.google.com/macros/s/AKfycbwNhaRKDP-7M4dXSQend8RbYPkXRgs5nzN0-BmNzxEO8IkBN9lt6KDtJCdOqpovhJEY1Q/exec';
+
+// Local Cache Helper for SWR (Stale-While-Revalidate)
+const AppCache = {
+    get: (key) => {
+        try {
+            const cached = localStorage.getItem(key);
+            if (cached) {
+                const parsed = JSON.parse(cached);
+                // Cache valid if under 24 hours
+                if (Date.now() - parsed.timestamp < 24 * 60 * 60 * 1000) {
+                    return parsed.data;
+                }
+            }
+        } catch (e) {
+            console.error('Error reading from cache:', e);
+        }
+        return null;
+    },
+    set: (key, data) => {
+        try {
+            localStorage.setItem(key, JSON.stringify({
+                timestamp: Date.now(),
+                data: data
+            }));
+        } catch (e) {
+            console.error('Error writing to cache:', e);
+        }
+    },
+    clear: (key) => {
+        localStorage.removeItem(key);
+    },
+    clearAll: () => {
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k && (k.startsWith('portal_initial_data_') || 
+                      k === 'official_holidays' || 
+                      k === 'app_settings' || 
+                      k.startsWith('my_reports_'))) {
+                keysToRemove.push(k);
+            }
+        }
+        keysToRemove.forEach(k => localStorage.removeItem(k));
+    }
+};
+
 let currentUser = JSON.parse(localStorage.getItem('empSession'));
 let currentSite = null;
 let lastLocation = null;
@@ -29,6 +75,9 @@ let registeredFaceDescriptor = null; // DEPRECATED: for backward compatibility
 let allOfficialHolidays = [];
 let appSettings = {}; // Store system settings including weekend days
 const MODEL_URL = '../models';
+
+let faceApiModelsPromise = null;
+let isFaceApiModelsLoaded = false;
 
 // Helper: Extract Cairo time from ISO string (format: 2026-04-26T09:34:48+02:00)
 // Returns time in format "9:34:48 ص" without any timezone conversion
@@ -411,6 +460,7 @@ function showError(elId, msg) {
 
 // -------- DASHBOARD SYSTEM --------------
 function logout() {
+    AppCache.clearAll();
     localStorage.removeItem('empSession');
     location.reload();
 }
@@ -418,74 +468,118 @@ function logout() {
 async function initSystem() {
     setStatus('🔄 جاري بدء النظام (النسخة المحدثة)...', 'text-muted');
 
-    // Step 1: Load Data & AI Models in Parallel
+    const userBioType = currentUser.biometricType || (currentUser.faceDescriptor ? 'face' : null);
+    
+    // Step 0: Try loading from cache for instant rendering
+    const cacheKeyData = `portal_initial_data_${currentUser.id}`;
+    const cachedData = AppCache.get(cacheKeyData);
+    const cachedHolidays = AppCache.get('official_holidays');
+    const cachedSettings = AppCache.get('app_settings');
+
+    let hasCache = false;
+    if (cachedData && cachedHolidays && cachedSettings) {
+        sitesData = cachedData.sites || [];
+        allAttendanceData = cachedData.attendance || [];
+        allLeaveRequests = cachedData.leaveRequests || [];
+        allOfficialHolidays = cachedHolidays || [];
+        appSettings = cachedSettings || {};
+
+        processAttendanceStatus(allAttendanceData);
+        initNotifications();
+        setStatus(`📡 تم تحميل ${sitesData.length} موقع. النظام جاهز...`, 'text-muted');
+        
+        // Setup biometric system using cached data
+        initBiometricSystem();
+        
+        if (userBioType === 'face') {
+            startVideo();
+        } else {
+            const cameraContainer = document.querySelector('.camera-container');
+            if (cameraContainer) cameraContainer.classList.add('hidden');
+        }
+        getLocation();
+        hasCache = true;
+    }
+
+    // Step 1: Start loading Face-API models asynchronously in background if user uses camera face
+    if (userBioType === 'face' && !faceApiModelsPromise) {
+        faceApiModelsPromise = Promise.all([
+            faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
+            faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+            faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+        ]).then(async () => {
+            isFaceApiModelsLoaded = true;
+            console.log('Face-api models loaded in background');
+            if (hasCache) {
+                await initFaceVerification();
+            }
+        }).catch(err => {
+            console.error('Error loading face-api models asynchronously:', err);
+            setStatus('❌ خطأ في تحميل ملفات الذكاء الاصطناعي الخاص بالوجه', 'error-text');
+        });
+    }
+
+    // Step 2: Fetch fresh data from API in background (Revalidation)
     try {
         const dataPromise = fetch(`${API_URL}?action=getPortalInitialData&employeeId=${encodeURIComponent(currentUser.id)}`).then(r => r.json());
         const holidaysPromise = fetch(`${API_URL}?action=getOfficialHolidays`).then(r => r.json());
         const settingsPromise = fetch(`${API_URL}?action=getSettings`).then(r => r.json());
-        const modelPromise = Promise.all([
-            faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
-            faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-            faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
-        ]);
 
-        const [dataResult, holidaysResult, _] = await Promise.all([dataPromise, holidaysPromise, modelPromise]);
+        const [dataResult, holidaysResult, settingsResult] = await Promise.all([dataPromise, holidaysPromise, settingsPromise]);
 
         if (dataResult.success) {
             sitesData = dataResult.sites || [];
             allAttendanceData = dataResult.attendance || [];
             allLeaveRequests = dataResult.leaveRequests || [];
-
-            // Load official holidays
+            
             if (holidaysResult.success) {
                 allOfficialHolidays = holidaysResult.data || [];
             }
-
-            // Load settings (weekend days, etc.)
-            try {
-                const settingsResult = await settingsPromise;
-                console.log('Settings loaded:', settingsResult);
-                if (settingsResult.success) {
-                    appSettings = settingsResult.data || {};
-                    console.log('appSettings set to:', appSettings);
-                } else {
-                    console.error('Settings load failed:', settingsResult);
-                }
-            } catch (e) {
-                console.error('Settings fetch error:', e);
+            
+            if (settingsResult.success) {
+                appSettings = settingsResult.data || {};
             }
 
-            // Process initial status
+            // Save fresh data to cache
+            AppCache.set(cacheKeyData, {
+                sites: sitesData,
+                attendance: allAttendanceData,
+                leaveRequests: allLeaveRequests
+            });
+            AppCache.set('official_holidays', allOfficialHolidays);
+            AppCache.set('app_settings', appSettings);
+
+            // Silently re-process and update UI
             processAttendanceStatus(allAttendanceData);
-
-            // Initialize notifications
-            initNotifications();
-
-            setStatus(`📡 تم تحميل ${sitesData.length} موقع. النظام جاهز...`, 'text-muted');
+            
+            if (!hasCache) {
+                initNotifications();
+                setStatus(`📡 تم تحميل ${sitesData.length} موقع. النظام جاهز...`, 'text-muted');
+                
+                await initBiometricSystem();
+                
+                if (userBioType === 'face') {
+                    startVideo();
+                } else {
+                    const cameraContainer = document.querySelector('.camera-container');
+                    if (cameraContainer) cameraContainer.classList.add('hidden');
+                }
+                getLocation();
+            } else {
+                updateActionButtonsState();
+            }
         } else {
             console.error("Data load failed", dataResult);
-            setStatus('⚠️ فشل في تحميل البيانات من السيرفر', 'error-text');
+            if (!hasCache) {
+                setStatus('⚠️ فشل في تحميل البيانات من السيرفر', 'error-text');
+            }
         }
     } catch(e) {
         console.error("Initial load error", e);
-        setStatus('❌ خطأ في الاتصال أو تحميل ملفات الذكاء الاصطناعي', 'error-text');
-        return;
+        if (!hasCache) {
+            setStatus('❌ خطأ في الاتصال بالخادم', 'error-text');
+        }
     }
-
-    // Step 3: Setup Biometric System
-    await initBiometricSystem();
-
-    // Step 4: Start video only for camera-based face recognition users
-    // For hardware biometric users (fingerprint/face_id), hide camera and don't start video
-    const userBioType = currentUser.biometricType || (currentUser.faceDescriptor ? 'face' : null);
-    if (userBioType === 'face') {
-        startVideo();
-    } else {
-        // Hide camera container for hardware biometric users
-        const cameraContainer = document.querySelector('.camera-container');
-        if (cameraContainer) cameraContainer.classList.add('hidden');
-    }
-    getLocation();
 }
 
 function processAttendanceStatus(data) {
@@ -502,9 +596,7 @@ function processAttendanceStatus(data) {
     }
 }
 
-// Initialize biometric system based on user registered biometric type
 async function initBiometricSystem() {
-    // Determine user's biometric type
     const userBioType = currentUser.biometricType || (currentUser.faceDescriptor ? 'face' : null);
     
     if (!userBioType) {
@@ -513,7 +605,6 @@ async function initBiometricSystem() {
         return;
     }
     
-    // Show biometric type badge
     const bioNames = {
         'face': '📷 كاميرا',
         'fingerprint': '👆 بصمة إصبع',
@@ -521,11 +612,13 @@ async function initBiometricSystem() {
     };
     document.getElementById('bioTypeBadge').innerText = bioNames[userBioType] || '📷 كاميرا';
     
-    // Setup based on registered biometric type
     if (userBioType === 'face') {
-        await initFaceVerification();
+        if (isFaceApiModelsLoaded) {
+            await initFaceVerification();
+        } else {
+            setStatus('🔄 جاري تحميل نظام بصمة الوجه في الخلفية...', 'text-muted');
+        }
     } else {
-        // Hardware biometric (fingerprint or Face ID)
         await initHardwareBiometricVerification(userBioType);
     }
 }
@@ -1267,10 +1360,12 @@ async function handleCheckIn() {
         const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'text/plain' } });
         const result = await res.json();
         if(result.success) {
+            AppCache.clearAll();
             alert(result.message);
             playSuccessSound(); // Play success sound
             vibrateSuccess(); // Vibrate for success
             setAppState('in', payload.checkIn);
+            initSystem();
         } else if (result.duplicateEntry) {
             // Duplicate entry detected (same timestamp) - show warning but no error sound needed
             alert('⚠️ ' + result.message);
@@ -1353,9 +1448,11 @@ async function forceCloseAndRecheckIn(openSessionId, originalPayload) {
         });
         const retryResult = await retryRes.json();
         if (retryResult.success) {
+            AppCache.clearAll();
             alert('✅ تم إغلاق الجلسة القديمة وتسجيل الحضور بنجاح!');
             playSuccessSound(); // Play success sound
             setAppState('in', originalPayload.checkIn);
+            initSystem();
         } else {
             alert('خطأ عند إعادة تسجيل الحضور: ' + retryResult.message);
             playErrorSound(); // Play error sound
@@ -1423,9 +1520,11 @@ async function handleCheckOut() {
         const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'text/plain' } });
         const result = await res.json();
         if(result.success) {
+            AppCache.clearAll();
             alert(result.message);
             playSuccessSound(); // Play success sound
             setAppState('out');
+            initSystem();
         }
         else {
             alert('خطأ: ' + result.message);
@@ -1609,6 +1708,7 @@ async function submitAllowanceRequest() {
         });
         const result = await res.json();
         if (result.success) {
+            AppCache.clearAll();
             alert(result.message);
             closeAllowanceModal();
         } else {
@@ -1677,6 +1777,7 @@ async function submitLeaveRequest() {
         });
         const result = await res.json();
         if (result.success) {
+            AppCache.clearAll();
             alert(result.message);
             closeLeaveModal();
         } else {
@@ -1701,7 +1802,25 @@ async function fetchMyReports() {
     const monthVal = document.getElementById('empReportMonth').value;
     if(!monthVal) return;
 
-    document.getElementById('loader').classList.remove('hidden');
+    const cacheKeyReports = `my_reports_${currentUser.id}_${monthVal}`;
+    const cachedReports = AppCache.get(cacheKeyReports);
+    
+    let hasCache = false;
+    if (cachedReports) {
+        allLeaveRequests = cachedReports.leaveRequests || [];
+        allAllowanceRequests = cachedReports.allowanceRequests || [];
+        approvedAllowanceExtraMap = null;
+        currentUser = {
+            ...currentUser,
+            salary: cachedReports.salary,
+            siteAllowances: cachedReports.siteAllowances || []
+        };
+        renderMyReports(cachedReports.attendanceData, monthVal);
+        hasCache = true;
+    } else {
+        document.getElementById('loader').classList.remove('hidden');
+    }
+
     try {
         // Fetch attendance, employee data, and leave requests in parallel
         const [attRes, empRes, leaveRes, allowRes] = await Promise.all([
@@ -1730,6 +1849,16 @@ async function fetchMyReports() {
                     };
                 }
             }
+
+            // Save to Cache
+            AppCache.set(cacheKeyReports, {
+                attendanceData: attResult.data,
+                leaveRequests: allLeaveRequests,
+                allowanceRequests: allAllowanceRequests,
+                salary: currentUser.salary,
+                siteAllowances: currentUser.siteAllowances || []
+            });
+
             renderMyReports(attResult.data, monthVal);
         }
     } catch(e) { console.error('خطأ في جلب التقارير', e); }
@@ -2268,6 +2397,7 @@ async function saveBiometricUpdate() {
         const result = await res.json();
         
         if (result.success) {
+            AppCache.clearAll();
             // Update local user data
             currentUser.biometricType = bioUpdateData.type;
             currentUser.biometricData = bioUpdateData.data;  // Already JSON string
