@@ -392,6 +392,7 @@ body {
         align-items: center;
         justify-content: flex-start; /* Value on the left */
         border-bottom: 1px solid rgba(255,255,255,0.05);
+        white-space: normal !important;
     }
 
     .table-container td:last-child {

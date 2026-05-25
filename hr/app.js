@@ -2739,7 +2739,7 @@ function renderAllowanceRequestsTable(data) {
             statusText = 'تمت الموافقة ✓';
             statusColor = 'var(--secondary)';
             actions = `
-                <div style="display:flex; align-items:center; gap:8px;">
+                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                     <span style="color:var(--text-muted); font-size:0.8rem;">تمت المعالجة</span>
                     <button class="btn-danger" style="width:auto; padding:2px 8px; font-size:0.75rem; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" onclick="deleteAllowanceRequest('${req.id}', '${req.employeeName}')">حذف 🗑️</button>
                 </div>
@@ -2748,7 +2748,7 @@ function renderAllowanceRequestsTable(data) {
             statusText = 'مرفوض ❌';
             statusColor = 'var(--danger)';
             actions = `
-                <div style="display:flex; align-items:center; gap:8px;">
+                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                     <span style="color:var(--text-muted); font-size:0.8rem;">تمت المعالجة</span>
                     <button class="btn-danger" style="width:auto; padding:2px 8px; font-size:0.75rem; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" onclick="deleteAllowanceRequest('${req.id}', '${req.employeeName}')">حذف 🗑️</button>
                 </div>
@@ -2907,7 +2907,7 @@ function renderLeaveRequestsTable(data) {
             statusText = 'تمت الموافقة';
             statusColor = '#10b981';
             actions = `
-                <div style="display:flex; align-items:center; gap:8px;">
+                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                     <span style="color:var(--text-muted); font-size:0.85rem;">تمت الموافقة بتاريخ ${formatDate(req.approvedAt)}</span>
                     <button class="btn-danger" style="width:auto; padding:2px 8px; font-size:0.75rem; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" onclick="deleteLeaveRequest('${req.id}', '${req.employeeName}')">حذف 🗑️</button>
                 </div>
@@ -2916,7 +2916,7 @@ function renderLeaveRequestsTable(data) {
             statusText = 'مرفوض';
             statusColor = '#ef4444';
             actions = `
-                <div style="display:flex; align-items:center; gap:8px;">
+                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                     <span style="color:var(--text-muted); font-size:0.85rem;">تم الرفض</span>
                     <button class="btn-danger" style="width:auto; padding:2px 8px; font-size:0.75rem; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" onclick="deleteLeaveRequest('${req.id}', '${req.employeeName}')">حذف 🗑️</button>
                 </div>
