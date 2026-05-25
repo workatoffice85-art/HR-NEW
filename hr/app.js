@@ -3183,14 +3183,14 @@ function renderDeviceChangeRequests(requests) {
         }
         
         const createdAt = formatCairoDate(req.created_at) + ' ' + formatCairoTime(req.created_at);
-        const oldDeviceShort = req.old_device_id ? req.old_device_id.substring(0, 20) + '...' : 'لا يوجد';
-        const newDeviceShort = req.new_device_id ? req.new_device_id.substring(0, 20) + '...' : 'غير معروف';
+        const oldDeviceVal = req.old_device_id || 'لا يوجد';
+        const newDeviceVal = req.new_device_id || 'غير معروف';
         
         html.push(`
             <tr>
                 <td data-label="الموظف">${req.user_name || req.user_id}</td>
-                <td data-label="الجهاز القديم" title="${req.old_device_id || ''}">${oldDeviceShort}</td>
-                <td data-label="الجهاز الجديد" title="${req.new_device_id || ''}">${newDeviceShort}</td>
+                <td data-label="الجهاز القديم" title="${req.old_device_id || ''}" style="max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${oldDeviceVal}</td>
+                <td data-label="الجهاز الجديد" title="${req.new_device_id || ''}" style="max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${newDeviceVal}</td>
                 <td data-label="نظام التشغيل">${req.new_os_type || '-'}</td>
                 <td data-label="التاريخ">${createdAt}</td>
                 <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
@@ -3294,12 +3294,12 @@ function renderDevicesTable(devices) {
         const statusText = device.is_active ? 'نشط' : 'غير نشط';
         const statusColor = device.is_active ? 'var(--secondary)' : 'var(--text-muted)';
         const createdAt = formatCairoDate(device.created_at) + ' ' + formatCairoTime(device.created_at);
-        const deviceIdShort = device.device_id ? device.device_id.substring(0, 20) + '...' : '-';
+        const deviceIdVal = device.device_id || '-';
         
         html.push(`
             <tr>
                 <td data-label="الموظف">${device.userName || device.user_id}</td>
-                <td data-label="معرف الجهاز" title="${device.device_id || ''}">${deviceIdShort}</td>
+                <td data-label="معرف الجهاز" title="${device.device_id || ''}" style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${deviceIdVal}</td>
                 <td data-label="الطراز">${device.device_model || '-'}</td>
                 <td data-label="نظام التشغيل">${device.os_type || '-'}</td>
                 <td data-label="تاريخ التسجيل">${createdAt}</td>

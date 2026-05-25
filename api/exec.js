@@ -2998,6 +2998,24 @@ if (action === "updateEmployee") {
             return res.status(200).json({ success: true, message: "تم رفض طلب تغيير الجهاز بنجاح" });
         }
 
+        // --- CLEAR PROCESSED DEVICE REQUESTS (Admin) ---
+        if (action === "clearProcessedDeviceRequests") {
+            const { error } = await supabase
+                .from('device_change_requests')
+                .delete()
+                .in('status', ['approved', 'rejected']);
+            
+            if (error) {
+                console.error("Clear processed device requests error:", error);
+                return res.status(200).json({ success: false, message: "فشل مسح الطلبات المنتهية" });
+            }
+            
+            return res.status(200).json({ 
+                success: true, 
+                message: "تم مسح جميع طلبات تغيير الأجهزة المنتهية بنجاح" 
+            });
+        }
+
         // --- GET ALL DEVICES (Admin) ---
         if (action === "getAllDevices") {
             const { data: devices, error } = await supabase
