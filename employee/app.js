@@ -1169,19 +1169,19 @@ async function getLocation() {
     setStatus('جاري تحديد الموقع...', 'text-muted');
     showGpsLoader();
 
-    // Try high-accuracy fresh position first (most accurate)
+    // Try high-accuracy fresh position first (most accurate, fast fail in 3.5s)
     tryGetPosition(
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }, // Fresh, high accuracy
+        { enableHighAccuracy: true, timeout: 3500, maximumAge: 0 }, 
         (position) => onPositionSuccess(position),
         (error) => {
-            // Fallback: try low-accuracy fresh position
+            // Fallback 1: try low-accuracy fresh position (fast fail in 3s)
             tryGetPosition(
-                { enableHighAccuracy: false, timeout: 8000, maximumAge: 0 },
+                { enableHighAccuracy: false, timeout: 3000, maximumAge: 0 },
                 (position) => onPositionSuccess(position),
                 (error2) => {
-                    // Last resort: accept cached position up to 5 min old
+                    // Fallback 2: accept ultra-recent cached position (up to 10s old, 100% secure)
                     tryGetPosition(
-                        { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 },
+                        { enableHighAccuracy: false, timeout: 2000, maximumAge: 10000 },
                         (position) => onPositionSuccess(position),
                         (error3) => handleGeoError(error3)
                     );
