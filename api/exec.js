@@ -32,13 +32,13 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
  * @param {string} requestType - 'leave' | 'site' | 'allowance' | 'device'
  * @returns {string} - The base64 URL-safe token
  */
-function generateSecureToken(requestId, action, requestType) {
+function generateSecureToken(requestId, action, requestType, approverEmail = '') {
     if (!SUPABASE_SERVICE_ROLE_KEY) {
         console.error("Missing SUPABASE_SERVICE_ROLE_KEY for token generation");
         return '';
     }
     const exp = Date.now() + 48 * 60 * 60 * 1000; // Expires in 48 hours
-    const payload = JSON.stringify({ requestId, action, requestType, exp });
+    const payload = JSON.stringify({ requestId, action, requestType, approverEmail, exp });
     const signature = crypto
         .createHmac('sha256', SUPABASE_SERVICE_ROLE_KEY)
         .update(payload)
@@ -326,13 +326,15 @@ async function sendRequestNotificationEmail(supabase, requestData, host) {
     const protocol = hostHeader.includes('localhost') || hostHeader.includes('127.0.0.1') ? 'http' : 'https';
     const baseUrl = `${protocol}://${hostHeader}`;
     
-    const approveToken = generateSecureToken(requestId, 'approved', type);
-    const rejectToken = generateSecureToken(requestId, 'rejected', type);
-    
-    const approveLink = `${baseUrl}/confirm-action.html?token=${approveToken}`;
-    const rejectLink = `${baseUrl}/confirm-action.html?token=${rejectToken}`;
-    
-    const text = `
+    const results = [];
+    for (const email of settings.emails) {
+        const approveToken = generateSecureToken(requestId, 'approved', type, email);
+        const rejectToken = generateSecureToken(requestId, 'rejected', type, email);
+        
+        const approveLink = `${baseUrl}/confirm-action.html?token=${approveToken}`;
+        const rejectLink = `${baseUrl}/confirm-action.html?token=${rejectToken}`;
+        
+        const text = `
 مرحباً،
 
 تم استلام ${typeLabel} جديد في نظام الموارد البشرية.
@@ -347,9 +349,9 @@ async function sendRequestNotificationEmail(supabase, requestData, host) {
 الرفض: ${rejectLink}
 
 نظام الموارد البشرية
-    `.trim();
-    
-    const html = `
+        `.trim();
+        
+        const html = `
 <!DOCTYPE html>
 <html lang="ar">
 <head>
@@ -527,14 +529,23 @@ async function sendRequestNotificationEmail(supabase, requestData, host) {
     </div>
 </body>
 </html>
-    `.trim();
+        `.trim();
+        
+        const res = await sendEmailNotification({
+            to: [email],
+            subject,
+            text,
+            html
+        });
+        results.push(res);
+    }
     
-    return await sendEmailNotification({
-        to: settings.emails,
-        subject,
-        text,
-        html
-    });
+    const allSuccess = results.every(r => r.success);
+    return { 
+        success: allSuccess, 
+        message: allSuccess ? 'All emails sent' : 'Some emails failed', 
+        details: results 
+    };
 }
 
 // ============================================
@@ -1021,7 +1032,8 @@ if (action === "login") {
                 return res.status(200).json({ success: false, message: "رابط الموافقة غير صالح أو منتهي الصلاحية (صلاحية الرابط 48 ساعة فقط)" });
             }
             
-            const { requestId, action: decision, requestType } = decoded;
+            const { requestId, action: decision, requestType, approverEmail } = decoded;
+            const approvedByVal = approverEmail ? `البريد (${approverEmail})` : 'البريد الإلكتروني (HR)';
             
             // 1. Fetch current status of the request from database to verify "pending" state (Idempotency check)
             let currentStatus = '';
@@ -1101,7 +1113,7 @@ if (action === "login") {
                     const { error } = await supabase.from('leaveRequests').update({
                         status: 'approved',
                         approvedAt: new Date().toISOString(),
-                        approvedBy: 'البريد الإلكتروني (HR)'
+                        approvedBy: approvedByVal
                     }).eq('id', requestId);
                     if (error) throw error;
                     
@@ -1110,7 +1122,7 @@ if (action === "login") {
                         id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
                         userId: requestDetails.employeeId,
                         title: 'تمت الموافقة على إجازتك',
-                        message: `تمت الموافقة على طلب إجازتك عبر البريد الإلكتروني`,
+                        message: `تمت الموافقة على طلب إجازتك عبر البريد` + (approverEmail ? ` (${approverEmail})` : ' الإلكتروني'),
                         type: 'leave_approved',
                         relatedId: requestId,
                         isRead: false,
@@ -1120,7 +1132,7 @@ if (action === "login") {
                     // Reject leave request
                     const { error } = await supabase.from('leaveRequests').update({
                         status: 'rejected',
-                        rejectionReason: 'تم الرفض عبر البريد الإلكتروني'
+                        rejectionReason: approverEmail ? `تم الرفض عبر البريد (${approverEmail})` : 'تم الرفض عبر البريد الإلكتروني'
                     }).eq('id', requestId);
                     if (error) throw error;
                     
@@ -1129,7 +1141,7 @@ if (action === "login") {
                         id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
                         userId: requestDetails.employeeId,
                         title: 'تم رفض طلب إجازتك',
-                        message: `تم رفض طلب إجازتك عبر البريد الإلكتروني`,
+                        message: `تم رفض طلب إجازتك عبر البريد` + (approverEmail ? ` (${approverEmail})` : ' الإلكتروني'),
                         type: 'leave_rejected',
                         relatedId: requestId,
                         isRead: false,
@@ -1172,7 +1184,7 @@ if (action === "login") {
                         id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
                         userId: reqData.employeeId,
                         title: 'تمت الموافقة على موقعك',
-                        message: `تمت الموافقة على طلب تسجيل الموقع: ${reqData.suggestedName} بشكل دائم عبر البريد الإلكتروني`,
+                        message: `تمت الموافقة على طلب تسجيل الموقع: ${reqData.suggestedName} بشكل دائم عبر البريد` + (approverEmail ? ` (${approverEmail})` : ' الإلكتروني'),
                         type: 'site_approved',
                         relatedId: requestId,
                         isRead: false,
@@ -1187,7 +1199,7 @@ if (action === "login") {
                         id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
                         userId: reqData.employeeId,
                         title: 'تم رفض طلب موقعك',
-                        message: `تم رفض طلب تسجيل الموقع: ${reqData.suggestedName} عبر البريد الإلكتروني`,
+                        message: `تم رفض طلب تسجيل الموقع: ${reqData.suggestedName} عبر البريد` + (approverEmail ? ` (${approverEmail})` : ' الإلكتروني'),
                         type: 'site_rejected',
                         relatedId: requestId,
                         isRead: false,
@@ -1225,7 +1237,7 @@ if (action === "login") {
                     .from('allowanceRequests')
                     .update({ 
                         status: decision, 
-                        adminNote: 'تمت المعالجة عبر البريد الإلكتروني' 
+                        adminNote: approverEmail ? `تمت المعالجة عبر البريد (${approverEmail})` : 'تمت المعالجة عبر البريد الإلكتروني' 
                     })
                     .eq('id', requestId);
                 
@@ -1237,17 +1249,19 @@ if (action === "login") {
                     id: logId,
                     requestId: requestId,
                     adminId: 'email',
-                    adminName: 'Outlook Email',
+                    adminName: approverEmail ? `البريد (${approverEmail})` : 'Outlook Email',
                     action: decision,
-                    details: decision === 'approved' ? 'تمت الموافقة على الطلب عبر البريد الإلكتروني' : 'تم رفض الطلب عبر البريد الإلكتروني',
+                    details: decision === 'approved' 
+                        ? (approverEmail ? `تمت الموافقة على الطلب عبر البريد (${approverEmail})` : 'تمت الموافقة على الطلب عبر البريد الإلكتروني')
+                        : (approverEmail ? `تم رفض الطلب عبر البريد (${approverEmail})` : 'تم رفض الطلب عبر البريد الإلكتروني'),
                     timestamp: new Date().toISOString()
                 }]);
                 
                 // Notify employee
                 const notifTitle = decision === 'approved' ? 'تمت الموافقة على طلب زيادة البدلات' : 'تم رفض طلب زيادة البدلات';
                 const notifMessage = decision === 'approved' 
-                    ? `تمت الموافقة على طلب زيادة البدلات بمبلغ ${reqData.amount} ج.م عبر البريد الإلكتروني`
-                    : `تم رفض طلب زيادة البدلات بمبلغ ${reqData.amount} ج.م عبر البريد الإلكتروني`;
+                    ? `تمت الموافقة على طلب زيادة البدلات بمبلغ ${reqData.amount} ج.م عبر البريد` + (approverEmail ? ` (${approverEmail})` : ' الإلكتروني')
+                    : `تم رفض طلب زيادة البدلات بمبلغ ${reqData.amount} ج.م عبر البريد` + (approverEmail ? ` (${approverEmail})` : ' الإلكتروني');
                 
                 await supabase.from('notifications').insert([{
                     id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
@@ -1303,7 +1317,7 @@ if (action === "login") {
                         .update({
                             status: 'approved',
                             processed_at: new Date().toISOString(),
-                            processed_by: 'البريد الإلكتروني (HR)'
+                            processed_by: approvedByVal
                         })
                         .eq('id', requestId);
                     
@@ -1313,9 +1327,9 @@ if (action === "login") {
                         .from('device_change_requests')
                         .update({
                             status: 'rejected',
-                            admin_note: 'تم الرفض عبر البريد الإلكتروني',
+                            admin_note: approverEmail ? `تم الرفض عبر البريد (${approverEmail})` : 'تم الرفض عبر البريد الإلكتروني',
                             processed_at: new Date().toISOString(),
-                            processed_by: 'البريد الإلكتروني (HR)'
+                            processed_by: approvedByVal
                         })
                         .eq('id', requestId);
                     
@@ -1335,11 +1349,11 @@ if (action === "login") {
                 id: requestId,
                 requestId: requestId,
                 status: decision,
-                approvedBy: 'Outlook Email',
-                rejectionReason: 'تم الرفض عبر البريد الإلكتروني',
+                approvedBy: approverEmail ? `البريد (${approverEmail})` : 'Outlook Email',
+                rejectionReason: approverEmail ? `تم الرفض عبر البريد (${approverEmail})` : 'تم الرفض عبر البريد الإلكتروني',
                 adminId: 'email',
-                adminName: 'Outlook Email',
-                adminNote: 'تمت المعالجة عبر البريد الإلكتروني'
+                adminName: approverEmail ? `البريد (${approverEmail})` : 'Outlook Email',
+                adminNote: approverEmail ? `تمت المعالجة عبر البريد (${approverEmail})` : 'تمت المعالجة عبر البريد الإلكتروني'
             };
             syncToGoogleSheet(syncPayload);
             
