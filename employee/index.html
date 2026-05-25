@@ -771,8 +771,13 @@
                     <input type="date" id="leaveDate">
                 </div>
                 <div class="input-group">
-                    <label>سبب الإجازة</label>
-                    <textarea id="leaveReason" placeholder="اكتب سبب طلب الإجازة..." rows="3"></textarea>
+                    <label>نوع الإجازة</label>
+                    <select id="leaveReason">
+                        <option value="" disabled selected>اختر نوع الإجازة...</option>
+                        <option value="إجازة مرضية">إجازة مرضية</option>
+                        <option value="إجازة اعتيادي">إجازة اعتيادي</option>
+                        <option value="إجازة طارئة">إجازة طارئة</option>
+                    </select>
                 </div>
                 <div style="display:flex; gap:10px;">
                     <button class="btn-primary" style="flex:1; background: linear-gradient(135deg, #f59e0b, #d97706) !important; color:#fff !important; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.35) !important;" onclick="submitLeaveRequest()">إرسال الطلب</button>

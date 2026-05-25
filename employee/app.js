@@ -1758,7 +1758,7 @@ async function submitLeaveRequest() {
     const reason = document.getElementById('leaveReason').value.trim();
 
     if (!leaveDate) return alert("يجب اختيار تاريخ الإجازة");
-    if (!reason) return alert("يجب كتابة سبب الإجازة");
+    if (!reason) return alert("يجب اختيار نوع الإجازة");
 
     const payload = {
         action: 'addLeaveRequest',
