@@ -1678,7 +1678,7 @@ function exportEmployeeDetailedToExcel() {
     const finalData = [
         ['التقرير التفصيلي للموظف - نظام HR'],
         [`الموظف: ${employeeName} | الفترة: ${startStr} إلى ${endStr}`],
-        ['ملخص:', `حضور: ${present}`, `غياب: ${absent}`, `تأخير: ${late}`, `إضافي: ${overtime}`, `بدل إضافي: ${overtimePay} ج.م`, `بدل انتقال: ${transport} ج.م`],
+        [`ملخص التقرير:  أيام الحضور: ${present}  |  أيام الغياب: ${absent}  |  أيام العمل الإضافي: ${overtime}  |  مبلغ العمل الإضافي: ${overtimePay} ج.م  |  أيام التأخير: ${late}  |  إجمالي البدلات: ${transport} ج.م`, '', '', '', '', ''],
         [''],
         headers,
         ...data.map(row => [
