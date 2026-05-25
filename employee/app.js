@@ -1128,6 +1128,20 @@ function startVideo() {
     });
 }
 
+function showGpsLoader() {
+    const loader = document.getElementById('gpsLoaderOverlay');
+    if (loader) {
+        loader.classList.remove('hidden');
+    }
+}
+
+function hideGpsLoader() {
+    const loader = document.getElementById('gpsLoaderOverlay');
+    if (loader) {
+        loader.classList.add('hidden');
+    }
+}
+
 async function getLocation() {
     if (!navigator.geolocation) {
         setStatus('المتصفح لا يدعم تحديد الموقع', 'error-text');
@@ -1153,6 +1167,7 @@ async function getLocation() {
     }
 
     setStatus('جاري تحديد الموقع...', 'text-muted');
+    showGpsLoader();
 
     // Try high-accuracy fresh position first (most accurate)
     tryGetPosition(
@@ -1181,6 +1196,7 @@ function tryGetPosition(options, onSuccess, onError) {
 }
 
 function onPositionSuccess(position) {
+    hideGpsLoader();
     lastLocation = { lat: position.coords.latitude, lng: position.coords.longitude };
     verifyLocation();
     // Don't overwrite face verification status - append to it or keep it
@@ -1214,6 +1230,7 @@ function startWatchingPosition() {
 }
 
 function handleGeoError(error) {
+    hideGpsLoader();
     let msg = 'خطأ في تحديد الموقع';
     switch(error.code) {
         case error.PERMISSION_DENIED:
