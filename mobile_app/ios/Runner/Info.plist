@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>بوابة الموظف</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>employee_mobile</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(FLUTTER_BUILD_NAME)</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<false/>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+
+	<!-- 📸 Camera & Microphone Access (Required for Face Recognition) -->
+	<key>NSCameraUsageDescription</key>
+	<string>نحتاج الوصول إلى الكاميرا لالتقاط بصمة الوجه والمطابقة الحيوية لتسجيل الحضور والانصراف.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>نحتاج للوصول للميكروفون لأغراض تشغيل الفيديو المصاحب للتحقق الثنائي.</string>
+
+	<!-- 📍 Background Geolocation & Geofencing permissions -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>نحتاج للوصول إلى موقعك الجغرافي للتحقق من وجودك داخل حدود مقر العمل أثناء تسجيل الحضور.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>نحتاج لتفعيل الموقع دائماً لنتمكن من تذكيرك بتسجيل الانصراف فور خروجك من الشركة وتنبيهك عند الوصول حتى لو كان التطبيق مغلقاً.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>نحتاج لتفعيل الموقع دائماً في الخلفية لنتمكن من إرسال إشعارات التذكير الذكية بالحضور والانصراف تلقائياً عند الاقتراب أو الابتعاد عن مقرات العمل.</string>
+
+	<!-- 🔄 iOS Background Task and Location Updates -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+		<string>fetch</string>
+		<string>processing</string>
+	</array>
+	
+	<!-- Required for Workmanager background sync -->
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.hrportal.geofenceCheckTask</string>
+	</array>
+</dict>
+</plist>

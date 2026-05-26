@@ -499,6 +499,9 @@ async function initSystem() {
         }
         getLocation();
         hasCache = true;
+        
+        // Sync geofences with mobile app if running in WebView
+        syncGeofencesWithMobileApp();
     }
 
     // Step 1: Start loading Face-API models asynchronously in background if user uses camera face
@@ -569,6 +572,9 @@ async function initSystem() {
                 } else {
                     updateActionButtonsState();
                 }
+
+                // Sync geofences with mobile app if running in WebView
+                syncGeofencesWithMobileApp();
             } else {
                 console.error("Data load failed", dataResult);
                 if (!hasCache) {
@@ -817,6 +823,15 @@ function setAppState(state, startTime) {
         stopWorkTimer();
     }
     updateActionButtonsState();
+
+    // Notify mobile app of state change for geofencing reminders
+    try {
+        if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+            window.flutter_inappwebview.callHandler('updateAttendanceState', state);
+        }
+    } catch (e) {
+        console.error("Error sending state to mobile app:", e);
+    }
 }
 
 function updateActionButtonsState() {
@@ -2616,6 +2631,31 @@ window.addEventListener('beforeunload', () => {
         bioUpdateVideoStream.getTracks().forEach(track => track.stop());
     }
 });
+
+// ------ MOBILE GEOFENCING JS BRIDGE ------ //
+function syncGeofencesWithMobileApp() {
+    try {
+        if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+            console.log("📱 Syncing geofences with Flutter app...", sitesData);
+            
+            // Format sitesData for Flutter consumption
+            const mobileSites = sitesData.map(site => ({
+                id: site.id || site.name,
+                name: site.name,
+                latitude: parseFloat(site.latitude),
+                longitude: parseFloat(site.longitude),
+                radius: parseFloat(site.radius || 100), // Default radius of 100 meters
+                employeeId: currentUser ? currentUser.id : ''
+            }));
+            
+            window.flutter_inappwebview.callHandler('syncGeofences', JSON.stringify(mobileSites));
+        } else {
+            console.log("💻 Running in standard browser, mobile geofence bridge skipped.");
+        }
+    } catch (e) {
+        console.error("Error syncing geofences with mobile app:", e);
+    }
+}
 
 // ------ NOTIFICATIONS SYSTEM ------ //
 let notificationsData = [];
