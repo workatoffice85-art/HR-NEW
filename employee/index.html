@@ -148,8 +148,8 @@
             height: 50px !important; /* Large touch targets */
             font-size: 16px !important; /* Critical: Prevent automatic iOS zoom */
             border-radius: 14px !important;
-            background: rgba(15, 23, 42, 0.45) !important;
-            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            background: var(--input-bg) !important;
+            border: 1px solid var(--card-border) !important;
             color: var(--text-main) !important;
             padding: 12px 16px !important;
             box-sizing: border-box !important;
@@ -168,7 +168,7 @@
         .input-group textarea:focus {
             border-color: var(--primary) !important;
             box-shadow: 0 0 0 3px var(--primary-glow) !important;
-            background: rgba(15, 23, 42, 0.6) !important;
+            background: var(--input-bg) !important;
         }
 
         /* Buttons Styling */
@@ -578,6 +578,47 @@
         @keyframes loadingDot {
             0%, 80%, 100% { transform: scale(0); }
             40% { transform: scale(1.0); }
+        }
+
+        /* Ambient and Color overrides for Light Mode */
+        @media (prefers-color-scheme: light) {
+            :root {
+                --text-main: #0f172a;
+                --text-muted: #475569;
+                --card-bg: rgba(255, 255, 255, 0.75);
+                --card-border: rgba(15, 23, 42, 0.08);
+                --glass-glow: rgba(15, 23, 42, 0.02);
+            }
+            body {
+                background: 
+                    url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.015'/%3E%3C/svg%3E"),
+                    #f8fafc !important;
+            }
+            .bg-glow {
+                opacity: 0.05 !important;
+            }
+            .faceid-ring {
+                box-shadow: 
+                    0 0 0 6px rgba(0, 0, 0, 0.05),
+                    0 0 30px rgba(99, 102, 241, 0.15),
+                    inset 0 0 20px rgba(99, 102, 241, 0.05) !important;
+            }
+            .faceid-ring::before {
+                box-shadow: 0 0 12px rgba(122, 193, 66, 0.8) !important;
+            }
+            .input-group input, 
+            .input-group select, 
+            .input-group textarea {
+                border: 1px solid rgba(15, 23, 42, 0.12) !important;
+                color: #0f172a !important;
+            }
+            .input-group input:focus, 
+            .input-group select:focus, 
+            .input-group textarea:focus {
+                border-color: var(--primary) !important;
+                box-shadow: 0 0 0 3px var(--primary-glow) !important;
+                background: #ffffff !important;
+            }
         }
     </style>
 

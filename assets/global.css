@@ -11,6 +11,30 @@
   --danger: #EF4444;
   --warning: #EAB308;
   --font-family: 'Tajawal', sans-serif;
+
+  /* Theme-aware variables */
+  --body-gradient-end: #1c2630;
+  --button-bg: rgba(255, 255, 255, 0.05);
+  --button-border: rgba(255, 255, 255, 0.1);
+  --button-text: #f8fafc;
+  --input-bg: rgba(15, 23, 42, 0.6);
+  --loader-border: rgba(255, 255, 255, 0.1);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg-color: #f8fafc;
+    --text-main: #0f172a;
+    --text-muted: #475569;
+    --card-bg: rgba(255, 255, 255, 0.75);
+    --card-border: rgba(15, 23, 42, 0.08);
+    --body-gradient-end: #cbd5e1;
+    --button-bg: rgba(15, 23, 42, 0.04);
+    --button-border: rgba(15, 23, 42, 0.08);
+    --button-text: #0f172a;
+    --input-bg: rgba(255, 255, 255, 0.9);
+    --loader-border: rgba(15, 23, 42, 0.1);
+  }
 }
 
 
@@ -23,7 +47,7 @@
 body {
   background: 
     url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.015'/%3E%3C/svg%3E"),
-    linear-gradient(135deg, var(--bg-color) 0%, #1c2630 100%);
+    linear-gradient(135deg, var(--bg-color) 0%, var(--body-gradient-end) 100%);
   color: var(--text-main);
   font-family: var(--font-family);
   min-height: 100vh;
@@ -102,9 +126,9 @@ body {
   padding: 30px 20px;
   border-radius: 16px;
   text-decoration: none;
-  color: var(--text-main);
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.1);
+  color: var(--button-text);
+  background: var(--button-bg);
+  border: 1px solid var(--button-border);
   transition: all 0.3s ease;
   position: relative;
   overflow: hidden;
@@ -189,7 +213,7 @@ body {
     width: 100%;
     padding: 12px 16px;
     border-radius: 8px;
-    background: rgba(15, 23, 42, 0.6);
+    background: var(--input-bg);
     border: 1px solid var(--card-border);
     color: var(--text-main);
     font-family: inherit;
@@ -234,7 +258,7 @@ body {
 
 /* Loader Styles */
 .loader {
-    border: 4px solid rgba(255,255,255,0.1);
+    border: 4px solid var(--loader-border);
     border-top: 4px solid var(--secondary);
     border-radius: 50%;
     width: 40px;
@@ -313,7 +337,7 @@ body {
 .table-container {
     width: 100%;
     overflow-x: auto !important;
-    background: rgba(30, 41, 59, 0.4);
+    background: var(--input-bg);
     border-radius: 16px;
     border: 1px solid var(--card-border);
     margin-top: 15px;
@@ -338,7 +362,7 @@ body {
     height: 6px;
 }
 .table-container::-webkit-scrollbar-track {
-    background: rgba(255,255,255,0.05);
+    background: var(--button-bg);
 }
 .table-container::-webkit-scrollbar-thumb {
     background: var(--primary);
@@ -392,7 +416,7 @@ body {
         display: flex;
         align-items: center;
         justify-content: flex-start; /* Value on the left */
-        border-bottom: 1px solid rgba(255,255,255,0.05);
+        border-bottom: 1px solid var(--card-border);
         white-space: normal !important;
     }
 
