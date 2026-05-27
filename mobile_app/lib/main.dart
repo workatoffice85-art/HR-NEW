@@ -69,7 +69,7 @@ class HRPortalApp extends StatelessWidget {
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF6366F1),
+          seedColor: const Color(0xFF5EAD32),
           brightness: Brightness.dark,
         ),
       ),
@@ -119,7 +119,7 @@ class _PortalWebViewPageState extends State<PortalWebViewPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF090D16),
+      backgroundColor: const Color(0xFF0D1218),
       body: SafeArea(
         child: Stack(
           children: [
@@ -170,13 +170,13 @@ class _PortalWebViewPageState extends State<PortalWebViewPage> {
             // 2. Premium visual loading state matching web portal dark design
             if (isLoading)
               Container(
-                color: const Color(0xFF090D16),
+                color: const Color(0xFF0D1218),
                 child: const Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6366F1)),
+                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF5EAD32)),
                       ),
                       SizedBox(height: 20),
                       Text(
@@ -217,7 +217,7 @@ class _PortalWebViewPageState extends State<PortalWebViewPage> {
                       const SizedBox(height: 24),
                       ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF6366F1),
+                          backgroundColor: const Color(0xFF5EAD32),
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

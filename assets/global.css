@@ -1,17 +1,18 @@
 :root {
-  --primary: #4F46E5;
-  --primary-hover: #4338CA;
-  --secondary: #10B981;
-  --secondary-hover: #059669;
-  --bg-color: #0f172a;
+  --primary: #5EAD32;
+  --primary-hover: #4C9028;
+  --secondary: #3A4750;
+  --secondary-hover: #2E3840;
+  --bg-color: #0d1218;
   --text-main: #f8fafc;
   --text-muted: #cbd5e1;
-  --card-bg: rgba(30, 41, 59, 0.7);
-  --card-border: rgba(255, 255, 255, 0.1);
+  --card-bg: rgba(22, 28, 45, 0.7);
+  --card-border: rgba(255, 255, 255, 0.08);
   --danger: #EF4444;
   --warning: #EAB308;
   --font-family: 'Tajawal', sans-serif;
 }
+
 
 * {
   box-sizing: border-box;
@@ -22,7 +23,7 @@
 body {
   background: 
     url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.015'/%3E%3C/svg%3E"),
-    linear-gradient(135deg, var(--bg-color) 0%, #172554 100%);
+    linear-gradient(135deg, var(--bg-color) 0%, #1c2630 100%);
   color: var(--text-main);
   font-family: var(--font-family);
   min-height: 100vh;
@@ -67,12 +68,12 @@ body {
 }
 
 .header h1 {
-  font-size: 2rem;
+  font-size: 2.2rem;
   font-weight: 800;
-    background: linear-gradient(to right, #60A5FA, #34D399);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
+  background: linear-gradient(to right, #8ce65e, #5EAD32);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
   margin-bottom: 10px;
 }
 
