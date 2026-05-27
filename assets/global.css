@@ -246,6 +246,51 @@ body {
     transform: translateY(-2px);
 }
 
+.btn-secondary {
+    background: linear-gradient(135deg, var(--secondary), var(--secondary-hover));
+    color: #ffffff;
+    border: 1px solid var(--card-border);
+    padding: 14px 24px;
+    border-radius: 8px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    cursor: pointer;
+    width: 100%;
+    transition: all 0.3s ease;
+    font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-secondary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.btn-outline {
+    background: transparent;
+    color: var(--text-main);
+    border: 1px solid var(--card-border);
+    padding: 14px 24px;
+    border-radius: 8px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    cursor: pointer;
+    width: 100%;
+    transition: all 0.3s ease;
+    font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-outline:hover {
+    background: var(--button-bg);
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
 .btn-danger {
     background: var(--danger);
     color: var(--text-main);

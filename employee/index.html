@@ -196,6 +196,57 @@
             opacity: 0.9 !important;
         }
 
+        .btn-secondary {
+            background: linear-gradient(135deg, var(--secondary), var(--secondary-hover)) !important;
+            color: var(--text-main) !important;
+            border: 1px solid var(--card-border) !important;
+            height: 50px !important;
+            border-radius: 14px !important;
+            font-size: 1.05rem !important;
+            font-weight: 700 !important;
+            cursor: pointer !important;
+            width: 100% !important;
+            transition: all 0.3s ease !important;
+            box-shadow: 0 4px 15px var(--secondary-glow) !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            font-family: var(--font-family) !important;
+            outline: none !important;
+        }
+
+        .btn-secondary:active {
+            transform: scale(0.98) !important;
+        }
+        
+        .btn-outline {
+            background: transparent !important;
+            color: var(--text-main) !important;
+            border: 1px solid var(--card-border) !important;
+            height: 50px !important;
+            border-radius: 14px !important;
+            font-size: 1.05rem !important;
+            font-weight: 700 !important;
+            cursor: pointer !important;
+            width: 100% !important;
+            transition: all 0.3s ease !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            font-family: var(--font-family) !important;
+            outline: none !important;
+        }
+
+        .btn-outline:hover {
+            background: var(--button-bg) !important;
+            border-color: var(--primary) !important;
+            color: var(--primary) !important;
+        }
+
+        .btn-outline:active {
+            transform: scale(0.98) !important;
+        }
+
         .btn-danger {
             background: linear-gradient(135deg, var(--danger), var(--danger-hover)) !important;
             color: var(--text-main) !important;
@@ -782,34 +833,24 @@
                 </button>
             </div>
 
-            <!-- Request Site Button (Hidden by default) -->
-            <button id="btnAllowanceRequest" class="btn-primary"
-                style="margin-top:10px; background: linear-gradient(135deg, #8b5cf6, #7c3aed) !important; box-shadow: 0 4px 15px rgba(139, 92, 246, 0.35) !important;" onclick="openAllowanceModal()">
+            <button id="btnAllowanceRequest" class="btn-secondary" style="margin-top:10px;" onclick="openAllowanceModal()">
                 💰 طلب زيادة بدلات
             </button>
 
-            <button id="btnLeaveRequest" class="btn-primary"
-                style="margin-top:10px; background: linear-gradient(135deg, #f59e0b, #d97706) !important; color:#fff !important; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.35) !important;" onclick="openLeaveModal()">
+            <button id="btnLeaveRequest" class="btn-secondary" style="margin-top:10px;" onclick="openLeaveModal()">
                 📅 طلب إجازة
             </button>
 
-            <!-- Update Biometric Button (Always visible) -->
-            <button id="btnUpdateBiometric" class="btn-primary"
-                style="margin-top:10px;" onclick="openBiometricUpdateModal()">
+            <button id="btnUpdateBiometric" class="btn-outline" style="margin-top:10px;" onclick="openBiometricUpdateModal()">
                 🔐 تحديث/تغيير بصمة الإصبع
             </button>
 
-            <!-- Request Site Button (Hidden by default, shown when outside range) -->
-            <button id="btnRequestSite" class="btn-primary hidden"
-                style="margin-top:10px; background: linear-gradient(135deg, #f59e0b, #d97706) !important; color:#fff !important; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.35) !important;" onclick="openRequestModal()">
+            <button id="btnRequestSite" class="btn-secondary hidden" style="margin-top:10px;" onclick="openRequestModal()">
                 📍 طلب تسجيل هذا الموقع كفرع عمل
             </button>
 
-            <button class="btn-primary" style="margin-top:20px;"
-                onclick="showMyReports()">تقارير الحضور الخاصة بي</button>
-            <button class="btn-primary"
-                style="margin-top:10px; background:transparent !important; border:1px solid rgba(255,255,255,0.2) !important; box-shadow: none !important;"
-                onclick="logout()">تسجيل خروج</button>
+            <button class="btn-secondary" style="margin-top:20px;" onclick="showMyReports()">تقارير الحضور الخاصة بي</button>
+            <button class="btn-outline" style="margin-top:10px;" onclick="logout()">تسجيل خروج</button>
         </div>
 
         <!-- Allowance Modal -->
@@ -836,8 +877,8 @@
                     <textarea id="allowanceNote" placeholder="سبب الطلب..." rows="3"></textarea>
                 </div>
                 <div style="display:flex; gap:10px;">
-                    <button id="btnSubmitAllowanceRequest" class="btn-primary" style="flex:1; background: linear-gradient(135deg, #8b5cf6, #7c3aed) !important; box-shadow: 0 4px 15px rgba(139, 92, 246, 0.35) !important;" onclick="submitAllowanceRequest()">إرسال الطلب</button>
-                    <button class="btn-danger" style="background:transparent !important; border:1px solid var(--danger) !important; box-shadow:none !important;"
+                    <button id="btnSubmitAllowanceRequest" class="btn-primary" style="flex:1;" onclick="submitAllowanceRequest()">إرسال الطلب</button>
+                    <button class="btn-outline" style="border-color:var(--danger) !important; color:var(--danger) !important;"
                         onclick="closeAllowanceModal()">إلغاء</button>
                 </div>
             </div>
@@ -869,8 +910,8 @@
                     </select>
                 </div>
                 <div style="display:flex; gap:10px;">
-                    <button id="btnSubmitLeaveRequest" class="btn-primary" style="flex:1; background: linear-gradient(135deg, #f59e0b, #d97706) !important; color:#fff !important; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.35) !important;" onclick="submitLeaveRequest()">إرسال الطلب</button>
-                    <button class="btn-danger" style="background:transparent !important; border:1px solid var(--danger) !important; box-shadow:none !important;"
+                    <button id="btnSubmitLeaveRequest" class="btn-primary" style="flex:1;" onclick="submitLeaveRequest()">إرسال الطلب</button>
+                    <button class="btn-outline" style="border-color:var(--danger) !important; color:var(--danger) !important;"
                         onclick="closeLeaveModal()">إلغاء</button>
                 </div>
             </div>
@@ -917,7 +958,7 @@
 
                 <div style="display:flex; gap:10px; margin-top: 15px;">
                     <button class="btn-primary" style="flex:1;" onclick="saveBiometricUpdate()">💾 حفظ البصمة الجديدة</button>
-                    <button class="btn-danger" style="background:transparent !important; border:1px solid var(--danger) !important; box-shadow:none !important;"
+                    <button class="btn-outline" style="border-color:var(--danger) !important; color:var(--danger) !important;"
                         onclick="closeBiometricUpdateModal()">إلغاء</button>
                 </div>
             </div>
@@ -943,7 +984,7 @@
                 </div>
                 <div style="display:flex; gap:10px;">
                     <button id="btnSubmitSiteRequest" class="btn-primary" style="flex: 1;" onclick="submitSiteRequest()">إرسال الطلب</button>
-                    <button class="btn-danger" style="background:transparent !important; border:1px solid var(--danger) !important; box-shadow:none !important;"
+                    <button class="btn-outline" style="border-color:var(--danger) !important; color:var(--danger) !important;"
                         onclick="closeRequestModal()">إلغاء</button>
                 </div>
             </div>
@@ -958,7 +999,7 @@
                 <input type="month" id="empReportMonth"
                     style="padding: 8px 12px; border-radius: 12px; background: rgba(0,0,0,0.3); color: #fff; border: 1px solid var(--card-border); font-size: 0.95rem; font-family: var(--font-family); outline: none; flex: 1; height: 42px;"
                     onchange="fetchMyReports()">
-                <button class="btn-primary" style="width: auto; padding: 0 16px; height: 42px !important; font-size: 0.9rem !important; box-shadow: none !important;"
+                <button class="btn-secondary" style="width: auto; padding: 0 16px; height: 42px !important; font-size: 0.9rem !important;"
                     onclick="showSection('dashboardSection')">عودة للرئيسية</button>
             </div>
 
