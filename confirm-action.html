@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>تأكيد الإجراء | ديمو كومب</title>
+    <title>تأكيد الإجراء | نظام الموارد البشرية</title>
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -107,10 +107,10 @@
         }
 
         .glass-card {
-            background: var(--card-bg);
+            background: rgba(17, 24, 39, 0.75);
             backdrop-filter: blur(24px) saturate(180%);
             -webkit-backdrop-filter: blur(24px) saturate(180%);
-            border: 1px solid var(--card-border);
+            border: 1px solid rgba(255, 255, 255, 0.08);
             box-shadow: 0 30px 60px rgba(0, 0, 0, 0.6), 
                         inset 0 1px 0 rgba(255, 255, 255, 0.1);
             border-radius: 28px;
@@ -189,8 +189,8 @@
 
         /* Request details block */
         .details-box {
-            background: var(--input-bg);
-            border: 1px solid var(--card-border);
+            background: rgba(15, 23, 42, 0.45);
+            border: 1px solid rgba(255, 255, 255, 0.05);
             border-radius: 20px;
             padding: 24px;
             text-align: right;
@@ -436,37 +436,6 @@
         .countdown-num {
             color: var(--action-color);
             font-weight: 700;
-        }
-
-        /* Light Mode dynamic overrides */
-        @media (prefers-color-scheme: light) {
-            h1.page-title {
-                color: #0f172a !important;
-            }
-            p.page-subtitle {
-                color: #475569 !important;
-            }
-            .detail-label {
-                color: #475569 !important;
-            }
-            .detail-value {
-                color: #0f172a !important;
-            }
-            .notes-area {
-                color: #0f172a !important;
-                background: rgba(15, 23, 42, 0.03) !important;
-            }
-            .decision-banner {
-                background: rgba(15, 23, 42, 0.02) !important;
-                color: #0f172a !important;
-            }
-            .icon-badge {
-                background: #ffffff !important;
-                box-shadow: 0 10px 25px rgba(15, 23, 42, 0.03) !important;
-            }
-            .bg-glow-blob {
-                opacity: 0.12 !important;
-            }
         }
     </style>
 </head>
