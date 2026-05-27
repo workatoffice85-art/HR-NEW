@@ -1,6 +1,6 @@
 :root {
-  --primary: #5EAD32;
-  --primary-hover: #4C9028;
+  --primary: #7ac142;
+  --primary-hover: #63a131;
   --secondary: #3A4750;
   --secondary-hover: #2E3840;
   --bg-color: #0d1218;
@@ -70,7 +70,7 @@ body {
 .header h1 {
   font-size: 2.2rem;
   font-weight: 800;
-  background: linear-gradient(to right, #8ce65e, #5EAD32);
+  background: linear-gradient(to right, #a2d47b, #7ac142);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
