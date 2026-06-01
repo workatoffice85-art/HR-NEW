@@ -1088,6 +1088,9 @@ async function generateEmployeeDetailedReport() {
                 } else if (req.status === 'rejected') {
                     statusText = 'مرفوض';
                     statusColor = '#ef4444';
+                    if (req.rejectionReason) {
+                        statusText += `<br><small style="color:var(--danger); font-weight:normal; font-size:0.75rem;">(${req.rejectionReason})</small>`;
+                    }
                 }
 
                 leavesHtml.push(`
@@ -1096,7 +1099,10 @@ async function generateEmployeeDetailedReport() {
                         <td>${req.reason}</td>
                         <td>${formatDate(req.createdAt)}</td>
                         <td><span style="color:${statusColor}; font-weight:bold;">${statusText}</span></td>
-                        <td>${req.approvedAt ? formatDate(req.approvedAt) : '-'}</td>
+                        <td>
+                            ${req.approvedAt ? formatDate(req.approvedAt) : '-'}
+                            ${req.approvedBy ? `<br><small style="color:var(--primary); font-weight:normal; font-size:0.75rem;">(${req.approvedBy})</small>` : ''}
+                        </td>
                     </tr>
                 `);
             });
@@ -2998,18 +3004,20 @@ function renderLeaveRequestsTable(data) {
         } else if (req.status === 'approved') {
             statusText = 'تمت الموافقة';
             statusColor = '#10b981';
+            const approvedByText = req.approvedBy ? `<br><small style="color:var(--primary); font-weight:normal; font-size:0.75rem;">بواسطة: ${req.approvedBy}</small>` : '';
             actions = `
                 <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                    <span style="color:var(--text-muted); font-size:0.85rem;">تمت الموافقة بتاريخ ${formatDate(req.approvedAt)}</span>
+                    <span style="color:var(--text-muted); font-size:0.85rem;">تمت الموافقة بتاريخ ${formatDate(req.approvedAt)}${approvedByText}</span>
                     <button class="btn-danger" style="width:auto; padding:2px 8px; font-size:0.75rem; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" onclick="deleteLeaveRequest('${req.id}', '${req.employeeName}')">حذف 🗑️</button>
                 </div>
             `;
         } else if (req.status === 'rejected') {
             statusText = 'مرفوض';
             statusColor = '#ef4444';
+            const rejectedByText = req.rejectionReason ? `<br><small style="color:var(--danger); font-weight:normal; font-size:0.75rem;">${req.rejectionReason}</small>` : '';
             actions = `
                 <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                    <span style="color:var(--text-muted); font-size:0.85rem;">تم الرفض</span>
+                    <span style="color:var(--text-muted); font-size:0.85rem;">تم الرفض${rejectedByText}</span>
                     <button class="btn-danger" style="width:auto; padding:2px 8px; font-size:0.75rem; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" onclick="deleteLeaveRequest('${req.id}', '${req.employeeName}')">حذف 🗑️</button>
                 </div>
             `;
