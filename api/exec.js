@@ -26,18 +26,32 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 });
 
 // --- Google Sheets Archive Caching Layer ---
-let googleSheetsAttendanceCache = null;
-let googleSheetsCacheTimestamp = 0;
+const googleSheetsCacheStore = new Map();
 const GOOGLE_SHEETS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache
 
-async function fetchGoogleSheetsAttendanceWithCache() {
+async function fetchGoogleSheetsAttendanceWithCache(employeeId = '', startDate = '', endDate = '') {
     const now = Date.now();
-    if (googleSheetsAttendanceCache && (now - googleSheetsCacheTimestamp < GOOGLE_SHEETS_CACHE_TTL)) {
-        return googleSheetsAttendanceCache;
+    const cacheKey = `${employeeId}_${startDate}_${endDate}`;
+    
+    // Clean up expired cache items to prevent memory growth
+    for (const [key, value] of googleSheetsCacheStore.entries()) {
+        if (now - value.timestamp > GOOGLE_SHEETS_CACHE_TTL) {
+            googleSheetsCacheStore.delete(key);
+        }
+    }
+    
+    const cached = googleSheetsCacheStore.get(cacheKey);
+    if (cached && (now - cached.timestamp < GOOGLE_SHEETS_CACHE_TTL)) {
+        return cached.data;
     }
 
     try {
-        const gsRes = await fetch(`${GOOGLE_SCRIPT_URL}?action=getDashboardData&t=${now}`, {
+        let url = `${GOOGLE_SCRIPT_URL}?action=getDashboardData&t=${now}`;
+        if (employeeId) url += `&employeeId=${encodeURIComponent(employeeId)}`;
+        if (startDate) url += `&startDate=${encodeURIComponent(startDate)}`;
+        if (endDate) url += `&endDate=${encodeURIComponent(endDate)}`;
+
+        const gsRes = await fetch(url, {
             method: 'GET',
             headers: { Accept: 'application/json' }
         });
@@ -46,12 +60,16 @@ async function fetchGoogleSheetsAttendanceWithCache() {
         const gsData = await gsRes.json();
         if (!gsData.success) throw new Error(gsData.message || "Failed to fetch Google Sheets dashboard data");
         
-        googleSheetsAttendanceCache = Array.isArray(gsData.attendance) ? gsData.attendance : [];
-        googleSheetsCacheTimestamp = now;
-        return googleSheetsAttendanceCache;
+        const attendance = Array.isArray(gsData.attendance) ? gsData.attendance : [];
+        googleSheetsCacheStore.set(cacheKey, {
+            timestamp: now,
+            data: attendance
+        });
+        return attendance;
     } catch (err) {
         console.error("fetchGoogleSheetsAttendanceWithCache error:", err.message);
-        // Graceful fallback to empty array if tables don't exist in Google Sheet yet
+        // Fallback to cache if available, even if expired
+        if (cached) return cached.data;
         return [];
     }
 }
@@ -1490,7 +1508,11 @@ if (action === "login") {
             if (data.includeArchive === true || hasOldDateRequested) {
                 try {
                     // Fetch full historical archive list from Google Sheets
-                    const gsAttendance = await fetchGoogleSheetsAttendanceWithCache();
+                    const gsAttendance = await fetchGoogleSheetsAttendanceWithCache(
+                        data.employeeId || '',
+                        data.startDate || '',
+                        data.endDate || ''
+                    );
                     
                     // Filter sheets rows by employee and date parameters if present
                     let filteredGs = gsAttendance;

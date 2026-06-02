@@ -7,7 +7,7 @@ const ARCHIVE_CRON_SECRET = process.env.ARCHIVE_CRON_SECRET || '';
 
 // Retention settings - keep only last 365 days in Supabase
 const RETENTION_DAYS = 365;
-const ARCHIVE_BATCH_SIZE = 150;
+const ARCHIVE_BATCH_SIZE = 1000;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false }
