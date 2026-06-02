@@ -2102,7 +2102,12 @@ if (action === "updateEmployee") {
             let mapLatitude = null;
             let mapLongitude = null;
 
-            if (mapLink) {
+            // Direct extraction from q=lat,lng if generated automatically by our client
+            const qMatch = mapLink.match(/[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/);
+            if (qMatch) {
+                mapLatitude = parseFloat(qMatch[1]);
+                mapLongitude = parseFloat(qMatch[2]);
+            } else if (mapLink) {
                 try {
                     // Try to resolve redirected map link and extract lat/lng
                     const resLink = await fetch(mapLink, { method: 'HEAD', redirect: 'follow' });
@@ -2118,6 +2123,12 @@ if (action === "updateEmployee") {
                 } catch (e) {
                     console.error("Map Link Resolution Failed:", e);
                 }
+            }
+
+            // Fallback to coordinates provided directly in request if still unresolved or auto-generated
+            if (mapLatitude === null || mapLongitude === null) {
+                mapLatitude = parseFloat(data.latitude) || null;
+                mapLongitude = parseFloat(data.longitude) || null;
             }
 
             const payload = {
