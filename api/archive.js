@@ -7,7 +7,7 @@ const ARCHIVE_CRON_SECRET = process.env.ARCHIVE_CRON_SECRET || '';
 
 // Retention settings - keep only last 365 days in Supabase
 const RETENTION_DAYS = 365;
-const ARCHIVE_BATCH_SIZE = 1000;
+const ARCHIVE_BATCH_SIZE = 200;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false }
@@ -66,18 +66,26 @@ export default async function handler(req, res) {
                     try {
                         const responseData = await gsRes.json();
                         if (responseData && responseData.success === true) {
-                            // Delete archived records from Supabase
-                            const idsToDelete = oldRecords.map(r => r.id);
-                            const { error: deleteError } = await supabase
-                                .from('attendance')
-                                .delete()
-                                .in('id', idsToDelete);
+                            // Validate that all records were either successfully added or identified as duplicates
+                            const processedCount = (responseData.addedCount || 0) + (responseData.duplicateCount || 0);
+                            const hasCounters = typeof responseData.addedCount !== 'undefined';
 
-                            if (deleteError) {
-                                results.errors.push(`Delete error: ${deleteError.message}`);
+                            if (hasCounters && processedCount !== oldRecords.length) {
+                                results.errors.push(`Integrity verification failed: Sent ${oldRecords.length} records, but Google Sheets processed ${processedCount} records (Added: ${responseData.addedCount || 0}, Duplicates: ${responseData.duplicateCount || 0}). Skipping deletion to prevent data loss.`);
                             } else {
-                                results.archived += oldRecords.length;
-                                results.deleted += oldRecords.length;
+                                // Delete archived records from Supabase
+                                const idsToDelete = oldRecords.map(r => r.id);
+                                const { error: deleteError } = await supabase
+                                    .from('attendance')
+                                    .delete()
+                                    .in('id', idsToDelete);
+
+                                if (deleteError) {
+                                    results.errors.push(`Delete error: ${deleteError.message}`);
+                                } else {
+                                    results.archived += oldRecords.length;
+                                    results.deleted += oldRecords.length;
+                                }
                             }
                         } else {
                             results.errors.push(`Google Sheets archive internal failure: ${responseData ? responseData.message : 'Unknown error'}`);

@@ -2025,6 +2025,61 @@ function doPost(e) {
       return json({ success: true, message: "تم مسح " + deletedCount + " إشعار قديم" });
     }
 
+    // ARCHIVE ATTENDANCE (from Supabase)
+    if (data.action === "archiveAttendance") {
+      var sheet = getOrCreateSheet("attendance",
+        ["employeeId","employeeName","siteId","siteName",
+         "checkIn","checkOut","latitude","longitude","status","totalHours","transportPrice"]
+      );
+      
+      var records = data.records || [];
+      var addedCount = 0;
+      var duplicateCount = 0;
+      
+      if (records && records.length) {
+        // Fetch existing check-ins to prevent duplicates
+        var existingRows = sheet.getDataRange().getValues();
+        var existingSigs = {};
+        for (var i = 1; i < existingRows.length; i++) {
+          var empId = String(existingRows[i][0] || "").trim();
+          var checkInTime = String(existingRows[i][4] || "").trim();
+          if (empId && checkInTime) {
+            existingSigs[empId + "_" + checkInTime] = true;
+          }
+        }
+        
+        records.forEach(function(r) {
+          var sig = String(r.employeeId || "").trim() + "_" + String(r.checkIn || "").trim();
+          if (existingSigs[sig]) {
+            duplicateCount++;
+            return; // Skip duplicate
+          }
+          
+          sheet.appendRow([
+            r.employeeId || "",
+            r.employeeName || "",
+            r.siteId || "",
+            r.siteName || "",
+            r.checkIn || "",
+            r.checkOut || "",
+            r.latitude || "",
+            r.longitude || "",
+            r.status || "",
+            r.totalHours || "",
+            r.transportPrice || ""
+          ]);
+          addedCount++;
+        });
+      }
+      
+      return json({ 
+        success: true, 
+        message: "تمت الأرشفة بنجاح.", 
+        addedCount: addedCount, 
+        duplicateCount: duplicateCount 
+      });
+    }
+
   } catch(e){
     return json({success:false,message:e.toString().replace('Error: ', '')});
   }
