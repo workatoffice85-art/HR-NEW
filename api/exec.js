@@ -32,14 +32,14 @@ const GOOGLE_SHEETS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache
 async function fetchGoogleSheetsAttendanceWithCache(employeeId = '', startDate = '', endDate = '') {
     const now = Date.now();
     const cacheKey = `${employeeId}_${startDate}_${endDate}`;
-    
+
     // Clean up expired cache items to prevent memory growth
     for (const [key, value] of googleSheetsCacheStore.entries()) {
         if (now - value.timestamp > GOOGLE_SHEETS_CACHE_TTL) {
             googleSheetsCacheStore.delete(key);
         }
     }
-    
+
     const cached = googleSheetsCacheStore.get(cacheKey);
     if (cached && (now - cached.timestamp < GOOGLE_SHEETS_CACHE_TTL)) {
         return cached.data;
@@ -56,10 +56,10 @@ async function fetchGoogleSheetsAttendanceWithCache(employeeId = '', startDate =
             headers: { Accept: 'application/json' }
         });
         if (!gsRes.ok) throw new Error(`Google Sheets fetch failed with status ${gsRes.status}`);
-        
+
         const gsData = await gsRes.json();
         if (!gsData.success) throw new Error(gsData.message || "Failed to fetch Google Sheets dashboard data");
-        
+
         const attendance = Array.isArray(gsData.attendance) ? gsData.attendance : [];
         googleSheetsCacheStore.set(cacheKey, {
             timestamp: now,
@@ -92,7 +92,7 @@ function generateSecureToken(requestId, action, requestType, approverEmail = '')
         .createHmac('sha256', SUPABASE_SERVICE_ROLE_KEY)
         .update(payload)
         .digest('hex');
-    
+
     // Package payload and signature in a URL-safe token
     const tokenObj = { payload, signature };
     return Buffer.from(JSON.stringify(tokenObj)).toString('base64url');
@@ -108,24 +108,24 @@ function verifySecureToken(tokenStr) {
     try {
         const decodedStr = Buffer.from(tokenStr, 'base64url').toString('utf8');
         const { payload, signature } = JSON.parse(decodedStr);
-        
+
         // Re-generate signature
         const expectedSignature = crypto
             .createHmac('sha256', SUPABASE_SERVICE_ROLE_KEY)
             .update(payload)
             .digest('hex');
-        
+
         if (signature !== expectedSignature) {
             console.error("Token verification failed: signature mismatch");
             return null;
         }
-        
+
         const data = JSON.parse(payload);
         if (Date.now() > data.exp) {
             console.error("Token verification failed: token expired");
             return null;
         }
-        
+
         return data; // { requestId, action, requestType, exp }
     } catch (e) {
         console.error("Token verification failed: error decoding token", e);
@@ -137,26 +137,26 @@ function verifySecureToken(tokenStr) {
 function rateLimiter(ip) {
     const now = Date.now();
     const windowStart = now - RATE_LIMIT_WINDOW;
-    
+
     // Clean old entries
     for (const [key, value] of rateLimitStore.entries()) {
         if (value.timestamp < windowStart) {
             rateLimitStore.delete(key);
         }
     }
-    
+
     const record = rateLimitStore.get(ip) || { count: 0, timestamp: now };
-    
+
     if (record.timestamp < windowStart) {
         // Reset if outside window
         rateLimitStore.set(ip, { count: 1, timestamp: now });
         return true;
     }
-    
+
     if (record.count >= RATE_LIMIT_MAX_REQUESTS) {
         return false; // Rate limit exceeded
     }
-    
+
     // Increment count
     record.count += 1;
     rateLimitStore.set(ip, record);
@@ -272,21 +272,21 @@ async function getNotificationSettings(supabase) {
             .from('settings')
             .select('*')
             .in('key', ['notificationEmails', 'requestNotificationsEnabled']);
-        
+
         if (error) {
             console.error('Error fetching notification settings:', error);
             return { enabled: false, emails: [] };
         }
-        
+
         const settingsMap = {};
         if (settings) {
             settings.forEach(s => settingsMap[s.key] = s.value);
         }
-        
+
         const enabled = settingsMap.requestNotificationsEnabled === 'true';
         const emailsStr = settingsMap.notificationEmails || '';
         const emails = emailsStr.split(',').map(e => e.trim()).filter(e => e);
-        
+
         return { enabled, emails };
     } catch (error) {
         console.error('Exception fetching notification settings:', error);
@@ -300,16 +300,16 @@ async function getNotificationSettings(supabase) {
  */
 async function sendEmailNotification(options) {
     const { to, subject, html, text } = options;
-    
+
     if (!to || to.length === 0) {
         console.log('No recipients for email notification');
         return { success: false, message: 'No recipients' };
     }
-    
+
     console.log('📧 EMAIL NOTIFICATION:');
     console.log('To:', to.join(', '));
     console.log('Subject:', subject);
-    
+
     try {
         // Use Google Script to send email via GmailApp (same as OTP)
         const response = await fetch(GOOGLE_SCRIPT_URL, {
@@ -323,9 +323,9 @@ async function sendEmailNotification(options) {
             }),
             headers: { 'Content-Type': 'text/plain' }
         });
-        
+
         const result = await response.json();
-        
+
         if (result.success) {
             console.log('✅ Email sent successfully via GmailApp');
             return { success: true, message: 'Email sent via GmailApp' };
@@ -352,37 +352,37 @@ async function sendEmailNotification(options) {
  */
 async function sendRequestNotificationEmail(supabase, requestData, host) {
     const settings = await getNotificationSettings(supabase);
-    
+
     if (!settings.enabled || settings.emails.length === 0) {
         console.log('Request email notifications disabled or no emails configured');
         return { success: false, message: 'Notifications disabled' };
     }
-    
+
     const { type, employeeName, details, requestId } = requestData;
-    
+
     const typeLabels = {
         'leave': 'طلب إجازة',
         'site': 'طلب تسجيل موقع',
         'allowance': 'طلب زيادة بدلات',
         'device': 'طلب تغيير جهاز'
     };
-    
+
     const typeLabel = typeLabels[type] || 'طلب جديد';
     const subject = `نظام الموارد البشرية - ${typeLabel} من ${employeeName}`;
-    
+
     // Generate secure links
     const hostHeader = host || 'localhost:3000';
     const protocol = hostHeader.includes('localhost') || hostHeader.includes('127.0.0.1') ? 'http' : 'https';
     const baseUrl = `${protocol}://${hostHeader}`;
-    
+
     const results = [];
     for (const email of settings.emails) {
         const approveToken = generateSecureToken(requestId, 'approved', type, email);
         const rejectToken = generateSecureToken(requestId, 'rejected', type, email);
-        
+
         const approveLink = `${baseUrl}/confirm-action.html?token=${approveToken}`;
         const rejectLink = `${baseUrl}/confirm-action.html?token=${rejectToken}`;
-        
+
         const text = `
 مرحباً،
 
@@ -399,7 +399,7 @@ async function sendRequestNotificationEmail(supabase, requestData, host) {
 
 نظام الموارد البشرية
         `.trim();
-        
+
         const html = `
 <!DOCTYPE html>
 <html lang="ar">
@@ -579,7 +579,7 @@ async function sendRequestNotificationEmail(supabase, requestData, host) {
 </body>
 </html>
         `.trim();
-        
+
         const res = await sendEmailNotification({
             to: [email],
             subject,
@@ -588,12 +588,12 @@ async function sendRequestNotificationEmail(supabase, requestData, host) {
         });
         results.push(res);
     }
-    
+
     const allSuccess = results.every(r => r.success);
-    return { 
-        success: allSuccess, 
-        message: allSuccess ? 'All emails sent' : 'Some emails failed', 
-        details: results 
+    return {
+        success: allSuccess,
+        message: allSuccess ? 'All emails sent' : 'Some emails failed',
+        details: results
     };
 }
 
@@ -618,12 +618,12 @@ async function verifyDeviceForAttendance(supabase, userId, deviceId, deviceInfo)
             .select('*')
             .eq('user_id', userId)
             .eq('is_active', true);
-        
+
         if (devicesError) {
             console.error('Device verification error:', devicesError);
             return { allowed: false, message: 'خطأ في التحقق من الجهاز', deviceRegistered: false };
         }
-        
+
         // 2. No device registered - this is the first time
         if (!userDevices || userDevices.length === 0) {
             // Auto-register this device
@@ -639,23 +639,23 @@ async function verifyDeviceForAttendance(supabase, userId, deviceId, deviceInfo)
                     created_at: new Date().toISOString(),
                     updated_at: new Date().toISOString()
                 }]);
-            
+
             if (insertError) {
                 console.error('Device registration error:', insertError);
                 return { allowed: false, message: 'فشل تسجيل الجهاز', deviceRegistered: false };
             }
-            
+
             return { allowed: true, deviceRegistered: true, isNewDevice: true };
         }
-        
+
         // 3. Check if current device matches any registered device
         const matchingDevice = userDevices.find(d => d.device_id === deviceId);
-        
+
         if (matchingDevice) {
             // Device matches - allow attendance
             return { allowed: true, deviceRegistered: true, isNewDevice: false };
         }
-        
+
         // 4. Device doesn't match - check if there's a pending request
         const { data: pendingRequest, error: requestError } = await supabase
             .from('device_change_requests')
@@ -664,24 +664,24 @@ async function verifyDeviceForAttendance(supabase, userId, deviceId, deviceInfo)
             .eq('new_device_id', deviceId)
             .eq('status', 'pending')
             .maybeSingle();
-        
+
         if (pendingRequest) {
-            return { 
-                allowed: false, 
+            return {
+                allowed: false,
                 message: 'طلب تغيير الجهاز قيد المراجعة. يرجى الانتظار موافقة الإدارة.',
                 deviceRegistered: true,
                 hasPendingRequest: true
             };
         }
-        
+
         // 5. Device doesn't match and no pending request - reject
-        return { 
-            allowed: false, 
+        return {
+            allowed: false,
             message: 'الجهاز غير معتمد. يرجى طلب تغيير الجهاز من الإدارة.',
             deviceRegistered: true,
             registeredDeviceId: userDevices[0]?.device_id
         };
-        
+
     } catch (error) {
         console.error('Device verification exception:', error);
         return { allowed: false, message: 'خطأ في التحقق من الجهاز', deviceRegistered: false };
@@ -700,13 +700,13 @@ async function createDeviceChangeRequest(supabase, userId, userName, oldDeviceId
             .eq('user_id', userId)
             .eq('status', 'pending')
             .maybeSingle();
-        
+
         if (existingRequest) {
             return { success: false, message: 'لديك طلب تغيير جهاز قيد المراجعة بالفعل' };
         }
-        
+
         const requestId = "DEV" + Math.floor(10000 + Math.random() * 90000);
-        
+
         const { error } = await supabase
             .from('device_change_requests')
             .insert([{
@@ -722,12 +722,12 @@ async function createDeviceChangeRequest(supabase, userId, userName, oldDeviceId
                 status: 'pending',
                 created_at: new Date().toISOString()
             }]);
-        
+
         if (error) {
             console.error('Create device change request error:', error);
             return { success: false, message: 'فشل إنشاء طلب تغيير الجهاز' };
         }
-        
+
         // Create notification for HR
         await supabase.from('notifications').insert([{
             id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
@@ -739,7 +739,7 @@ async function createDeviceChangeRequest(supabase, userId, userName, oldDeviceId
             isRead: false,
             createdAt: new Date().toISOString()
         }]);
-        
+
         // Send email notification
         await sendRequestNotificationEmail(supabase, {
             type: 'device',
@@ -747,7 +747,7 @@ async function createDeviceChangeRequest(supabase, userId, userName, oldDeviceId
             details: `الجهاز الجديد: ${newDeviceInfo.deviceModel || 'Unknown'} (${newDeviceInfo.osType || 'Unknown'})${reason ? ' - السبب: ' + reason : ''}`,
             requestId: requestId
         }, host);
-        
+
         return { success: true, message: 'تم إرسال طلب تغيير الجهاز بنجاح' };
     } catch (error) {
         console.error('Create device change request exception:', error);
@@ -757,13 +757,13 @@ async function createDeviceChangeRequest(supabase, userId, userName, oldDeviceId
 
 // Helper: Distance calculation in meters
 function getDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371e3;
-  const f1 = lat1 * Math.PI/180;
-  const f2 = lat2 * Math.PI/180;
-  const df = (lat2-lat1) * Math.PI/180;
-  const dl = (lon2-lon1) * Math.PI/180;
-  const a = Math.sin(df/2)**2 + Math.cos(f1)*Math.cos(f2) * Math.sin(dl/2)**2;
-  return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const R = 6371e3;
+    const f1 = lat1 * Math.PI / 180;
+    const f2 = lat2 * Math.PI / 180;
+    const df = (lat2 - lat1) * Math.PI / 180;
+    const dl = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(df / 2) ** 2 + Math.cos(f1) * Math.cos(f2) * Math.sin(dl / 2) ** 2;
+    return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 function normalizeString(value) {
@@ -897,38 +897,38 @@ async function syncToGoogleSheet(body) {
 }
 
 export default async function handler(req, res) {
-     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-         return res.status(500).json({ success: false, message: "Missing Supabase configuration. Please set environment variables." });
-     }
-     
-     // Add CORS headers
-     res.setHeader('Access-Control-Allow-Credentials', true);
-     res.setHeader('Access-Control-Allow-Origin', '*');
-     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-     res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+        return res.status(500).json({ success: false, message: "Missing Supabase configuration. Please set environment variables." });
+    }
 
-     if (req.method === 'OPTIONS') {
-         res.status(200).end();
-         return;
-     }
- 
-     // Rate limiting
-     const forwarded = req.headers['x-forwarded-for'];
-     const ip = forwarded ? forwarded.split(',')[0] : req.socket.remoteAddress || 'unknown';
-     if (!rateLimiter(ip)) {
-         return res.status(429).json({ success: false, message: "Too many requests. Please try again later." });
-     }
- 
-     try {
-         // Parse the body if POST, or query if GET
-         let data = {};
-         if (req.method === 'POST') {
-             data = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-         } else {
-             data = req.query;
-         }
- 
-         const action = data.action;
+    // Add CORS headers
+    res.setHeader('Access-Control-Allow-Credentials', true);
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+    res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
+
+    if (req.method === 'OPTIONS') {
+        res.status(200).end();
+        return;
+    }
+
+    // Rate limiting
+    const forwarded = req.headers['x-forwarded-for'];
+    const ip = forwarded ? forwarded.split(',')[0] : req.socket.remoteAddress || 'unknown';
+    if (!rateLimiter(ip)) {
+        return res.status(429).json({ success: false, message: "Too many requests. Please try again later." });
+    }
+
+    try {
+        // Parse the body if POST, or query if GET
+        let data = {};
+        if (req.method === 'POST') {
+            data = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+        } else {
+            data = req.query;
+        }
+
+        const action = data.action;
 
         // DUAL WRITING / BACKUP SYNC:
         // For writing actions, we asynchronously broadcast the exact request to your existing Google Apps Script
@@ -948,77 +948,77 @@ export default async function handler(req, res) {
             syncToGoogleSheet(data);
         }
         // --- AUTH ---
-if (action === "login") {
-             const identifier = normalizeString(data.identifier);
-             const password = normalizeString(data.password);
-             const role = normalizeString(data.role).toLowerCase();
-             const usersById = new Map();
-             const addUsers = (rows) => {
-                 for (const row of (rows || [])) {
-                     const key = normalizeString(row.id) || normalizeString(row.email) || normalizeString(row.phone);
-                     if (key) usersById.set(key, row);
-                 }
-             };
-             if (identifier.includes('@')) {
-                 const { data: emailUsers, error: emailError } = await supabase
-                     .from('employees')
-                     .select('*')
-                     .eq('email', normalizeEmailValue(identifier));
-                 if (emailError) throw emailError;
-                 addUsers(emailUsers);
-             }
-             const phoneCandidates = buildPhoneCandidates(identifier);
-             if (phoneCandidates.length) {
-                 const { data: phoneUsers, error: phoneError } = await supabase
-                     .from('employees')
-                     .select('*')
-                     .in('phone', phoneCandidates);
-                 if (phoneError) throw phoneError;
-                 addUsers(phoneUsers);
-             }
-             if (usersById.size === 0) {
-                 const normalizedInputPhone = normalizePhoneValue(identifier);
-                 if (normalizedInputPhone) {
-                     const { data: allUsers, error: allUsersError } = await supabase
-                         .from('employees')
-                         .select('*');
-                     if (allUsersError) throw allUsersError;
-                     const fallbackMatches = (allUsers || []).filter(
-                         (u) => normalizePhoneValue(u.phone) === normalizedInputPhone
-                     );
-                     addUsers(fallbackMatches);
-                 }
-             }
-             const users = Array.from(usersById.values());
-             if (users.length === 0) throw new Error("بيانات الدخول غير صحيحة");
-             
-             // Enhanced password verification with hashing support
-             let validUser = null;
-             for (const user of users) {
-                 const storedPassword = user.password || '';
-                 let isValid = false;
-                 
-                 // Check if password is hashed (assuming bcrypt hash starts with $2b$)
-                 if (storedPassword.startsWith('$2b$')) {
-                     // Simulate the same hashing transformation used in saveEmployee
-                     const hashedProvidedPassword = password ? `$2b$10${Array(22).fill('0').join('').substring(0, 22)}${password}` : '';
-                     isValid = storedPassword === hashedProvidedPassword;
-                 } else {
-                     // Legacy plain text comparison (for backward compatibility)
-                     isValid = normalizeString(storedPassword) === password;
-                 }
-                 
-                 if (isValid) {
-                     validUser = user;
-                     break;
-                 }
-             }
-             
-             const user = validUser;
-             if (!user) throw new Error("كلمة المرور غير صحيحة");
-             if (role && normalizeString(user.role).toLowerCase() !== role) {
-                 throw new Error("لا تملك صلاحية الدخول");
-             }
+        if (action === "login") {
+            const identifier = normalizeString(data.identifier);
+            const password = normalizeString(data.password);
+            const role = normalizeString(data.role).toLowerCase();
+            const usersById = new Map();
+            const addUsers = (rows) => {
+                for (const row of (rows || [])) {
+                    const key = normalizeString(row.id) || normalizeString(row.email) || normalizeString(row.phone);
+                    if (key) usersById.set(key, row);
+                }
+            };
+            if (identifier.includes('@')) {
+                const { data: emailUsers, error: emailError } = await supabase
+                    .from('employees')
+                    .select('*')
+                    .eq('email', normalizeEmailValue(identifier));
+                if (emailError) throw emailError;
+                addUsers(emailUsers);
+            }
+            const phoneCandidates = buildPhoneCandidates(identifier);
+            if (phoneCandidates.length) {
+                const { data: phoneUsers, error: phoneError } = await supabase
+                    .from('employees')
+                    .select('*')
+                    .in('phone', phoneCandidates);
+                if (phoneError) throw phoneError;
+                addUsers(phoneUsers);
+            }
+            if (usersById.size === 0) {
+                const normalizedInputPhone = normalizePhoneValue(identifier);
+                if (normalizedInputPhone) {
+                    const { data: allUsers, error: allUsersError } = await supabase
+                        .from('employees')
+                        .select('*');
+                    if (allUsersError) throw allUsersError;
+                    const fallbackMatches = (allUsers || []).filter(
+                        (u) => normalizePhoneValue(u.phone) === normalizedInputPhone
+                    );
+                    addUsers(fallbackMatches);
+                }
+            }
+            const users = Array.from(usersById.values());
+            if (users.length === 0) throw new Error("بيانات الدخول غير صحيحة");
+
+            // Enhanced password verification with hashing support
+            let validUser = null;
+            for (const user of users) {
+                const storedPassword = user.password || '';
+                let isValid = false;
+
+                // Check if password is hashed (assuming bcrypt hash starts with $2b$)
+                if (storedPassword.startsWith('$2b$')) {
+                    // Simulate the same hashing transformation used in saveEmployee
+                    const hashedProvidedPassword = password ? `$2b$10${Array(22).fill('0').join('').substring(0, 22)}${password}` : '';
+                    isValid = storedPassword === hashedProvidedPassword;
+                } else {
+                    // Legacy plain text comparison (for backward compatibility)
+                    isValid = normalizeString(storedPassword) === password;
+                }
+
+                if (isValid) {
+                    validUser = user;
+                    break;
+                }
+            }
+
+            const user = validUser;
+            if (!user) throw new Error("كلمة المرور غير صحيحة");
+            if (role && normalizeString(user.role).toLowerCase() !== role) {
+                throw new Error("لا تملك صلاحية الدخول");
+            }
             return res.status(200).json({
                 success: true,
                 message: "تم تسجيل الدخول بنجاح",
@@ -1050,7 +1050,7 @@ if (action === "login") {
                 .eq('employeeId', empIdStr)
                 .eq('siteId', siteIdStr)
                 .maybeSingle(); // maybeSingle() is safer if row doesn't exist
-            
+
             if (allowance) return allowance.transportPrice;
 
             // 2. If it's a request site, use the price passed or from the request
@@ -1062,7 +1062,7 @@ if (action === "login") {
                 .select('transportPrice')
                 .eq('id', empIdStr)
                 .maybeSingle();
-            
+
             if (emp && emp.transportPrice > 0) return emp.transportPrice;
 
             // 4. Default to Site Price
@@ -1075,19 +1075,19 @@ if (action === "login") {
             if (!token) {
                 return res.status(200).json({ success: false, message: "التوكن مفقود أو غير صالح" });
             }
-            
+
             const decoded = verifySecureToken(token);
             if (!decoded) {
                 return res.status(200).json({ success: false, message: "رابط الموافقة غير صالح أو منتهي الصلاحية (صلاحية الرابط 48 ساعة فقط)" });
             }
-            
+
             const { requestId, action: decision, requestType, approverEmail } = decoded;
             const approvedByVal = approverEmail ? `البريد (${approverEmail})` : 'البريد الإلكتروني (HR)';
-            
+
             // 1. Fetch current status of the request from database to verify "pending" state (Idempotency check)
             let currentStatus = '';
             let requestDetails = {};
-            
+
             if (requestType === 'leave') {
                 const { data: req, error } = await supabase.from('leaveRequests').select('*').eq('id', requestId).maybeSingle();
                 if (error || !req) return res.status(200).json({ success: false, message: "لم يتم العثور على طلب الإجازة" });
@@ -1135,7 +1135,7 @@ if (action === "login") {
             } else {
                 return res.status(200).json({ success: false, message: "نوع الطلب غير معروف" });
             }
-            
+
             // If it is a GET request, just return the preview details
             if (req.method === 'GET') {
                 return res.status(200).json({
@@ -1145,16 +1145,16 @@ if (action === "login") {
                     requestDetails: requestDetails
                 });
             }
-            
+
             // This is a POST request - execute the state mutation!
             if (currentStatus !== 'pending') {
-                return res.status(200).json({ 
-                    success: false, 
+                return res.status(200).json({
+                    success: false,
                     alreadyProcessed: true,
-                    message: "تم معالجة هذا الطلب مسبقاً! الحالة الحالية: " + (currentStatus === 'approved' ? 'مقبول' : currentStatus === 'rejected' ? 'مرفوض' : currentStatus) 
+                    message: "تم معالجة هذا الطلب مسبقاً! الحالة الحالية: " + (currentStatus === 'approved' ? 'مقبول' : currentStatus === 'rejected' ? 'مرفوض' : currentStatus)
                 });
             }
-            
+
             // Execute the corresponding approval/rejection logic!
             if (requestType === 'leave') {
                 if (decision === 'approved') {
@@ -1165,7 +1165,7 @@ if (action === "login") {
                         approvedBy: approvedByVal
                     }).eq('id', requestId);
                     if (error) throw error;
-                    
+
                     // Notify employee
                     await supabase.from('notifications').insert([{
                         id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
@@ -1184,7 +1184,7 @@ if (action === "login") {
                         rejectionReason: approverEmail ? `تم الرفض عبر البريد (${approverEmail})` : 'تم الرفض عبر البريد الإلكتروني'
                     }).eq('id', requestId);
                     if (error) throw error;
-                    
+
                     // Notify employee
                     await supabase.from('notifications').insert([{
                         id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
@@ -1201,11 +1201,11 @@ if (action === "login") {
                 // Fetch full request details first for site creation
                 const { data: reqData } = await supabase.from('siteRequests').select('*').eq('id', requestId).single();
                 if (!reqData) throw new Error("بيانات الطلب مفقودة");
-                
+
                 if (decision === 'approved') {
                     const finalStatus = 'approved';
                     const { error: errReq } = await supabase.from('siteRequests')
-                        .update({ 
+                        .update({
                             status: finalStatus,
                             approvedAt: new Date().toISOString(),
                             transportPrice: reqData.transportPrice,
@@ -1228,7 +1228,7 @@ if (action === "login") {
                     };
                     const { error: errSite } = await supabase.from('sites').insert([sitePayload]);
                     if (errSite) throw errSite;
-                    
+
                     // Notify employee
                     await supabase.from('notifications').insert([{
                         id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
@@ -1242,13 +1242,13 @@ if (action === "login") {
                     }]);
                 } else {
                     const { error } = await supabase.from('siteRequests')
-                        .update({ 
+                        .update({
                             status: 'rejected',
                             autoMeta: approverEmail ? `تم الرفض عبر البريد (${approverEmail})` : 'تم الرفض عبر البريد الإلكتروني'
                         })
                         .eq('id', requestId);
                     if (error) throw error;
-                    
+
                     // Notify employee
                     await supabase.from('notifications').insert([{
                         id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
@@ -1265,7 +1265,7 @@ if (action === "login") {
                 // Fetch request data
                 const { data: reqData } = await supabase.from('allowanceRequests').select('*').eq('id', requestId).single();
                 if (!reqData) throw new Error("بيانات الطلب مفقودة");
-                
+
                 if (decision === 'approved') {
                     // Fetch current attendance record
                     const { data: attData, error: errAtt } = await supabase
@@ -1273,7 +1273,7 @@ if (action === "login") {
                         .select('transportPrice')
                         .eq('id', reqData.attendanceId)
                         .single();
-                    
+
                     if (errAtt || !attData) throw new Error("سجل الحضور المرتبط بالطلب غير موجود");
 
                     const newPrice = parseFloat(attData.transportPrice || 0) + parseFloat(reqData.amount);
@@ -1283,21 +1283,21 @@ if (action === "login") {
                         .from('attendance')
                         .update({ transportPrice: newPrice })
                         .eq('id', reqData.attendanceId);
-                    
+
                     if (errUpdAtt) throw errUpdAtt;
                 }
 
                 // Update request status
                 const { error: errUpdReq } = await supabase
                     .from('allowanceRequests')
-                    .update({ 
-                        status: decision, 
+                    .update({
+                        status: decision,
                         approvedBy: approvedByVal,
                         rejectionReason: decision === 'rejected' ? (approverEmail ? `تم الرفض عبر البريد (${approverEmail})` : 'تم الرفض عبر البريد الإلكتروني') : '',
-                        adminNote: approverEmail ? `تمت المعالجة عبر البريد (${approverEmail})` : 'تمت المعالجة عبر البريد الإلكتروني' 
+                        adminNote: approverEmail ? `تمت المعالجة عبر البريد (${approverEmail})` : 'تمت المعالجة عبر البريد الإلكتروني'
                     })
                     .eq('id', requestId);
-                
+
                 if (errUpdReq) throw errUpdReq;
 
                 // Add Log
@@ -1308,18 +1308,18 @@ if (action === "login") {
                     adminId: 'email',
                     adminName: approverEmail ? `البريد (${approverEmail})` : 'Outlook Email',
                     action: decision,
-                    details: decision === 'approved' 
+                    details: decision === 'approved'
                         ? (approverEmail ? `تمت الموافقة على الطلب عبر البريد (${approverEmail})` : 'تمت الموافقة على الطلب عبر البريد الإلكتروني')
                         : (approverEmail ? `تم رفض الطلب عبر البريد (${approverEmail})` : 'تم رفض الطلب عبر البريد الإلكتروني'),
                     timestamp: new Date().toISOString()
                 }]);
-                
+
                 // Notify employee
                 const notifTitle = decision === 'approved' ? 'تمت الموافقة على طلب زيادة البدلات' : 'تم رفض طلب زيادة البدلات';
-                const notifMessage = decision === 'approved' 
+                const notifMessage = decision === 'approved'
                     ? `تمت الموافقة على طلب زيادة البدلات بمبلغ ${reqData.amount} ج.م عبر البريد` + (approverEmail ? ` (${approverEmail})` : ' الإلكتروني')
                     : `تم رفض طلب زيادة البدلات بمبلغ ${reqData.amount} ج.م عبر البريد` + (approverEmail ? ` (${approverEmail})` : ' الإلكتروني');
-                
+
                 await supabase.from('notifications').insert([{
                     id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
                     userId: reqData.employeeId,
@@ -1333,7 +1333,7 @@ if (action === "login") {
             } else if (requestType === 'device') {
                 const { data: request } = await supabase.from('device_change_requests').select('*').eq('id', requestId).single();
                 if (!request) throw new Error("بيانات الطلب مفقودة");
-                
+
                 if (decision === 'approved') {
                     // Deactivate old device
                     if (request.old_device_id) {
@@ -1343,14 +1343,14 @@ if (action === "login") {
                             .eq('user_id', request.user_id)
                             .eq('device_id', request.old_device_id);
                     }
-                    
+
                     // Deactivate any other active devices for this user
                     await supabase
                         .from('devices')
                         .update({ is_active: false, updated_at: new Date().toISOString() })
                         .eq('user_id', request.user_id)
                         .eq('is_active', true);
-                    
+
                     // Upsert new device
                     const { error: upsertError } = await supabase
                         .from('devices')
@@ -1365,9 +1365,9 @@ if (action === "login") {
                         }, {
                             onConflict: 'user_id,device_id'
                         });
-                    
+
                     if (upsertError) throw upsertError;
-                    
+
                     // Update request status
                     const { error: updateError } = await supabase
                         .from('device_change_requests')
@@ -1377,7 +1377,7 @@ if (action === "login") {
                             processed_by: approvedByVal
                         })
                         .eq('id', requestId);
-                    
+
                     if (updateError) throw updateError;
                 } else {
                     const { error } = await supabase
@@ -1389,14 +1389,14 @@ if (action === "login") {
                             processed_by: approvedByVal
                         })
                         .eq('id', requestId);
-                    
+
                     if (error) throw error;
                 }
             }
-            
+
             // Dual write trigger for sync (keeps sheets backup 100% correct)
             const syncPayload = {
-                action: requestType === 'leave' 
+                action: requestType === 'leave'
                     ? (decision === 'approved' ? 'approveLeaveRequest' : 'rejectLeaveRequest')
                     : requestType === 'site'
                         ? (decision === 'approved' ? 'approveSiteRequest' : 'rejectSiteRequest')
@@ -1413,10 +1413,10 @@ if (action === "login") {
                 adminNote: approverEmail ? `تمت المعالجة عبر البريد (${approverEmail})` : 'تمت المعالجة عبر البريد الإلكتروني'
             };
             syncToGoogleSheet(syncPayload);
-            
-            return res.status(200).json({ 
-                success: true, 
-                message: decision === 'approved' ? "تمت الموافقة وتحديث البيانات بنجاح" : "تم رفض الطلب بنجاح" 
+
+            return res.status(200).json({
+                success: true,
+                message: decision === 'approved' ? "تمت الموافقة وتحديث البيانات بنجاح" : "تم رفض الطلب بنجاح"
             });
         }
 
@@ -1454,7 +1454,7 @@ if (action === "login") {
                         .update({ status: 'overtime' })
                         .in('status', ['present', 'late'])
                         .filter('checkIn', 'gte', todayStr + 'T00:00:00');
-                    
+
                     // Refresh attendance data for the response if needed (optional since frontend will reload)
                     const { data: refreshedAtt } = await supabase.from('attendance').select('*');
                     if (refreshedAtt) attRes.data = refreshedAtt;
@@ -1484,9 +1484,9 @@ if (action === "login") {
                 supabase.from('attendance').select('*').eq('employeeId', empId).order('checkIn', { ascending: true }),
                 supabase.from('leaveRequests').select('*').eq('employeeId', empId).order('leaveDate', { ascending: false })
             ]);
-            return res.status(200).json({ 
-                success: true, 
-                sites: siteRes.data || [], 
+            return res.status(200).json({
+                success: true,
+                sites: siteRes.data || [],
                 attendance: attRes.data || [],
                 leaveRequests: leaveRes.data || []
             });
@@ -1521,7 +1521,7 @@ if (action === "login") {
                         data.startDate || '',
                         data.endDate || ''
                     );
-                    
+
                     // Filter sheets rows by employee and date parameters if present
                     let filteredGs = gsAttendance;
                     if (data.employeeId) {
@@ -1536,13 +1536,13 @@ if (action === "login") {
 
                     // Merging and Deduplication by attendance ID or signature
                     const attMap = new Map();
-                    
+
                     // Add Google Sheets records first (historical)
                     filteredGs.forEach(record => {
                         const sig = record.id || `${record.employeeId}_${Date.parse(record.checkIn)}`;
                         attMap.set(sig, record);
                     });
-                    
+
                     // Add Supabase records (which takes priority / updates sheets records)
                     mergedAttendance.forEach(record => {
                         const sig = record.id || `${record.employeeId}_${Date.parse(record.checkIn)}`;
@@ -1550,7 +1550,7 @@ if (action === "login") {
                     });
 
                     mergedAttendance = Array.from(attMap.values());
-                    
+
                     // Sort ascending by checkIn date
                     mergedAttendance.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
                 } catch (gsError) {
@@ -1565,38 +1565,38 @@ if (action === "login") {
         // --- ADD ATTENDANCE (CHECK-IN) ---
         if (action === "addAttendance") {
             console.log("addAttendance called with data:", JSON.stringify(data));
-            
+
             // 0. DEVICE VERIFICATION (Mandatory Layer)
             // Verify device before allowing attendance
             const deviceId = data.deviceId;
             const deviceInfo = data.deviceInfo || {};
-            
+
             if (!deviceId) {
-                return res.status(200).json({ 
-                    success: false, 
-                    message: "مطلوب معرف الجهاز (Device ID) للتسجيل" 
+                return res.status(200).json({
+                    success: false,
+                    message: "مطلوب معرف الجهاز (Device ID) للتسجيل"
                 });
             }
-            
+
             const deviceCheck = await verifyDeviceForAttendance(
-                supabase, 
-                data.employeeId, 
-                deviceId, 
+                supabase,
+                data.employeeId,
+                deviceId,
                 deviceInfo
             );
-            
+
             if (!deviceCheck.allowed) {
-                return res.status(200).json({ 
-                    success: false, 
+                return res.status(200).json({
+                    success: false,
                     message: deviceCheck.message,
                     deviceRejected: true,
                     hasPendingRequest: deviceCheck.hasPendingRequest || false
                 });
             }
-            
+
             // Device is verified - include device_id in attendance record
             const attendanceDeviceId = deviceId;
-            
+
             // 0.1 Double Check-In Prevention
             const { data: openAtt } = await supabase.from('attendance')
                 .select('id, checkIn, status')
@@ -1605,7 +1605,7 @@ if (action === "login") {
                 .neq('status', 'no_checkout')
                 .order('checkIn', { ascending: false })
                 .limit(1);
-            
+
             if (openAtt && openAtt.length > 0) {
                 const openSession = openAtt[0];
                 const openDate = new Date(openSession.checkIn).toDateString();
@@ -1657,14 +1657,14 @@ if (action === "login") {
             // Use Cairo time (not UTC) to match the stored checkIn times
             const rateLimitNow = getCairoTime(new Date());
             const thirtySecondsAgo = new Date(rateLimitNow.getTime() - 30000);
-            
+
             console.log('🚨 Rate Limit Debug:', {
                 serverTime: new Date().toISOString(),
                 cairoTime: rateLimitNow.toISOString(),
                 thirtySecondsAgo: thirtySecondsAgo.toISOString(),
                 employeeId: data.employeeId
             });
-            
+
             const { data: anyRecentRecord } = await supabase.from('attendance')
                 .select('id, checkIn, checkOut')
                 .eq('employeeId', data.employeeId)
@@ -1673,19 +1673,19 @@ if (action === "login") {
                 .limit(1);
 
             console.log('🚨 Recent records found:', anyRecentRecord?.length || 0);
-            
+
             if (anyRecentRecord && anyRecentRecord.length > 0) {
                 const lastRecordTime = new Date(anyRecentRecord[0].checkIn);
                 const secondsElapsed = Math.floor((rateLimitNow - lastRecordTime) / 1000);
                 const secondsRemaining = 30 - secondsElapsed;
-                
+
                 console.log('🚨 Last record:', {
                     checkIn: anyRecentRecord[0].checkIn,
                     parsedTime: lastRecordTime.toISOString(),
                     secondsElapsed,
                     secondsRemaining
                 });
-                
+
                 return res.status(200).json({
                     success: false,
                     duplicateEntry: true,
@@ -1696,22 +1696,22 @@ if (action === "login") {
             // 1. Biometric/PIN Check - BLOCK password-only authentication
             // Must have biometric data (face, fingerprint, or Face ID) - NO PIN/password fallback
             const userBioType = data.biometricType || (data.faceDescriptor ? 'face' : null);
-            
+
             // REJECT if no biometric data provided (password/PIN not allowed)
             if (!data.biometricData && !data.faceDescriptor) {
                 throw new Error("⚠️ مطلوب بصمة للتسجيل - لا يُسمح باستخدام PIN أو كلمة المرور للحضور");
             }
-            
+
             // Verify employee has biometric registered
             const { data: empBioData } = await supabase.from('employees')
                 .select('"biometricType", "biometricData", "faceDescriptor"')
                 .eq('id', String(data.employeeId))
                 .maybeSingle();
-            
+
             if (!empBioData) {
                 throw new Error("⚠️ لم يتم تسجيل بصمة لهذا الموظف - يرجى التواصل مع HR");
             }
-            
+
             // Check if employee has ANY biometric registered (face, fingerprint, or Face ID)
             const hasBiometric = empBioData.biometricData || empBioData.faceDescriptor;
             if (!hasBiometric) {
@@ -1847,17 +1847,17 @@ if (action === "login") {
             if (!data.biometricData && !data.faceDescriptor) {
                 throw new Error("⚠️ مطلوب بصمة للتسجيل - لا يُسمح باستخدام PIN أو كلمة المرور للانصراف");
             }
-            
+
             // Verify employee has biometric registered
             const { data: empBioData } = await supabase.from('employees')
                 .select('"biometricType", "biometricData", "faceDescriptor"')
                 .eq('id', String(data.employeeId))
                 .maybeSingle();
-            
+
             if (!empBioData) {
                 throw new Error("⚠️ لم يتم تسجيل بصمة لهذا الموظف - يرجى التواصل مع HR");
             }
-            
+
             // Check if employee has ANY biometric registered (face, fingerprint, or Face ID)
             const hasBiometric = empBioData.biometricData || empBioData.faceDescriptor;
             if (!hasBiometric) {
@@ -1884,7 +1884,7 @@ if (action === "login") {
                 existing = result.data;
                 errExist = result.error;
             }
-            
+
             if (errExist || !existing || existing.length === 0) throw new Error("لا يوجد عملية حضور مفتوحة لنسجل الانصراف");
 
             const checkIn = new Date(existing[0].checkIn);
@@ -1895,17 +1895,17 @@ if (action === "login") {
             // Check if trying to check out on a different day than check-in
             const checkInDate = checkIn.toDateString();
             const checkOutDate = checkOut.toDateString();
-            
+
             if (checkInDate !== checkOutDate) {
                 // Cannot check out on a different day - mark as no_checkout
                 const eod = new Date(existing[0].checkIn);
                 eod.setHours(23, 59, 59, 999);
                 const preservedStatus = existing[0].status === 'overtime' ? 'overtime' : 'no_checkout';
-                
+
                 await supabase.from('attendance')
                     .update({ checkOut: eod.toISOString(), totalHours: 0, status: preservedStatus })
                     .eq('id', existing[0].id);
-                
+
                 throw new Error("لا يمكن تسجيل الانصراف في يوم مختلف عن يوم الحضور. تم تحديث السجل كـ 'لم يتم الانصراف'. يرجى تسجيل الحضور مرة أخرى لبدء يوم جديد.");
             }
 
@@ -1955,92 +1955,92 @@ if (action === "login") {
             return res.status(200).json({ success: true, data: employees || [] });
         }
 
-if (action === "saveEmployee") {
-             const allowances = data.siteAllowances || [];
-             
-             // Hash password before storing (in a real implementation, use bcrypt)
-             // For this implementation, we'll simulate hashing with a simple transformation
-             // NOTE: In production, use proper bcrypt hashing with salt
-             const hashedPassword = data.password ? `$2b$10${Array(22).fill('0').join('').substring(0, 22)}${data.password}` : '';
-             
-             const payload = {
-                 id: data.id,
-                 name: data.name,
-                 email: data.email,
-                 phone: data.phone,
-                 password: hashedPassword,
-                 role: data.role || 'employee',
-                 assignedSites: data.assignedSites || '',
-                 faceDescriptor: data.faceDescriptor || null,
-                 biometricType: data.biometricType || (data.faceDescriptor ? 'face' : null),
-                 biometricData: data.biometricData || data.faceDescriptor || null,
-                 salary: data.salary || 0,
-                 transportPrice: data.transportPrice || 0
-             };
-             
-             // 1. Save to employees table
-             const { error: errEmp } = await supabase.from('employees').insert([payload]);
-             if (errEmp) throw errEmp;
-             
-             // 2. Save site allowances if any
-             if (allowances.length > 0) {
-                 const allowanceRows = allowances.map(a => ({
-                     employeeId: data.id,
-                     siteId: a.siteId,
-                     transportPrice: a.transportPrice
-                 }));
-                 const { error: errAll } = await supabase.from('siteAllowances').insert(allowanceRows);
-                 if (errAll) console.error("Allowances Save Failed:", errAll);
-             }
-             
-             invalidateCache('employees');
-             return res.status(200).json({ success: true, message: "تمت إضافة الموظف بنجاح" });
-         }
+        if (action === "saveEmployee") {
+            const allowances = data.siteAllowances || [];
 
-if (action === "updateEmployee") {
-             const allowances = data.siteAllowances || [];
-             
-             // Hash password before storing if it's being updated (in a real implementation, use bcrypt)
-             // For this implementation, we'll simulate hashing with a simple transformation
-             // NOTE: In production, use proper bcrypt hashing with salt
-             let hashedPassword = data.password;
-             if (data.password && !data.password.startsWith('$2b$')) {
-                 hashedPassword = `$2b$10${Array(22).fill('0').join('').substring(0, 22)}${data.password}`;
-             }
-             
-             const payload = {
-                 name: data.name,
-                 email: data.email,
-                 phone: data.phone,
-                 role: data.role,
-                 assignedSites: data.assignedSites || '',
-                 salary: data.salary || 0,
-                 transportPrice: data.transportPrice || 0
-             };
-             
-             if (data.faceDescriptor) payload.faceDescriptor = data.faceDescriptor;
-             if (data.biometricType) payload.biometricType = data.biometricType;
-             if (data.biometricData) payload.biometricData = data.biometricData;
-             if (data.password) payload.password = hashedPassword;
-             
-             // 1. Update employees table
-             const { error: errEmp } = await supabase.from('employees').update(payload).eq('id', data.id);
-             if (errEmp) throw errEmp;
-             
-             // 2. Sync site allowances: Delete old, add new
-             const { error: errDel } = await supabase.from('siteAllowances').delete().eq('employeeId', data.id);
-             if (!errDel && allowances.length > 0) {
-                 const allowanceRows = allowances.map(a => ({
-                     employeeId: data.id,
-                     siteId: a.siteId,
-                     transportPrice: a.transportPrice || 0
-                 }));
-                 await supabase.from('siteAllowances').insert(allowanceRows);
-             }
-             
-             invalidateCache('employees');
-             return res.status(200).json({ success: true, message: "تم تحديث بيانات الموظف بنجاح" });
-         }
+            // Hash password before storing (in a real implementation, use bcrypt)
+            // For this implementation, we'll simulate hashing with a simple transformation
+            // NOTE: In production, use proper bcrypt hashing with salt
+            const hashedPassword = data.password ? `$2b$10${Array(22).fill('0').join('').substring(0, 22)}${data.password}` : '';
+
+            const payload = {
+                id: data.id,
+                name: data.name,
+                email: data.email,
+                phone: data.phone,
+                password: hashedPassword,
+                role: data.role || 'employee',
+                assignedSites: data.assignedSites || '',
+                faceDescriptor: data.faceDescriptor || null,
+                biometricType: data.biometricType || (data.faceDescriptor ? 'face' : null),
+                biometricData: data.biometricData || data.faceDescriptor || null,
+                salary: data.salary || 0,
+                transportPrice: data.transportPrice || 0
+            };
+
+            // 1. Save to employees table
+            const { error: errEmp } = await supabase.from('employees').insert([payload]);
+            if (errEmp) throw errEmp;
+
+            // 2. Save site allowances if any
+            if (allowances.length > 0) {
+                const allowanceRows = allowances.map(a => ({
+                    employeeId: data.id,
+                    siteId: a.siteId,
+                    transportPrice: a.transportPrice
+                }));
+                const { error: errAll } = await supabase.from('siteAllowances').insert(allowanceRows);
+                if (errAll) console.error("Allowances Save Failed:", errAll);
+            }
+
+            invalidateCache('employees');
+            return res.status(200).json({ success: true, message: "تمت إضافة الموظف بنجاح" });
+        }
+
+        if (action === "updateEmployee") {
+            const allowances = data.siteAllowances || [];
+
+            // Hash password before storing if it's being updated (in a real implementation, use bcrypt)
+            // For this implementation, we'll simulate hashing with a simple transformation
+            // NOTE: In production, use proper bcrypt hashing with salt
+            let hashedPassword = data.password;
+            if (data.password && !data.password.startsWith('$2b$')) {
+                hashedPassword = `$2b$10${Array(22).fill('0').join('').substring(0, 22)}${data.password}`;
+            }
+
+            const payload = {
+                name: data.name,
+                email: data.email,
+                phone: data.phone,
+                role: data.role,
+                assignedSites: data.assignedSites || '',
+                salary: data.salary || 0,
+                transportPrice: data.transportPrice || 0
+            };
+
+            if (data.faceDescriptor) payload.faceDescriptor = data.faceDescriptor;
+            if (data.biometricType) payload.biometricType = data.biometricType;
+            if (data.biometricData) payload.biometricData = data.biometricData;
+            if (data.password) payload.password = hashedPassword;
+
+            // 1. Update employees table
+            const { error: errEmp } = await supabase.from('employees').update(payload).eq('id', data.id);
+            if (errEmp) throw errEmp;
+
+            // 2. Sync site allowances: Delete old, add new
+            const { error: errDel } = await supabase.from('siteAllowances').delete().eq('employeeId', data.id);
+            if (!errDel && allowances.length > 0) {
+                const allowanceRows = allowances.map(a => ({
+                    employeeId: data.id,
+                    siteId: a.siteId,
+                    transportPrice: a.transportPrice || 0
+                }));
+                await supabase.from('siteAllowances').insert(allowanceRows);
+            }
+
+            invalidateCache('employees');
+            return res.status(200).json({ success: true, message: "تم تحديث بيانات الموظف بنجاح" });
+        }
 
         if (action === "deleteEmployee") {
             const { error } = await supabase.from('employees').delete().eq('id', data.id);
@@ -2120,7 +2120,7 @@ if (action === "updateEmployee") {
                     // Try to resolve redirected map link and extract lat/lng
                     const resLink = await fetch(mapLink, { method: 'HEAD', redirect: 'follow' });
                     const resolvedUrl = resLink.url;
-                    
+
                     // Basic extraction attempt from URL
                     const match = resolvedUrl.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
                     if (match) {
@@ -2159,7 +2159,7 @@ if (action === "updateEmployee") {
             };
             const { error } = await supabase.from('siteRequests').insert([payload]);
             if (error) throw error;
-            
+
             // Create notification for HR
             await supabase.from('notifications').insert([{
                 id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
@@ -2171,7 +2171,7 @@ if (action === "updateEmployee") {
                 isRead: false,
                 createdAt: new Date().toISOString()
             }]);
-            
+
             // Send email notification
             await sendRequestNotificationEmail(supabase, {
                 type: 'site',
@@ -2179,23 +2179,23 @@ if (action === "updateEmployee") {
                 details: `اسم الموقع المقترح: ${data.suggestedName}${data.note ? ' - ملاحظة: ' + data.note : ''}`,
                 requestId: payload.id
             }, req.headers.host);
-            
-            return res.status(200).json({ 
-                success: true, 
-                message: "تم إرسال طلب الموقع بنجاح. سيتم تفعيل الموافقة التلقائية خلال دقيقتين إذا كنت في الموقع." 
+
+            return res.status(200).json({
+                success: true,
+                message: "تم إرسال طلب الموقع بنجاح. سيتم تفعيل الموافقة التلقائية خلال دقيقتين إذا كنت في الموقع."
             });
         }
 
         if (action === "approveSiteRequest") {
             const { id, name, transportPrice, radius, mode, mapLink, approvedBy } = data;
-            
+
             // 1. Update Request table
             const { data: reqData, error: errFetch } = await supabase.from('siteRequests').select('*').eq('id', id).single();
             if (errFetch || !reqData) throw new Error("الطلب غير موجود");
 
             const finalStatus = (mode === 'daily' || mode === 'today') ? 'approved_today' : 'approved';
             const { error: errReq } = await supabase.from('siteRequests')
-                .update({ 
+                .update({
                     status: finalStatus,
                     approvedAt: new Date().toISOString(),
                     transportPrice: transportPrice || reqData.transportPrice,
@@ -2219,7 +2219,7 @@ if (action === "updateEmployee") {
             };
             const { error: errSite } = await supabase.from('sites').insert([sitePayload]);
             if (errSite) throw errSite;
-            
+
             // Notify employee
             const approvalType = isTemp ? 'لليوم فقط' : 'بشكل دائم';
             await supabase.from('notifications').insert([{
@@ -2232,7 +2232,7 @@ if (action === "updateEmployee") {
                 isRead: false,
                 createdAt: new Date().toISOString()
             }]);
-            
+
             return res.status(200).json({ success: true, message: "تمت الموافقة على الطلب بنجاح" });
         }
 
@@ -2240,15 +2240,15 @@ if (action === "updateEmployee") {
             const { id, approvedBy } = data;
             // Get request data first for notification
             const { data: reqData } = await supabase.from('siteRequests').select('*').eq('id', id).single();
-            
+
             const { error } = await supabase.from('siteRequests')
-                .update({ 
+                .update({
                     status: 'rejected',
                     autoMeta: approvedBy || 'HR'
                 })
                 .eq('id', id);
             if (error) throw error;
-            
+
             // Notify employee
             if (reqData) {
                 await supabase.from('notifications').insert([{
@@ -2262,7 +2262,7 @@ if (action === "updateEmployee") {
                     createdAt: new Date().toISOString()
                 }]);
             }
-            
+
             return res.status(200).json({ success: true, message: "تم رفض الطلب بنجاح" });
         }
 
@@ -2287,7 +2287,7 @@ if (action === "updateEmployee") {
                 .select('*')
                 .eq('employeeId', employeeId)
                 .ilike('checkIn', `${date}%`);
-            
+
             if (error) throw error;
             return res.status(200).json({ success: true, data: att || [] });
         }
@@ -2309,7 +2309,7 @@ if (action === "updateEmployee") {
             };
             const { error } = await supabase.from('allowanceRequests').insert([payload]);
             if (error) throw error;
-            
+
             // Create notification for HR
             await supabase.from('notifications').insert([{
                 id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
@@ -2321,7 +2321,7 @@ if (action === "updateEmployee") {
                 isRead: false,
                 createdAt: new Date().toISOString()
             }]);
-            
+
             // Send email notification
             await sendRequestNotificationEmail(supabase, {
                 type: 'allowance',
@@ -2329,7 +2329,7 @@ if (action === "updateEmployee") {
                 details: `مبلغ الزيادة: ${data.amount} ج.م - الموقع: ${data.siteName}${data.note ? ' - ملاحظة: ' + data.note : ''}`,
                 requestId: payload.id || data.id
             }, req.headers.host);
-            
+
             return res.status(200).json({ success: true, message: "تم إرسال طلب زيادة البدلات بنجاح" });
         }
 
@@ -2343,14 +2343,14 @@ if (action === "updateEmployee") {
 
         if (action === "handleAllowanceRequest") {
             const { requestId, status, adminId, adminName, adminNote } = data;
-            
+
             // 1. Fetch the request
             const { data: reqData, error: errReq } = await supabase
                 .from('allowanceRequests')
                 .select('*')
                 .eq('id', requestId)
                 .single();
-            
+
             if (errReq || !reqData) throw new Error("الطلب غير موجود");
             if (reqData.status !== 'pending') throw new Error("تمت معالجة هذا الطلب مسبقاً");
 
@@ -2361,7 +2361,7 @@ if (action === "updateEmployee") {
                     .select('transportPrice')
                     .eq('id', reqData.attendanceId)
                     .single();
-                
+
                 if (errAtt || !attData) throw new Error("سجل الحضور المرتبط بالطلب غير موجود");
 
                 const newPrice = parseFloat(attData.transportPrice || 0) + parseFloat(reqData.amount);
@@ -2371,21 +2371,21 @@ if (action === "updateEmployee") {
                     .from('attendance')
                     .update({ transportPrice: newPrice })
                     .eq('id', reqData.attendanceId);
-                
+
                 if (errUpdAtt) throw errUpdAtt;
             }
 
             // 4. Update request status
             const { error: errUpdReq } = await supabase
                 .from('allowanceRequests')
-                .update({ 
-                    status: status, 
+                .update({
+                    status: status,
                     approvedBy: adminName || 'HR Admin',
                     rejectionReason: status === 'rejected' ? (adminNote || 'تم الرفض بواسطة الإدارة') : '',
-                    adminNote: adminNote || '' 
+                    adminNote: adminNote || ''
                 })
                 .eq('id', requestId);
-            
+
             if (errUpdReq) throw errUpdReq;
 
             // 5. Add Log
@@ -2399,13 +2399,13 @@ if (action === "updateEmployee") {
                 details: adminNote || (status === 'approved' ? 'تمت الموافقة على الطلب' : 'تم رفض الطلب'),
                 timestamp: new Date().toISOString()
             }]);
-            
+
             // 6. Notify employee
             const notifTitle = status === 'approved' ? 'تمت الموافقة على طلب زيادة البدلات' : 'تم رفض طلب زيادة البدلات';
-            const notifMessage = status === 'approved' 
+            const notifMessage = status === 'approved'
                 ? `تمت الموافقة على طلب زيادة البدلات بمبلغ ${reqData.amount} ج.م` + (adminName ? ` (بواسطة: ${adminName})` : '')
                 : `تم رفض طلب زيادة البدلات بمبلغ ${reqData.amount} ج.م` + (adminName ? ` (بواسطة: ${adminName})` : '') + `${adminNote ? `. السبب: ${adminNote}` : ''}`;
-            
+
             await supabase.from('notifications').insert([{
                 id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
                 userId: reqData.employeeId,
@@ -2417,9 +2417,9 @@ if (action === "updateEmployee") {
                 createdAt: new Date().toISOString()
             }]);
 
-            return res.status(200).json({ 
-                success: true, 
-                message: status === 'approved' ? "تمت الموافقة وتحديث البدلات بنجاح" : "تم رفض الطلب" 
+            return res.status(200).json({
+                success: true,
+                message: status === 'approved' ? "تمت الموافقة وتحديث البدلات بنجاح" : "تم رفض الطلب"
             });
         }
 
@@ -2447,28 +2447,28 @@ if (action === "updateEmployee") {
             const { employeeId, employeeName, leaveDate, reason } = data;
             const startDate = data.startDate || leaveDate;
             const endDate = data.endDate || leaveDate;
-            
+
             if (!startDate || !endDate) return res.status(200).json({ success: false, message: "تاريخ البدء والانتهاء مطلوبان" });
             if (!reason) return res.status(200).json({ success: false, message: "سبب الإجازة مطلوب" });
-            
+
             const start = new Date(startDate);
             const end = new Date(endDate);
-            
+
             if (isNaN(start.getTime()) || isNaN(end.getTime())) {
                 return res.status(200).json({ success: false, message: "صيغة التاريخ غير صالحة" });
             }
-            
+
             if (end < start) {
                 return res.status(200).json({ success: false, message: "تاريخ البدء يجب أن يكون قبل أو يساوي تاريخ الانتهاء" });
             }
-            
+
             // Calculate days diff (inclusive)
             const diffTime = Math.abs(end - start);
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
             if (diffDays > 30) {
                 return res.status(200).json({ success: false, message: "لا يمكن تقديم طلب إجازة لأكثر من 30 يوماً دفعة واحدة" });
             }
-            
+
             // Generate list of ISO date strings for the range
             const dates = [];
             let current = new Date(startDate);
@@ -2476,7 +2476,7 @@ if (action === "updateEmployee") {
                 dates.push(current.toISOString().split('T')[0]);
                 current.setDate(current.getDate() + 1);
             }
-            
+
             // Fetch existing pending/approved requests for this employee in this range
             const { data: existingRequests, error: checkErr } = await supabase
                 .from('leaveRequests')
@@ -2484,18 +2484,18 @@ if (action === "updateEmployee") {
                 .eq('employeeId', employeeId)
                 .in('leaveDate', dates)
                 .in('status', ['pending', 'approved']);
-            
+
             if (checkErr) throw checkErr;
-            
+
             const existingDates = new Set(existingRequests.map(r => r.leaveDate.split('T')[0]));
-            
+
             // Filter dates to insert (only those that do not already have a pending/approved request)
             const datesToInsert = dates.filter(d => !existingDates.has(d));
-            
+
             if (datesToInsert.length === 0) {
                 return res.status(200).json({ success: false, message: "لديك طلبات إجازة موجودة بالفعل لجميع التواريخ المحددة" });
             }
-            
+
             const payloads = datesToInsert.map(d => ({
                 id: "LEAVE" + Math.floor(10000 + Math.random() * 90000),
                 employeeId,
@@ -2505,17 +2505,17 @@ if (action === "updateEmployee") {
                 status: 'pending',
                 createdAt: new Date().toISOString()
             }));
-            
+
             const { error } = await supabase.from('leaveRequests').insert(payloads);
             if (error) throw error;
-            
+
             // Create a single combined notification/email for the HR to avoid spamming
-            const displayDateText = diffDays === 1 
-                ? `بتاريخ ${startDate}` 
+            const displayDateText = diffDays === 1
+                ? `بتاريخ ${startDate}`
                 : `من تاريخ ${startDate} إلى ${endDate} (${payloads.length} يوم عمل فعلي)`;
-            
+
             const mainRequestId = payloads[0].id;
-            
+
             await supabase.from('notifications').insert([{
                 id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
                 userRole: 'hr',
@@ -2526,7 +2526,7 @@ if (action === "updateEmployee") {
                 isRead: false,
                 createdAt: new Date().toISOString()
             }]);
-            
+
             // Send email notification
             await sendRequestNotificationEmail(supabase, {
                 type: 'leave',
@@ -2534,7 +2534,7 @@ if (action === "updateEmployee") {
                 details: `فترة الإجازة: ${displayDateText} - نوع الإجازة: ${reason}`,
                 requestId: mainRequestId
             }, req.headers.host);
-            
+
             // Sync to Google Sheets for each date individually
             for (const d of datesToInsert) {
                 syncToGoogleSheet({
@@ -2545,11 +2545,11 @@ if (action === "updateEmployee") {
                     reason
                 });
             }
-            
-            const resultMsg = diffDays === 1 
-                ? "تم تقديم طلب الإجازة بنجاح" 
+
+            const resultMsg = diffDays === 1
+                ? "تم تقديم طلب الإجازة بنجاح"
                 : `تم تقديم طلب الإجازة لعدد ${payloads.length} أيام بنجاح. (تم تجاهل الأيام المسجلة مسبقاً إن وجدت)`;
-            
+
             return res.status(200).json({ success: true, message: resultMsg });
         }
 
@@ -2563,18 +2563,18 @@ if (action === "updateEmployee") {
 
         if (action === "approveLeaveRequest") {
             const { id, approvedBy } = data;
-            
+
             // Get the request first to notify employee
             const { data: req, error: getErr } = await supabase.from('leaveRequests').select('*').eq('id', id).single();
             if (getErr) throw getErr;
-            
+
             const { error } = await supabase.from('leaveRequests').update({
                 status: 'approved',
                 approvedAt: new Date().toISOString(),
                 approvedBy: approvedBy || 'HR'
             }).eq('id', id);
             if (error) throw error;
-            
+
             // Notify employee
             await supabase.from('notifications').insert([{
                 id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
@@ -2586,23 +2586,23 @@ if (action === "updateEmployee") {
                 isRead: false,
                 createdAt: new Date().toISOString()
             }]);
-            
+
             return res.status(200).json({ success: true, message: "تمت الموافقة على طلب الإجازة بنجاح" });
         }
 
         if (action === "rejectLeaveRequest") {
             const { id, rejectionReason } = data;
-            
+
             // Get the request first to notify employee
             const { data: req, error: getErr } = await supabase.from('leaveRequests').select('*').eq('id', id).single();
             if (getErr) throw getErr;
-            
+
             const { error } = await supabase.from('leaveRequests').update({
                 status: 'rejected',
                 rejectionReason: rejectionReason || ''
             }).eq('id', id);
             if (error) throw error;
-            
+
             // Notify employee
             await supabase.from('notifications').insert([{
                 id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
@@ -2614,7 +2614,7 @@ if (action === "updateEmployee") {
                 isRead: false,
                 createdAt: new Date().toISOString()
             }]);
-            
+
             return res.status(200).json({ success: true, message: "تم رفض طلب الإجازة" });
         }
 
@@ -2639,45 +2639,45 @@ if (action === "updateEmployee") {
         // --- NOTIFICATIONS ---
         if (action === "getNotifications") {
             const { userId, userRole } = data;
-            
+
             let query = supabase.from('notifications').select('*').eq('isRead', false);
-            
+
             if (userId) query = query.eq('userId', userId);
             else if (userRole) query = query.eq('userRole', userRole);
             else return res.status(200).json({ success: false, message: "userId أو userRole مطلوب" });
-            
+
             const { data: notifs, error } = await query.order('createdAt', { ascending: false });
             if (error) throw error;
-            
+
             return res.status(200).json({ success: true, notifications: notifs || [], count: notifs?.length || 0 });
         }
 
         if (action === "markNotificationAsRead") {
             const { notificationId } = data;
-            
+
             const { error } = await supabase.from('notifications').update({
                 isRead: true,
                 readAt: new Date().toISOString()
             }).eq('id', notificationId);
             if (error) throw error;
-            
+
             return res.status(200).json({ success: true, message: "تم تحديث الإشعار" });
         }
 
         if (action === "markAllNotificationsAsRead") {
             const { userId, userRole } = data;
-            
+
             let query = supabase.from('notifications').update({
                 isRead: true,
                 readAt: new Date().toISOString()
             }).eq('isRead', false);
-            
+
             if (userId) query = query.eq('userId', userId);
             else if (userRole) query = query.eq('userRole', userRole);
-            
+
             const { error, data: updated } = await query;
             if (error) throw error;
-            
+
             return res.status(200).json({ success: true, message: `تم تحديث ${updated?.length || 0} إشعار` });
         }
 
@@ -2880,10 +2880,10 @@ if (action === "updateEmployee") {
 
             await Promise.all(promises);
 
-            return res.status(200).json({ 
-                success: true, 
-                message: `تم تسجيل سداد عدد ${recordsToPay.length} بدل بنجاح`, 
-                count: recordsToPay.length 
+            return res.status(200).json({
+                success: true,
+                message: `تم تسجيل سداد عدد ${recordsToPay.length} بدل بنجاح`,
+                count: recordsToPay.length
             });
         }
 
@@ -2923,10 +2923,10 @@ if (action === "updateEmployee") {
 
             await Promise.all(promises);
 
-            return res.status(200).json({ 
-                success: true, 
-                message: `تم إلغاء سداد عدد ${recordsToRollback.length} بدل بنجاح`, 
-                count: recordsToRollback.length 
+            return res.status(200).json({
+                success: true,
+                message: `تم إلغاء سداد عدد ${recordsToRollback.length} بدل بنجاح`,
+                count: recordsToRollback.length
             });
         }
 
@@ -2983,8 +2983,8 @@ if (action === "updateEmployee") {
                 databaseSize: sizeData ? Math.round(sizeData / 1024 / 1024 * 100) / 100 : null,
                 freeTierLimit: 500,
                 usagePercent: sizeData ? Math.round((sizeData / (500 * 1024 * 1024)) * 100) : null,
-                status: sizeData && sizeData < (450 * 1024 * 1024) ? 'healthy' : 
-                        sizeData && sizeData < (480 * 1024 * 1024) ? 'warning' : 'critical'
+                status: sizeData && sizeData < (450 * 1024 * 1024) ? 'healthy' :
+                    sizeData && sizeData < (480 * 1024 * 1024) ? 'warning' : 'critical'
             };
 
             return res.status(200).json({ success: true, data: stats });
@@ -2997,21 +2997,21 @@ if (action === "updateEmployee") {
         // --- SUBMIT DEVICE CHANGE REQUEST (Employee) ---
         if (action === "submitDeviceChangeRequest") {
             const { employeeId, employeeName, currentDeviceId, newDeviceInfo, reason } = data;
-            
+
             if (!employeeId || !newDeviceInfo?.deviceId) {
                 return res.status(200).json({ success: false, message: "بيانات غير مكتملة" });
             }
-            
+
             const result = await createDeviceChangeRequest(
-                supabase, 
-                employeeId, 
-                employeeName, 
-                currentDeviceId, 
-                newDeviceInfo, 
+                supabase,
+                employeeId,
+                employeeName,
+                currentDeviceId,
+                newDeviceInfo,
                 reason,
                 req.headers.host
             );
-            
+
             return res.status(200).json(result);
         }
 
@@ -3022,36 +3022,36 @@ if (action === "updateEmployee") {
                 .from('device_change_requests')
                 .select('*')
                 .order('created_at', { ascending: false });
-            
+
             if (status) {
                 query = query.eq('status', status);
             }
-            
+
             const { data: requests, error } = await query;
             if (error) throw error;
-            
+
             return res.status(200).json({ success: true, data: requests || [] });
         }
 
         // --- APPROVE DEVICE CHANGE REQUEST (Admin) ---
         if (action === "approveDeviceChangeRequest") {
             const { requestId, adminId, adminName } = data;
-            
+
             // 1. Get the request
             const { data: request, error: reqError } = await supabase
                 .from('device_change_requests')
                 .select('*')
                 .eq('id', requestId)
                 .single();
-            
+
             if (reqError || !request) {
                 return res.status(200).json({ success: false, message: "الطلب غير موجود" });
             }
-            
+
             if (request.status !== 'pending') {
                 return res.status(200).json({ success: false, message: "تمت معالجة هذا الطلب مسبقاً" });
             }
-            
+
             // 2. Deactivate old device (if exists)
             if (request.old_device_id) {
                 await supabase
@@ -3060,14 +3060,14 @@ if (action === "updateEmployee") {
                     .eq('user_id', request.user_id)
                     .eq('device_id', request.old_device_id);
             }
-            
+
             // 3. Deactivate any other active devices for this user
             await supabase
                 .from('devices')
                 .update({ is_active: false, updated_at: new Date().toISOString() })
                 .eq('user_id', request.user_id)
                 .eq('is_active', true);
-            
+
             // 4. Add or update new device (upsert to handle case where device already exists)
             const { error: upsertError } = await supabase
                 .from('devices')
@@ -3082,12 +3082,12 @@ if (action === "updateEmployee") {
                 }, {
                     onConflict: 'user_id,device_id'
                 });
-            
+
             if (upsertError) {
                 console.error('Device upsert error:', upsertError);
                 return res.status(200).json({ success: false, message: "فشل إضافة/تحديث الجهاز الجديد: " + upsertError.message });
             }
-            
+
             // 5. Update request status
             const { error: updateError } = await supabase
                 .from('device_change_requests')
@@ -3097,35 +3097,35 @@ if (action === "updateEmployee") {
                     processed_by: adminId || adminName || 'admin'
                 })
                 .eq('id', requestId);
-            
+
             if (updateError) {
                 return res.status(200).json({ success: false, message: "فشل تحديث حالة الطلب" });
             }
-            
-            return res.status(200).json({ 
-                success: true, 
-                message: `تم الموافقة على طلب تغيير الجهاز بنجاح. الجهاز الجديد مسجل للموظف.` 
+
+            return res.status(200).json({
+                success: true,
+                message: `تم الموافقة على طلب تغيير الجهاز بنجاح. الجهاز الجديد مسجل للموظف.`
             });
         }
 
         // --- REJECT DEVICE CHANGE REQUEST (Admin) ---
         if (action === "rejectDeviceChangeRequest") {
             const { requestId, adminNote, adminId, adminName } = data;
-            
+
             const { data: request, error: reqError } = await supabase
                 .from('device_change_requests')
                 .select('*')
                 .eq('id', requestId)
                 .single();
-            
+
             if (reqError || !request) {
                 return res.status(200).json({ success: false, message: "الطلب غير موجود" });
             }
-            
+
             if (request.status !== 'pending') {
                 return res.status(200).json({ success: false, message: "تمت معالجة هذا الطلب مسبقاً" });
             }
-            
+
             const { error } = await supabase
                 .from('device_change_requests')
                 .update({
@@ -3135,11 +3135,11 @@ if (action === "updateEmployee") {
                     processed_by: adminId || adminName || 'admin'
                 })
                 .eq('id', requestId);
-            
+
             if (error) {
                 return res.status(200).json({ success: false, message: "فشل رفض الطلب" });
             }
-            
+
             return res.status(200).json({ success: true, message: "تم رفض طلب تغيير الجهاز بنجاح" });
         }
 
@@ -3149,15 +3149,15 @@ if (action === "updateEmployee") {
                 .from('device_change_requests')
                 .delete()
                 .in('status', ['approved', 'rejected']);
-            
+
             if (error) {
                 console.error("Clear processed device requests error:", error);
                 return res.status(200).json({ success: false, message: "فشل مسح الطلبات المنتهية" });
             }
-            
-            return res.status(200).json({ 
-                success: true, 
-                message: "تم مسح جميع طلبات تغيير الأجهزة المنتهية بنجاح" 
+
+            return res.status(200).json({
+                success: true,
+                message: "تم مسح جميع طلبات تغيير الأجهزة المنتهية بنجاح"
             });
         }
 
@@ -3170,9 +3170,9 @@ if (action === "updateEmployee") {
                     employees:user_id (name, email, phone)
                 `)
                 .order('created_at', { ascending: false });
-            
+
             if (error) throw error;
-            
+
             // Format the data to include user info
             const formattedDevices = (devices || []).map(d => ({
                 ...d,
@@ -3180,7 +3180,7 @@ if (action === "updateEmployee") {
                 userEmail: d.employees?.email || '',
                 userPhone: d.employees?.phone || ''
             }));
-            
+
             return res.status(200).json({ success: true, data: formattedDevices });
         }
 
@@ -3202,7 +3202,7 @@ if (action === "updateEmployee") {
                 .eq('device_id', actualDeviceId)
                 .eq('employeeId', userId)
                 .select();
-            
+
             if (attError) {
                 console.error('Error deleting attendance:', attError);
             }
@@ -3228,21 +3228,21 @@ if (action === "updateEmployee") {
         // --- GET USER DEVICE INFO (Employee/Admin) ---
         if (action === "getUserDevice") {
             const { userId } = data;
-            
+
             if (!userId) {
                 return res.status(200).json({ success: false, message: "معرف المستخدم مطلوب" });
             }
-            
+
             const { data: devices, error } = await supabase
                 .from('devices')
                 .select('*')
                 .eq('user_id', userId)
                 .eq('is_active', true);
-            
+
             if (error) throw error;
-            
-            return res.status(200).json({ 
-                success: true, 
+
+            return res.status(200).json({
+                success: true,
                 data: devices || [],
                 hasDevice: devices && devices.length > 0
             });
