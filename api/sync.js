@@ -2,8 +2,9 @@ import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwNhaRKDP-7M4dXSQend8RbYPkXRgs5nzN0-BmNzxEO8IkBN9lt6KDtJCdOqpovhJEY1Q/exec';
+const GOOGLE_SCRIPT_URL = process.env.GOOGLE_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwNhaRKDP-7M4dXSQend8RbYPkXRgs5nzN0-BmNzxEO8IkBN9lt6KDtJCdOqpovhJEY1Q/exec';
 const SYNC_DEFAULT_PASSWORD = process.env.SYNC_DEFAULT_PASSWORD || '';
+const RETENTION_DAYS = 365;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 const READ_PAGE_SIZE = 1000;
@@ -356,6 +357,8 @@ export default async function handler(req, res) {
         const attendanceToInsert = [];
         const attendanceToUpdate = [];
 
+        const retentionCutoffMs = Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
         for (const attendance of gsAttendance) {
             const employeeId = normalizeString(attendance.employeeId);
             const sig = getAttendanceSig(attendance);
@@ -363,6 +366,12 @@ export default async function handler(req, res) {
             if (!sig) {
                 stats.attendanceSkipped++;
                 pushIssue(issues, 'Skipped attendance row with invalid employeeId/checkIn');
+                continue;
+            }
+
+            // Skip historical archived records to prevent infinite sync-archive loop
+            const parsedCheckIn = parseTimeMs(attendance.checkIn);
+            if (parsedCheckIn !== null && parsedCheckIn < retentionCutoffMs) {
                 continue;
             }
 
