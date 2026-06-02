@@ -2755,6 +2755,11 @@ function renderSiteRequestsTable(data) {
             statusColor = 'var(--danger)';
         }
 
+        let statusHtml = `<span style="color:${statusColor}">${statusText}</span>`;
+        if (req.status !== 'pending' && req.autoMeta) {
+            statusHtml += `<br><small style="color:var(--text-muted); font-size:0.8rem;">بواسطة: ${req.autoMeta}</small>`;
+        }
+
         const canOverrideAutoApprovedToday = req.status === 'approved_today' && req.isAutoApproved && req.isActiveToday;
         const canManageRequest = req.status === 'pending' || canOverrideAutoApprovedToday;
         const actions = canManageRequest ? `
@@ -2785,7 +2790,7 @@ function renderSiteRequestsTable(data) {
                 <td data-label="مرفق">${receiptHtml}</td>
                 <td data-label="الإحداثيات" dir="ltr">${req.latitude}, ${req.longitude}</td>
                 <td data-label="التاريخ">${dateStr}</td>
-                <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
+                <td data-label="الحالة">${statusHtml}</td>
                 <td data-label="الإجراءات">${actions}</td>
             </tr>
         `);
@@ -2828,7 +2833,8 @@ async function confirmApproval(mode) {
                 transportPrice: transportPrice, 
                 radius: radius,
                 mode: mode,
-                mapLink: mapLink
+                mapLink: mapLink,
+                approvedBy: hrSession ? hrSession.name : 'HR Admin'
             }),
             headers: { 'Content-Type': 'text/plain' }
         });
@@ -2849,7 +2855,11 @@ async function rejectRequest(id) {
     try {
         const res = await fetch(API_URL, {
             method: 'POST',
-            body: JSON.stringify({ action: 'rejectSiteRequest', id: id }),
+            body: JSON.stringify({ 
+                action: 'rejectSiteRequest', 
+                id: id,
+                approvedBy: hrSession ? hrSession.name : 'HR Admin'
+            }),
             headers: { 'Content-Type': 'text/plain' }
         });
         const result = await res.json();
@@ -2933,6 +2943,21 @@ function renderAllowanceRequestsTable(data) {
             `;
         }
 
+        let statusHtml = `<span style="color:${statusColor}">${statusText}</span>`;
+        if (req.status === 'approved' && req.approvedBy) {
+            statusHtml += `<br><small style="color:var(--text-muted); font-size:0.8rem;">بواسطة: ${req.approvedBy}</small>`;
+        } else if (req.status === 'rejected') {
+            const approver = req.approvedBy || (req.rejectionReason && req.rejectionReason.includes('البريد') ? req.rejectionReason : '');
+            if (approver) {
+                statusHtml += `<br><small style="color:var(--text-muted); font-size:0.8rem;">بواسطة: ${approver}</small>`;
+            }
+            if (req.adminNote && !req.adminNote.includes('تمت المعالجة')) {
+                statusHtml += `<br><small style="color:var(--text-muted); font-size:0.75rem;">ملاحظة: ${req.adminNote}</small>`;
+            } else if (req.rejectionReason && !req.rejectionReason.includes('البريد') && req.rejectionReason !== 'تم الرفض بواسطة الإدارة') {
+                statusHtml += `<br><small style="color:var(--text-muted); font-size:0.75rem;">السبب: ${req.rejectionReason}</small>`;
+            }
+        }
+
         const createdAt = formatCairoDate(req.createdAt) + ' ' + formatCairoTime(req.createdAt);
 
         html.push(`
@@ -2943,7 +2968,7 @@ function renderAllowanceRequestsTable(data) {
                 <td data-label="المبلغ">${req.amount} ج.م</td>
                 <td data-label="الملاحظة">${req.note || '-'}</td>
                 <td data-label="التاريخ">${createdAt}</td>
-                <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
+                <td data-label="الحالة">${statusHtml}</td>
                 <td data-label="الإجراءات" style="display:flex; gap:5px;">${actions}</td>
             </tr>
         `);
@@ -3272,6 +3297,14 @@ function renderDeviceChangeRequests(requests) {
             actions = '<span style="color:var(--text-muted); font-size:0.8rem;">تم الرفض</span>';
         }
         
+        let statusHtml = `<span style="color:${statusColor}">${statusText}</span>`;
+        if (req.status !== 'pending' && req.processed_by) {
+            statusHtml += `<br><small style="color:var(--text-muted); font-size:0.8rem;">بواسطة: ${req.processed_by}</small>`;
+        }
+        if (req.status === 'rejected' && req.admin_note) {
+            statusHtml += `<br><small style="color:var(--text-muted); font-size:0.75rem;">ملاحظة: ${req.admin_note}</small>`;
+        }
+
         const createdAt = formatCairoDate(req.created_at) + ' ' + formatCairoTime(req.created_at);
         const oldDeviceVal = req.old_device_id || 'لا يوجد';
         const newDeviceVal = req.new_device_id || 'غير معروف';
@@ -3283,7 +3316,7 @@ function renderDeviceChangeRequests(requests) {
                 <td data-label="الجهاز الجديد" title="${req.new_device_id || ''}" style="max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${newDeviceVal}</td>
                 <td data-label="نظام التشغيل">${req.new_os_type || '-'}</td>
                 <td data-label="التاريخ">${createdAt}</td>
-                <td data-label="الحالة"><span style="color:${statusColor}">${statusText}</span></td>
+                <td data-label="الحالة">${statusHtml}</td>
                 <td data-label="الإجراءات" style="display:flex; gap:5px;">${actions}</td>
             </tr>
         `);

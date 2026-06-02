@@ -1209,7 +1209,8 @@ if (action === "login") {
                             status: finalStatus,
                             approvedAt: new Date().toISOString(),
                             transportPrice: reqData.transportPrice,
-                            tempRadius: reqData.tempRadius
+                            tempRadius: reqData.tempRadius,
+                            autoMeta: approvedByVal
                         })
                         .eq('id', requestId);
                     if (errReq) throw errReq;
@@ -1240,7 +1241,12 @@ if (action === "login") {
                         createdAt: new Date().toISOString()
                     }]);
                 } else {
-                    const { error } = await supabase.from('siteRequests').update({ status: 'rejected' }).eq('id', requestId);
+                    const { error } = await supabase.from('siteRequests')
+                        .update({ 
+                            status: 'rejected',
+                            autoMeta: approverEmail ? `تم الرفض عبر البريد (${approverEmail})` : 'تم الرفض عبر البريد الإلكتروني'
+                        })
+                        .eq('id', requestId);
                     if (error) throw error;
                     
                     // Notify employee
@@ -1286,6 +1292,8 @@ if (action === "login") {
                     .from('allowanceRequests')
                     .update({ 
                         status: decision, 
+                        approvedBy: approvedByVal,
+                        rejectionReason: decision === 'rejected' ? (approverEmail ? `تم الرفض عبر البريد (${approverEmail})` : 'تم الرفض عبر البريد الإلكتروني') : '',
                         adminNote: approverEmail ? `تمت المعالجة عبر البريد (${approverEmail})` : 'تمت المعالجة عبر البريد الإلكتروني' 
                     })
                     .eq('id', requestId);
@@ -2179,7 +2187,7 @@ if (action === "updateEmployee") {
         }
 
         if (action === "approveSiteRequest") {
-            const { id, name, transportPrice, radius, mode, mapLink } = data;
+            const { id, name, transportPrice, radius, mode, mapLink, approvedBy } = data;
             
             // 1. Update Request table
             const { data: reqData, error: errFetch } = await supabase.from('siteRequests').select('*').eq('id', id).single();
@@ -2191,7 +2199,8 @@ if (action === "updateEmployee") {
                     status: finalStatus,
                     approvedAt: new Date().toISOString(),
                     transportPrice: transportPrice || reqData.transportPrice,
-                    tempRadius: radius || reqData.tempRadius
+                    tempRadius: radius || reqData.tempRadius,
+                    autoMeta: approvedBy || 'HR'
                 })
                 .eq('id', id);
             if (errReq) throw errReq;
@@ -2217,7 +2226,7 @@ if (action === "updateEmployee") {
                 id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
                 userId: reqData.employeeId,
                 title: 'تمت الموافقة على موقعك',
-                message: `تمت الموافقة على طلب تسجيل الموقع: ${name || reqData.suggestedName} ${approvalType}`,
+                message: `تمت الموافقة على طلب تسجيل الموقع: ${name || reqData.suggestedName} ${approvalType}` + (approvedBy ? ` (بواسطة: ${approvedBy})` : ''),
                 type: 'site_approved',
                 relatedId: id,
                 isRead: false,
@@ -2228,10 +2237,16 @@ if (action === "updateEmployee") {
         }
 
         if (action === "rejectSiteRequest") {
+            const { id, approvedBy } = data;
             // Get request data first for notification
-            const { data: reqData } = await supabase.from('siteRequests').select('*').eq('id', data.id).single();
+            const { data: reqData } = await supabase.from('siteRequests').select('*').eq('id', id).single();
             
-            const { error } = await supabase.from('siteRequests').update({ status: 'rejected' }).eq('id', data.id);
+            const { error } = await supabase.from('siteRequests')
+                .update({ 
+                    status: 'rejected',
+                    autoMeta: approvedBy || 'HR'
+                })
+                .eq('id', id);
             if (error) throw error;
             
             // Notify employee
@@ -2240,9 +2255,9 @@ if (action === "updateEmployee") {
                     id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
                     userId: reqData.employeeId,
                     title: 'تم رفض طلب موقعك',
-                    message: `تم رفض طلب تسجيل الموقع: ${reqData.suggestedName}`,
+                    message: `تم رفض طلب تسجيل الموقع: ${reqData.suggestedName}` + (approvedBy ? ` (بواسطة: ${approvedBy})` : ''),
                     type: 'site_rejected',
-                    relatedId: data.id,
+                    relatedId: id,
                     isRead: false,
                     createdAt: new Date().toISOString()
                 }]);
@@ -2365,6 +2380,8 @@ if (action === "updateEmployee") {
                 .from('allowanceRequests')
                 .update({ 
                     status: status, 
+                    approvedBy: adminName || 'HR Admin',
+                    rejectionReason: status === 'rejected' ? (adminNote || 'تم الرفض بواسطة الإدارة') : '',
                     adminNote: adminNote || '' 
                 })
                 .eq('id', requestId);
@@ -2386,8 +2403,8 @@ if (action === "updateEmployee") {
             // 6. Notify employee
             const notifTitle = status === 'approved' ? 'تمت الموافقة على طلب زيادة البدلات' : 'تم رفض طلب زيادة البدلات';
             const notifMessage = status === 'approved' 
-                ? `تمت الموافقة على طلب زيادة البدلات بمبلغ ${reqData.amount} ج.م`
-                : `تم رفض طلب زيادة البدلات بمبلغ ${reqData.amount} ج.م${adminNote ? `. السبب: ${adminNote}` : ''}`;
+                ? `تمت الموافقة على طلب زيادة البدلات بمبلغ ${reqData.amount} ج.م` + (adminName ? ` (بواسطة: ${adminName})` : '')
+                : `تم رفض طلب زيادة البدلات بمبلغ ${reqData.amount} ج.م` + (adminName ? ` (بواسطة: ${adminName})` : '') + `${adminNote ? `. السبب: ${adminNote}` : ''}`;
             
             await supabase.from('notifications').insert([{
                 id: "NOTIF" + Math.floor(10000 + Math.random() * 90000),
