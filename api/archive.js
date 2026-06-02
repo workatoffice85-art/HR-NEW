@@ -63,21 +63,30 @@ export default async function handler(req, res) {
                 });
                 
                 if (gsRes.ok) {
-                    // Delete archived records from Supabase
-                    const idsToDelete = oldRecords.map(r => r.id);
-                    const { error: deleteError } = await supabase
-                        .from('attendance')
-                        .delete()
-                        .in('id', idsToDelete);
+                    try {
+                        const responseData = await gsRes.json();
+                        if (responseData && responseData.success === true) {
+                            // Delete archived records from Supabase
+                            const idsToDelete = oldRecords.map(r => r.id);
+                            const { error: deleteError } = await supabase
+                                .from('attendance')
+                                .delete()
+                                .in('id', idsToDelete);
 
-                    if (deleteError) {
-                        results.errors.push(`Delete error: ${deleteError.message}`);
-                    } else {
-                        results.archived += oldRecords.length;
-                        results.deleted += oldRecords.length;
+                            if (deleteError) {
+                                results.errors.push(`Delete error: ${deleteError.message}`);
+                            } else {
+                                results.archived += oldRecords.length;
+                                results.deleted += oldRecords.length;
+                            }
+                        } else {
+                            results.errors.push(`Google Sheets archive internal failure: ${responseData ? responseData.message : 'Unknown error'}`);
+                        }
+                    } catch (parseError) {
+                        results.errors.push(`Failed to parse Google Sheets response: ${parseError.message}`);
                     }
                 } else {
-                    results.errors.push(`Google Sheets archive failed: ${gsRes.status}`);
+                    results.errors.push(`Google Sheets archive failed: HTTP ${gsRes.status}`);
                 }
             } catch (e) {
                 results.errors.push(`Archive sync error: ${e.message}`);

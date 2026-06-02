@@ -802,6 +802,46 @@ async function generateEmployeeDetailedReport() {
         await fetchAttendance();
     }
 
+    // --- SMART RETRIEVAL LAYER FOR OLD ARCHIVED ATTENDANCE ---
+    const retentionCutoff = new Date();
+    retentionCutoff.setDate(retentionCutoff.getDate() - 365);
+    
+    if (startDate < retentionCutoff) {
+        const loader = document.getElementById('loader');
+        if (loader) loader.classList.remove('hidden');
+        try {
+            const res = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'getAttendance',
+                    employeeId: employeeId,
+                    startDate: startStr,
+                    endDate: endStr,
+                    includeArchive: true
+                })
+            });
+            const result = await res.json();
+            if (result.success && Array.isArray(result.data)) {
+                // Merge into allAttendanceData to prevent duplicates and keep cache updated
+                const attMap = new Map();
+                allAttendanceData.forEach(r => {
+                    const sig = r.id || `${r.employeeId}_${r.checkIn}`;
+                    attMap.set(sig, r);
+                });
+                result.data.forEach(r => {
+                    const sig = r.id || `${r.employeeId}_${r.checkIn}`;
+                    attMap.set(sig, r);
+                });
+                allAttendanceData = Array.from(attMap.values());
+            }
+        } catch (e) {
+            console.error("Failed to fetch historical attendance archive:", e);
+        }
+        if (loader) loader.classList.add('hidden');
+    }
+    // --- END OF SMART RETRIEVAL LAYER ---
+
     const employeeRecords = allAttendanceData.filter(record => {
         const recordDateStr = record.checkIn ? record.checkIn.slice(0, 10) : '';
         if (!recordDateStr) return false;
@@ -1157,16 +1197,58 @@ async function sendEmployeeDetailedReport() {
 }
 
 // Reports Logic
-function generateReport() {
+async function generateReport() {
     const startStr = document.getElementById('reportStartDate').value;
     const endStr = document.getElementById('reportEndDate').value;
     
-    if(!startStr || !endStr || allAttendanceData.length === 0) return;
+    if(!startStr || !endStr) return;
     
     const startDate = new Date(startStr);
     startDate.setHours(0,0,0,0);
     const endDate = new Date(endStr);
     endDate.setHours(23,59,59,999);
+
+    // --- SMART RETRIEVAL LAYER FOR OLD ARCHIVED ATTENDANCE (GENERAL REPORT) ---
+    const retentionCutoff = new Date();
+    retentionCutoff.setDate(retentionCutoff.getDate() - 365);
+    
+    if (startDate < retentionCutoff) {
+        const loader = document.getElementById('loader');
+        if (loader) loader.classList.remove('hidden');
+        try {
+            const res = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'getAttendance',
+                    startDate: startStr,
+                    endDate: endStr,
+                    includeArchive: true
+                })
+            });
+            const result = await res.json();
+            if (result.success && Array.isArray(result.data)) {
+                // Merge into allAttendanceData
+                const attMap = new Map();
+                allAttendanceData.forEach(r => {
+                    const sig = r.id || `${r.employeeId}_${r.checkIn}`;
+                    attMap.set(sig, r);
+                });
+                result.data.forEach(r => {
+                    const sig = r.id || `${r.employeeId}_${r.checkIn}`;
+                    attMap.set(sig, r);
+                });
+                allAttendanceData = Array.from(attMap.values());
+            }
+        } catch (e) {
+            console.error("Failed to fetch general historical attendance archive:", e);
+        }
+        if (loader) loader.classList.add('hidden');
+    }
+    // --- END OF SMART RETRIEVAL LAYER ---
+
+    if (allAttendanceData.length === 0) return;
+    
 
     // Filter records for the range (using Cairo-normalized dates)
     const filtered = allAttendanceData.filter(record => {

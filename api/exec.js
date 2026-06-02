@@ -25,6 +25,37 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false }
 });
 
+// --- Google Sheets Archive Caching Layer ---
+let googleSheetsAttendanceCache = null;
+let googleSheetsCacheTimestamp = 0;
+const GOOGLE_SHEETS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache
+
+async function fetchGoogleSheetsAttendanceWithCache() {
+    const now = Date.now();
+    if (googleSheetsAttendanceCache && (now - googleSheetsCacheTimestamp < GOOGLE_SHEETS_CACHE_TTL)) {
+        return googleSheetsAttendanceCache;
+    }
+
+    try {
+        const gsRes = await fetch(`${GOOGLE_SCRIPT_URL}?action=getDashboardData&t=${now}`, {
+            method: 'GET',
+            headers: { Accept: 'application/json' }
+        });
+        if (!gsRes.ok) throw new Error(`Google Sheets fetch failed with status ${gsRes.status}`);
+        
+        const gsData = await gsRes.json();
+        if (!gsData.success) throw new Error(gsData.message || "Failed to fetch Google Sheets dashboard data");
+        
+        googleSheetsAttendanceCache = Array.isArray(gsData.attendance) ? gsData.attendance : [];
+        googleSheetsCacheTimestamp = now;
+        return googleSheetsAttendanceCache;
+    } catch (err) {
+        console.error("fetchGoogleSheetsAttendanceWithCache error:", err.message);
+        // Graceful fallback to empty array if tables don't exist in Google Sheet yet
+        return [];
+    }
+}
+
 /**
  * Generate a cryptographically signed HMAC token for email approvals
  * @param {string} requestId - The request ID
@@ -1446,9 +1477,59 @@ if (action === "login") {
         if (action === "getAttendance") {
             let query = supabase.from('attendance').select('*').order('checkIn', { ascending: true });
             if (data.employeeId) query = query.eq('employeeId', data.employeeId);
-            const { data: att, error } = await query;
+            const { data: sbAtt, error } = await query;
             if (error) throw error;
-            return res.status(200).json({ success: true, data: att });
+
+            let mergedAttendance = sbAtt || [];
+
+            // Detect if historical archive data is needed (if requested explicitly or start date is older than 365 days)
+            const retentionCutoff = new Date();
+            retentionCutoff.setDate(retentionCutoff.getDate() - 365);
+            const hasOldDateRequested = data.startDate && new Date(data.startDate) < retentionCutoff;
+
+            if (data.includeArchive === true || hasOldDateRequested) {
+                try {
+                    // Fetch full historical archive list from Google Sheets
+                    const gsAttendance = await fetchGoogleSheetsAttendanceWithCache();
+                    
+                    // Filter sheets rows by employee and date parameters if present
+                    let filteredGs = gsAttendance;
+                    if (data.employeeId) {
+                        filteredGs = filteredGs.filter(r => String(r.employeeId) === String(data.employeeId));
+                    }
+                    if (data.startDate) {
+                        filteredGs = filteredGs.filter(r => r.checkIn && r.checkIn.slice(0, 10) >= data.startDate);
+                    }
+                    if (data.endDate) {
+                        filteredGs = filteredGs.filter(r => r.checkIn && r.checkIn.slice(0, 10) <= data.endDate);
+                    }
+
+                    // Merging and Deduplication by attendance ID or signature
+                    const attMap = new Map();
+                    
+                    // Add Google Sheets records first (historical)
+                    filteredGs.forEach(record => {
+                        const sig = record.id || `${record.employeeId}_${Date.parse(record.checkIn)}`;
+                        attMap.set(sig, record);
+                    });
+                    
+                    // Add Supabase records (which takes priority / updates sheets records)
+                    mergedAttendance.forEach(record => {
+                        const sig = record.id || `${record.employeeId}_${Date.parse(record.checkIn)}`;
+                        attMap.set(sig, record);
+                    });
+
+                    mergedAttendance = Array.from(attMap.values());
+                    
+                    // Sort ascending by checkIn date
+                    mergedAttendance.sort((a, b) => new Date(a.checkIn) - new Date(b.checkIn));
+                } catch (gsError) {
+                    console.error("Failed to merge archive records from Google Sheets:", gsError);
+                    // Safe fallback: continue with Supabase-only data
+                }
+            }
+
+            return res.status(200).json({ success: true, data: mergedAttendance });
         }
 
         // --- ADD ATTENDANCE (CHECK-IN) ---
