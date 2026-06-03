@@ -5,6 +5,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>لوحة تحكم الموارد البشرية | HR Dashboard</title>
+    <!-- PWA Settings -->
+    <link rel="manifest" href="../manifest.json">
+    <meta name="theme-color" content="#5EAD32">
+    <!-- Fonts & Scripts -->
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../assets/global.css?v=1.2">
     <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
@@ -1085,7 +1089,16 @@
             </div>
         </div>
     </div>
-
+    <!-- PWA Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('../sw.js')
+                    .then(reg => console.log('Service Worker registered successfully!', reg.scope))
+                    .catch(err => console.error('Service Worker registration failed:', err));
+            });
+        }
+    </script>
     <script src="app.js?v=1.5"></script>
 </body>
 
