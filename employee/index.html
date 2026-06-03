@@ -618,7 +618,7 @@
                 <h4 style="margin: 0 0 10px 0; color: #a5b4fc; font-size: 0.95rem; font-weight: 700;">تثبيت التطبيق على هاتفك 📱</h4>
                 
                 <!-- Install Button (Visible when browser supports and app is not installed) -->
-                <button id="pwaInstallBtn" class="btn-primary hidden" style="background: linear-gradient(135deg, #4f46e5, #4338ca) !important; box-shadow: 0 4px 15px rgba(79, 70, 229, 0.35) !important; margin: 0 auto 12px; height: 42px !important; font-size: 0.9rem !important; width: 85% !important;" onclick="triggerPwaInstall()">
+                <button id="pwaInstallBtn" class="btn-primary" style="background: linear-gradient(135deg, #4f46e5, #4338ca) !important; box-shadow: 0 4px 15px rgba(79, 70, 229, 0.35) !important; margin: 0 auto 12px; height: 42px !important; font-size: 0.9rem !important; width: 85% !important;" onclick="triggerPwaInstall()">
                     📥 تثبيت التطبيق الآن
                 </button>
                 
@@ -934,6 +934,35 @@
             </div>
         </div>
 
+        <!-- PWA Manual Installation Guide Modal -->
+        <div id="pwaManualInstallModal" class="modal hidden"
+            style="position:fixed; top:0; left:0; width:100%; height:100%; display:none; align-items:center; justify-content:center; z-index:10000; direction: rtl;">
+            <div class="glass-card" style="max-width: 400px; width: 90%; text-align: center; padding: 30px 24px;">
+                <h3 style="margin-bottom: 15px; font-weight: 800; color: #fff;">كيفية تثبيت التطبيق 📱</h3>
+                <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px; line-height: 1.6;">
+                    التثبيت التلقائي غير مدعوم في متصفحك الحالي أو التطبيق مثبت بالفعل. يمكنك تثبيته يدوياً بالخطوات البسيطة التالية:
+                </p>
+                
+                <div style="text-align: right; margin-bottom: 24px; font-size: 0.9rem; line-height: 1.6;">
+                    <!-- Android/Chrome instructions -->
+                    <div style="margin-bottom: 15px; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);">
+                        <strong style="color: var(--primary); display: block; margin-bottom: 6px;">🤖 هواتف الأندرويد والكمبيوتر (Chrome):</strong>
+                        1. اضغط على زر القائمة (<b>النقاط الثلاث</b>) في أعلى يسار المتصفح.<br>
+                        2. اختر <b>تثبيت التطبيق (Install app)</b> أو <b>إضافة إلى الشاشة الرئيسية (Add to Home screen)</b>.
+                    </div>
+                    
+                    <!-- iOS/Safari instructions -->
+                    <div style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);">
+                        <strong style="color: #818cf8; display: block; margin-bottom: 6px;">🍎 هواتف الآيفون (Safari):</strong>
+                        1. اضغط على زر <b>المشاركة (Share)</b> <span style="font-size:1.1rem;">⎋</span> في أسفل المتصفح.<br>
+                        2. مرر لأسفل واختر <b>إضافة إلى الصفحة الرئيسية (Add to Home Screen)</b>.
+                    </div>
+                </div>
+                
+                <button class="btn-primary" style="background: var(--secondary) !important; box-shadow: none !important; margin: 0 auto; width: 60% !important; height: 42px !important; font-size: 0.95rem !important;" onclick="closePwaManualInstallModal()">فهمت</button>
+            </div>
+        </div>
+
         <!-- 6. My Reports Section -->
         <div id="myReportsSection" class="glass-card hidden fade-in">
             <div class="header">
@@ -1032,6 +1061,15 @@
                 navigator.serviceWorker.register('../sw.js')
                     .then(reg => console.log('Service Worker registered successfully!', reg.scope))
                     .catch(err => console.error('Service Worker registration failed:', err));
+                
+                // Hide PWA install options if already running in standalone PWA mode
+                const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+                if (isStandalone) {
+                    const installContainer = document.getElementById('pwaInstallContainer');
+                    if (installContainer) {
+                        installContainer.classList.add('hidden');
+                    }
+                }
             });
         }
 
@@ -1041,7 +1079,7 @@
             e.preventDefault();
             // Stash the event so it can be triggered later.
             deferredPrompt = e;
-            // Update UI to notify the user they can install the PWA
+            // Ensure the install button is visible
             const installBtn = document.getElementById('pwaInstallBtn');
             if (installBtn) {
                 installBtn.classList.remove('hidden');
@@ -1049,30 +1087,59 @@
             console.log('[PWA] beforeinstallprompt event fired');
         });
 
+        // Open manual installation modal
+        function openPwaManualInstallModal() {
+            const modal = document.getElementById('pwaManualInstallModal');
+            if (modal) {
+                modal.classList.remove('hidden');
+                modal.style.display = 'flex';
+            }
+        }
+
+        // Close manual installation modal
+        function closePwaManualInstallModal() {
+            const modal = document.getElementById('pwaManualInstallModal');
+            if (modal) {
+                modal.classList.add('hidden');
+                modal.style.display = 'none';
+            }
+        }
+
         // Trigger the PWA installation
         async function triggerPwaInstall() {
-            if (!deferredPrompt) return;
-            // Show the prompt
-            deferredPrompt.prompt();
-            // Wait for the user to respond to the prompt
-            const { outcome } = await deferredPrompt.userChoice;
-            console.log(`[PWA] User response to the install prompt: ${outcome}`);
-            // We've used the prompt, and can't use it again
-            deferredPrompt = null;
-            // Hide the install button
-            const installBtn = document.getElementById('pwaInstallBtn');
-            if (installBtn) {
-                installBtn.classList.add('hidden');
+            console.log('[PWA] triggerPwaInstall - deferredPrompt status:', !!deferredPrompt);
+            if (!deferredPrompt) {
+                // If native installation is not available, show manual guidance modal
+                openPwaManualInstallModal();
+                return;
+            }
+            try {
+                // Show the browser install prompt
+                deferredPrompt.prompt();
+                // Wait for the user to respond to the prompt
+                const { outcome } = await deferredPrompt.userChoice;
+                console.log(`[PWA] User response to the install prompt: ${outcome}`);
+                // Clear the prompt event
+                deferredPrompt = null;
+                // Hide the install button since it was prompted
+                const installBtn = document.getElementById('pwaInstallBtn');
+                if (installBtn) {
+                    installBtn.classList.add('hidden');
+                }
+            } catch (err) {
+                console.error('[PWA] Error during installation prompt:', err);
+                // Fallback to manual guidance modal in case of error
+                openPwaManualInstallModal();
             }
         }
 
         // Listen for the appinstalled event
         window.addEventListener('appinstalled', (evt) => {
             console.log('[PWA] App installed successfully!');
-            // Hide the install button
-            const installBtn = document.getElementById('pwaInstallBtn');
-            if (installBtn) {
-                installBtn.classList.add('hidden');
+            // Hide the install container completely
+            const installContainer = document.getElementById('pwaInstallContainer');
+            if (installContainer) {
+                installContainer.classList.add('hidden');
             }
         });
     </script>
