@@ -612,6 +612,28 @@
             <div id="loginError" class="error-text hidden" style="margin-top:15px; padding:10px; text-align:center;">
             </div>
             <span class="link-text" onclick="showSection('otpSection')">أنت موظف جديد؟ سجل حسابك الآن</span>
+            
+            <!-- PWA Installation Helper -->
+            <div id="pwaInstallContainer" style="margin-top: 25px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.08); text-align: center;">
+                <h4 style="margin: 0 0 10px 0; color: #a5b4fc; font-size: 0.95rem; font-weight: 700;">تثبيت التطبيق على هاتفك 📱</h4>
+                
+                <!-- Install Button (Visible when browser supports and app is not installed) -->
+                <button id="pwaInstallBtn" class="btn-primary hidden" style="background: linear-gradient(135deg, #4f46e5, #4338ca) !important; box-shadow: 0 4px 15px rgba(79, 70, 229, 0.35) !important; margin: 0 auto 12px; height: 42px !important; font-size: 0.9rem !important; width: 85% !important;" onclick="triggerPwaInstall()">
+                    📥 تثبيت التطبيق الآن
+                </button>
+                
+                <!-- Instructions / Hints -->
+                <div style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.5; background: rgba(255, 255, 255, 0.02); padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.04); text-align: right;">
+                    <div style="margin-bottom: 6px; display: flex; align-items: flex-start; gap: 6px;">
+                        <span>💡</span>
+                        <span>لأفضل تجربة، يرجى فتح الموقع باستخدام متصفح <b>Google Chrome</b> ليظهر لك خيار التثبيت مباشرة.</span>
+                    </div>
+                    <div style="display: flex; align-items: flex-start; gap: 6px;">
+                        <span>🍎</span>
+                        <span><b>أجهزة الآيفون (iOS):</b> افتح الموقع في متصفح <b>Safari</b>، واضغط على زر المشاركة <span style="font-size:0.9rem;">⎋</span> ثم اختر <b>إضافة إلى الصفحة الرئيسية (Add to Home Screen)</b>.</span>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- 2. Request OTP Section (For Registration) -->
@@ -1001,8 +1023,10 @@
         </div>
     </div>
 
-    <!-- PWA Service Worker Registration -->
+    <!-- PWA Service Worker Registration & Installation Prompt -->
     <script>
+        let deferredPrompt = null;
+
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('../sw.js')
@@ -1010,6 +1034,47 @@
                     .catch(err => console.error('Service Worker registration failed:', err));
             });
         }
+
+        // Listen for the beforeinstallprompt event
+        window.addEventListener('beforeinstallprompt', (e) => {
+            // Prevent Chrome 67 and earlier from automatically showing the prompt
+            e.preventDefault();
+            // Stash the event so it can be triggered later.
+            deferredPrompt = e;
+            // Update UI to notify the user they can install the PWA
+            const installBtn = document.getElementById('pwaInstallBtn');
+            if (installBtn) {
+                installBtn.classList.remove('hidden');
+            }
+            console.log('[PWA] beforeinstallprompt event fired');
+        });
+
+        // Trigger the PWA installation
+        async function triggerPwaInstall() {
+            if (!deferredPrompt) return;
+            // Show the prompt
+            deferredPrompt.prompt();
+            // Wait for the user to respond to the prompt
+            const { outcome } = await deferredPrompt.userChoice;
+            console.log(`[PWA] User response to the install prompt: ${outcome}`);
+            // We've used the prompt, and can't use it again
+            deferredPrompt = null;
+            // Hide the install button
+            const installBtn = document.getElementById('pwaInstallBtn');
+            if (installBtn) {
+                installBtn.classList.add('hidden');
+            }
+        }
+
+        // Listen for the appinstalled event
+        window.addEventListener('appinstalled', (evt) => {
+            console.log('[PWA] App installed successfully!');
+            // Hide the install button
+            const installBtn = document.getElementById('pwaInstallBtn');
+            if (installBtn) {
+                installBtn.classList.add('hidden');
+            }
+        });
     </script>
     <script src="app.js?v=2.1"></script>
 </body>
