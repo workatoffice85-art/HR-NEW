@@ -767,6 +767,12 @@
                 </button>
             </div>
 
+            <!-- PWA Install Button inside Dashboard -->
+            <button id="pwaInstallBtnDashboard" class="btn-primary"
+                style="margin-top:10px; background: linear-gradient(135deg, #4f46e5, #4338ca) !important; box-shadow: 0 4px 15px rgba(79, 70, 229, 0.35) !important;" onclick="triggerPwaInstall()">
+                📥 تثبيت التطبيق على الهاتف
+            </button>
+
             <!-- Request Site Button (Hidden by default) -->
             <button id="btnAllowanceRequest" class="btn-primary"
                 style="margin-top:10px; background: linear-gradient(135deg, #8b5cf6, #7c3aed) !important; box-shadow: 0 4px 15px rgba(139, 92, 246, 0.35) !important;" onclick="openAllowanceModal()">
@@ -1069,6 +1075,10 @@
                     if (installContainer) {
                         installContainer.classList.add('hidden');
                     }
+                    const installBtnDashboard = document.getElementById('pwaInstallBtnDashboard');
+                    if (installBtnDashboard) {
+                        installBtnDashboard.classList.add('hidden');
+                    }
                 }
             });
         }
@@ -1079,10 +1089,14 @@
             e.preventDefault();
             // Stash the event so it can be triggered later.
             deferredPrompt = e;
-            // Ensure the install button is visible
+            // Ensure the install buttons are visible
             const installBtn = document.getElementById('pwaInstallBtn');
             if (installBtn) {
                 installBtn.classList.remove('hidden');
+            }
+            const installBtnDashboard = document.getElementById('pwaInstallBtnDashboard');
+            if (installBtnDashboard) {
+                installBtnDashboard.classList.remove('hidden');
             }
             console.log('[PWA] beforeinstallprompt event fired');
         });
@@ -1121,10 +1135,14 @@
                 console.log(`[PWA] User response to the install prompt: ${outcome}`);
                 // Clear the prompt event
                 deferredPrompt = null;
-                // Hide the install button since it was prompted
+                // Hide the install buttons since it was prompted
                 const installBtn = document.getElementById('pwaInstallBtn');
                 if (installBtn) {
                     installBtn.classList.add('hidden');
+                }
+                const installBtnDashboard = document.getElementById('pwaInstallBtnDashboard');
+                if (installBtnDashboard) {
+                    installBtnDashboard.classList.add('hidden');
                 }
             } catch (err) {
                 console.error('[PWA] Error during installation prompt:', err);
@@ -1140,6 +1158,10 @@
             const installContainer = document.getElementById('pwaInstallContainer');
             if (installContainer) {
                 installContainer.classList.add('hidden');
+            }
+            const installBtnDashboard = document.getElementById('pwaInstallBtnDashboard');
+            if (installBtnDashboard) {
+                installBtnDashboard.classList.add('hidden');
             }
         });
     </script>
