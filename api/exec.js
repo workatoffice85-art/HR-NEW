@@ -1479,16 +1479,22 @@ export default async function handler(req, res) {
         // --- EMPLOYEE DASHBOARD INIT ---
         if (action === "getPortalInitialData") {
             const empId = data.employeeId;
-            const [siteRes, attRes, leaveRes] = await Promise.all([
+            const [siteRes, attRes, leaveRes, allowanceRes, siteReqRes, deviceReqRes] = await Promise.all([
                 supabase.from('sites').select('*'),
                 supabase.from('attendance').select('*').eq('employeeId', empId).order('checkIn', { ascending: true }),
-                supabase.from('leaveRequests').select('*').eq('employeeId', empId).order('leaveDate', { ascending: false })
+                supabase.from('leaveRequests').select('*').eq('employeeId', empId).order('leaveDate', { ascending: false }),
+                supabase.from('allowanceRequests').select('*').eq('employeeId', empId).order('createdAt', { ascending: false }),
+                supabase.from('siteRequests').select('*').eq('employeeId', empId).order('timestamp', { ascending: false }),
+                supabase.from('device_change_requests').select('*').eq('user_id', empId).order('created_at', { ascending: false })
             ]);
             return res.status(200).json({
                 success: true,
                 sites: siteRes.data || [],
                 attendance: attRes.data || [],
-                leaveRequests: leaveRes.data || []
+                leaveRequests: leaveRes.data || [],
+                allowanceRequests: allowanceRes.data || [],
+                siteRequests: siteReqRes.data || [],
+                deviceChangeRequests: deviceReqRes.data || []
             });
         }
 

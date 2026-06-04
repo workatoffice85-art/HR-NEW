@@ -798,6 +798,8 @@
 
             <button class="btn-primary" style="margin-top:20px;"
                 onclick="showMyReports()">تقارير الحضور الخاصة بي</button>
+            <button class="btn-primary" style="margin-top:10px; background: linear-gradient(135deg, #3b82f6, #1d4ed8) !important; box-shadow: 0 4px 15px rgba(59, 130, 246, 0.35) !important;"
+                onclick="showMyRequests()">📊 متابعة طلباتي</button>
             <button class="btn-primary"
                 style="margin-top:10px; background:transparent !important; border:1px solid rgba(255,255,255,0.2) !important; box-shadow: none !important;"
                 onclick="logout()">تسجيل خروج</button>
@@ -1031,6 +1033,32 @@
                     </thead>
                     <tbody id="myReportsTableBody"></tbody>
                 </table>
+            </div>
+        </div>
+
+        <!-- 7. My Requests Section -->
+        <div id="myRequestsSection" class="glass-card hidden fade-in">
+            <div class="header">
+                <h2>📊 متابعة طلباتي</h2>
+                <p style="color:var(--text-muted); font-size:0.9rem;">هنا يمكنك متابعة حالة طلباتك المقدمة للإدارة (إجازات، بدلات، مواقع، أجهزة)</p>
+            </div>
+            
+            <div style="display:flex; justify-content:space-between; margin-bottom: 20px; align-items: center; gap: 10px;">
+                <select id="requestTypeFilter" onchange="renderMyRequestsList()"
+                    style="padding: 8px 12px; border-radius: 12px; background: rgba(0,0,0,0.3); color: #fff; border: 1px solid var(--card-border); font-size: 0.95rem; font-family: var(--font-family); outline: none; flex: 1; height: 42px;">
+                    <option value="all">كل الطلبات</option>
+                    <option value="leave">📅 طلبات الإجازات</option>
+                    <option value="allowance">💰 طلبات زيادة البدلات</option>
+                    <option value="site">📍 طلبات تسجيل المواقع</option>
+                    <option value="device">📱 طلبات تغيير الأجهزة</option>
+                </select>
+                <button class="btn-primary" style="width: auto; padding: 0 16px; height: 42px !important; font-size: 0.9rem !important; box-shadow: none !important;"
+                    onclick="showSection('dashboardSection')">عودة للرئيسية</button>
+            </div>
+
+            <!-- Request Cards / List Container -->
+            <div id="myRequestsListContainer" style="max-height: 480px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 4px;">
+                <!-- Cards will be populated dynamically -->
             </div>
         </div>
     </div>

@@ -54,6 +54,8 @@ let sitesData = [];
 let allAttendanceData = [];
 let allLeaveRequests = [];
 let allAllowanceRequests = [];
+let allSiteRequests = [];
+let allDeviceChangeRequests = [];
 let approvedAllowanceExtraMap = null;
 let faceMatcher = null;
 let currentFaceDescriptor = null; // DEPRECATED: use currentBiometricVerification
@@ -170,7 +172,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function showSection(id) {
-    const sections = ['loginSection', 'otpSection', 'verifyOTPSection', 'registrationSection', 'dashboardSection', 'myReportsSection'];
+    const sections = ['loginSection', 'otpSection', 'verifyOTPSection', 'registrationSection', 'dashboardSection', 'myReportsSection', 'myRequestsSection'];
     sections.forEach(s => {
         const el = document.getElementById(s);
         if (el) el.classList.add('hidden');
@@ -481,6 +483,9 @@ async function initSystem() {
         sitesData = cachedData.sites || [];
         allAttendanceData = cachedData.attendance || [];
         allLeaveRequests = cachedData.leaveRequests || [];
+        allAllowanceRequests = cachedData.allowanceRequests || [];
+        allSiteRequests = cachedData.siteRequests || [];
+        allDeviceChangeRequests = cachedData.deviceChangeRequests || [];
         allOfficialHolidays = cachedHolidays || [];
         appSettings = cachedSettings || {};
 
@@ -535,6 +540,9 @@ async function initSystem() {
                 sitesData = dataResult.sites || [];
                 allAttendanceData = dataResult.attendance || [];
                 allLeaveRequests = dataResult.leaveRequests || [];
+                allAllowanceRequests = dataResult.allowanceRequests || [];
+                allSiteRequests = dataResult.siteRequests || [];
+                allDeviceChangeRequests = dataResult.deviceChangeRequests || [];
                 
                 if (holidaysResult.success) {
                     allOfficialHolidays = holidaysResult.data || [];
@@ -548,7 +556,10 @@ async function initSystem() {
                 AppCache.set(cacheKeyData, {
                     sites: sitesData,
                     attendance: allAttendanceData,
-                    leaveRequests: allLeaveRequests
+                    leaveRequests: allLeaveRequests,
+                    allowanceRequests: allAllowanceRequests,
+                    siteRequests: allSiteRequests,
+                    deviceChangeRequests: allDeviceChangeRequests
                 });
                 AppCache.set('official_holidays', allOfficialHolidays);
                 AppCache.set('app_settings', appSettings);
@@ -2978,3 +2989,314 @@ document.addEventListener('click', (e) => {
         dropdown.classList.add('hidden');
     }
 });
+
+// ------ MY REQUESTS TRACKING SYSTEM ------ //
+function showMyRequests() {
+    showSection('myRequestsSection');
+    // Set default filter to 'all'
+    const filterSelect = document.getElementById('requestTypeFilter');
+    if (filterSelect) filterSelect.value = 'all';
+    
+    // Initial render from local cache/variables
+    renderMyRequestsList();
+    
+    // Fetch fresh data in the background
+    fetchMyRequestsFresh();
+}
+
+async function fetchMyRequestsFresh() {
+    if (!currentUser || !currentUser.id) return;
+    
+    try {
+        const cacheKeyData = `portal_initial_data_${currentUser.id}`;
+        const res = await fetch(`${API_URL}?action=getPortalInitialData&employeeId=${encodeURIComponent(currentUser.id)}`);
+        const dataResult = await res.json();
+        
+        if (dataResult.success) {
+            sitesData = dataResult.sites || [];
+            allAttendanceData = dataResult.attendance || [];
+            allLeaveRequests = dataResult.leaveRequests || [];
+            allAllowanceRequests = dataResult.allowanceRequests || [];
+            allSiteRequests = dataResult.siteRequests || [];
+            allDeviceChangeRequests = dataResult.deviceChangeRequests || [];
+            
+            // Save to local cache
+            const cachedData = AppCache.get(cacheKeyData) || {};
+            AppCache.set(cacheKeyData, {
+                ...cachedData,
+                sites: sitesData,
+                attendance: allAttendanceData,
+                leaveRequests: allLeaveRequests,
+                allowanceRequests: allAllowanceRequests,
+                siteRequests: allSiteRequests,
+                deviceChangeRequests: allDeviceChangeRequests
+            });
+            
+            // Re-render if the user is still on the requests page
+            const currentSection = document.getElementById('myRequestsSection');
+            if (currentSection && !currentSection.classList.contains('hidden')) {
+                renderMyRequestsList();
+            }
+        }
+    } catch (e) {
+        console.error("Error fetching fresh requests list:", e);
+    }
+}
+
+function renderMyRequestsList() {
+    const filterSelect = document.getElementById('requestTypeFilter');
+    const container = document.getElementById('myRequestsListContainer');
+    if (!container) return;
+    
+    const filter = filterSelect ? filterSelect.value : 'all';
+    let list = [];
+    
+    // 1. Leave Requests (Group consecutive days with same reason and status)
+    if (filter === 'all' || filter === 'leave') {
+        const sortedLeaves = [...allLeaveRequests].sort((a, b) => new Date(a.leaveDate) - new Date(b.leaveDate));
+        const groupedLeaves = [];
+        
+        sortedLeaves.forEach(req => {
+            const lastGroup = groupedLeaves[groupedLeaves.length - 1];
+            if (lastGroup && 
+                lastGroup.status === req.status && 
+                lastGroup.reason === req.reason &&
+                (new Date(req.leaveDate) - new Date(lastGroup.endDate)) <= 24 * 60 * 60 * 1000 * 1.5) {
+                lastGroup.endDate = req.leaveDate;
+                lastGroup.daysCount++;
+                lastGroup.ids.push(req.id);
+            } else {
+                groupedLeaves.push({
+                    type: 'leave',
+                    startDate: req.leaveDate,
+                    endDate: req.leaveDate,
+                    reason: req.reason,
+                    status: req.status,
+                    rejectionReason: req.rejectionReason,
+                    approvedBy: req.approvedBy,
+                    approvedAt: req.approvedAt,
+                    createdAt: req.createdAt || req.leaveDate,
+                    daysCount: 1,
+                    ids: [req.id]
+                });
+            }
+        });
+        
+        list.push(...groupedLeaves);
+    }
+    
+    // 2. Allowance Requests
+    if (filter === 'all' || filter === 'allowance') {
+        allAllowanceRequests.forEach(req => {
+            list.push({
+                type: 'allowance',
+                id: req.id,
+                date: req.requestDate,
+                amount: req.amount,
+                siteName: req.siteName,
+                note: req.note,
+                status: req.status,
+                rejectionReason: req.rejectionReason,
+                adminNote: req.adminNote,
+                approvedBy: req.approvedBy,
+                approvedAt: req.approvedAt,
+                createdAt: req.createdAt
+            });
+        });
+    }
+    
+    // 3. Site Requests
+    if (filter === 'all' || filter === 'site') {
+        allSiteRequests.forEach(req => {
+            list.push({
+                type: 'site',
+                id: req.id,
+                suggestedName: req.suggestedName,
+                note: req.note,
+                status: req.status,
+                mapLink: req.mapLink,
+                createdAt: req.timestamp || req.approvedAt,
+                approvedAt: req.approvedAt,
+                autoMeta: req.autoMeta
+            });
+        });
+    }
+    
+    // 4. Device Change Requests
+    if (filter === 'all' || filter === 'device') {
+        allDeviceChangeRequests.forEach(req => {
+            list.push({
+                type: 'device',
+                id: req.id,
+                newDeviceModel: req.new_device_model,
+                reason: req.reason,
+                status: req.status,
+                adminNote: req.admin_note,
+                createdAt: req.created_at,
+                processedAt: req.processed_at,
+                processedBy: req.processed_by
+            });
+        });
+    }
+    
+    // Sort all requests by creation date descending
+    list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    
+    if (list.length === 0) {
+        container.innerHTML = `
+            <div style="text-align: center; color: var(--text-muted); padding: 40px 20px;">
+                <span style="font-size: 3rem; display: block; margin-bottom: 10px;">📭</span>
+                لا توجد طلبات مسجلة في هذا القسم.
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '';
+    list.forEach(req => {
+        const dateStr = formatCairoDate(req.createdAt);
+        const statusMeta = getRequestStatusMeta(req.status);
+        
+        let cardTitle = '';
+        let cardIcon = '';
+        let cardBody = '';
+        let detailsHtml = '';
+        
+        if (req.type === 'leave') {
+            cardIcon = '📅';
+            cardTitle = 'طلب إجازة';
+            const rangeText = req.daysCount === 1 
+                ? `يوم ${formatCairoDate(req.startDate)}`
+                : `من ${formatCairoDate(req.startDate)} إلى ${formatCairoDate(req.endDate)} (${req.daysCount} أيام)`;
+            
+            cardBody = `
+                <div><strong>الفترة:</strong> ${rangeText}</div>
+                <div><strong>نوع الإجازة:</strong> ${req.reason}</div>
+            `;
+            
+            if (req.status === 'rejected' && req.rejectionReason) {
+                detailsHtml = `<div style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed rgba(239,68,68,0.2); color: var(--danger); font-size: 0.85rem;">
+                    <strong>سبب الرفض:</strong> ${req.rejectionReason}
+                </div>`;
+            } else if (req.status === 'approved') {
+                detailsHtml = `<div style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed rgba(16,185,129,0.2); color: var(--secondary); font-size: 0.85rem;">
+                    <strong>بواسطة:</strong> ${req.approvedBy || 'HR'}
+                </div>`;
+            }
+        } 
+        else if (req.type === 'allowance') {
+            cardIcon = '💰';
+            cardTitle = 'طلب زيادة بدلات';
+            cardBody = `
+                <div><strong>اليوم:</strong> ${formatCairoDate(req.date)}</div>
+                <div><strong>الموقع:</strong> ${req.siteName || '-'}</div>
+                <div><strong>المبلغ المطلوب:</strong> <span style="color:#f59e0b; font-weight:bold;">${parseFloat(req.amount).toFixed(2)} ج.م</span></div>
+                ${req.note ? `<div><strong>ملاحظة:</strong> ${req.note}</div>` : ''}
+            `;
+            
+            if (req.status === 'rejected' && (req.rejectionReason || req.adminNote)) {
+                detailsHtml = `<div style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed rgba(239,68,68,0.2); color: var(--danger); font-size: 0.85rem;">
+                    <strong>السبب:</strong> ${req.rejectionReason || req.adminNote}
+                </div>`;
+            } else if (req.status === 'approved') {
+                detailsHtml = `<div style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed rgba(16,185,129,0.2); color: var(--secondary); font-size: 0.85rem;">
+                    <strong>معتمد بواسطة:</strong> ${req.approvedBy || 'HR'}
+                    ${req.adminNote ? `<br><strong>ملاحظة الإدارة:</strong> ${req.adminNote}` : ''}
+                </div>`;
+            }
+        }
+        else if (req.type === 'site') {
+            cardIcon = '📍';
+            cardTitle = 'طلب تسجيل موقع جديد';
+            cardBody = `
+                <div><strong>اسم الموقع المقترح:</strong> ${req.suggestedName}</div>
+                ${req.note ? `<div><strong>ملاحظة الانتقالات:</strong> ${req.note}</div>` : ''}
+                ${req.mapLink ? `<div style="margin-top: 4px;"><a href="${req.mapLink}" target="_blank" style="color: #6366f1; text-decoration: underline; font-size: 0.85rem;">📍 عرض الموقع على الخريطة</a></div>` : ''}
+            `;
+            
+            if (req.status === 'rejected') {
+                detailsHtml = `<div style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed rgba(239,68,68,0.2); color: var(--danger); font-size: 0.85rem;">
+                    <strong>سبب الرفض:</strong> تم رفض الموقع من قبل الإدارة
+                </div>`;
+            } else if (req.status === 'approved' || req.status === 'approved_today') {
+                detailsHtml = `<div style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed rgba(16,185,129,0.2); color: var(--secondary); font-size: 0.85rem;">
+                    <strong>تم الاعتماد بنجاح</strong> (بواسطة: ${req.autoMeta || 'HR'})
+                </div>`;
+            }
+        }
+        else if (req.type === 'device') {
+            cardIcon = '📱';
+            cardTitle = 'طلب تغيير جهاز';
+            cardBody = `
+                <div><strong>الجهاز المطلوب اعتماده:</strong> ${req.newDeviceModel || 'غير معروف'}</div>
+                ${req.reason ? `<div><strong>سبب التغيير:</strong> ${req.reason}</div>` : ''}
+            `;
+            
+            if (req.status === 'rejected' && req.adminNote) {
+                detailsHtml = `<div style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed rgba(239,68,68,0.2); color: var(--danger); font-size: 0.85rem;">
+                    <strong>ملاحظة الإدارة:</strong> ${req.adminNote}
+                </div>`;
+            } else if (req.status === 'approved') {
+                detailsHtml = `<div style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed rgba(16,185,129,0.2); color: var(--secondary); font-size: 0.85rem;">
+                    <strong>تم تفعيل الجهاز الجديد بنجاح</strong> (بواسطة: ${req.processedBy || 'HR'})
+                </div>`;
+            }
+        }
+        
+        html += `
+            <div style="background: rgba(30, 41, 59, 0.4); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 18px; padding: 16px; direction: rtl; text-align: right; box-shadow: 0 4px 15px rgba(0,0,0,0.1); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); margin-bottom: 8px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 1.4rem;">${cardIcon}</span>
+                        <span style="font-weight: 800; color: #fff; font-size: 1.05rem;">${cardTitle}</span>
+                    </div>
+                    <span style="background: ${statusMeta.bg}; color: ${statusMeta.color}; border: 1px solid ${statusMeta.border}; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: bold; display: flex; align-items: center; gap: 4px;">
+                        ${statusMeta.icon} ${statusMeta.text}
+                    </span>
+                </div>
+                
+                <div style="font-size: 0.9rem; color: #cbd5e1; line-height: 1.6; display: flex; flex-direction: column; gap: 4px;">
+                    ${cardBody}
+                </div>
+                
+                ${detailsHtml}
+                
+                <div style="margin-top: 10px; text-align: left; font-size: 0.75rem; color: var(--text-muted);">
+                    تاريخ الطلب: ${dateStr}
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+function getRequestStatusMeta(status) {
+    const st = String(status).toLowerCase();
+    if (st === 'approved' || st === 'approved_today') {
+        return {
+            text: 'مقبول',
+            icon: '✓',
+            color: '#10b981',
+            bg: 'rgba(16, 185, 129, 0.1)',
+            border: 'rgba(16, 185, 129, 0.2)'
+        };
+    }
+    if (st === 'rejected') {
+        return {
+            text: 'مرفوض',
+            icon: '✕',
+            color: '#ef4444',
+            bg: 'rgba(239, 68, 68, 0.1)',
+            border: 'rgba(239, 68, 68, 0.2)'
+        };
+    }
+    // Default to pending
+    return {
+        text: 'قيد الانتظار',
+        icon: '⏳',
+        color: '#f59e0b',
+        bg: 'rgba(245, 158, 11, 0.1)',
+        border: 'rgba(245, 158, 11, 0.2)'
+    };
+}
