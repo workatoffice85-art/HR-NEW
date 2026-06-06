@@ -2764,9 +2764,9 @@ function getWeekendDaysFromUI() {
 async function saveSettings() {
     const workStartTime = document.getElementById('setWorkStartTime').value;
     const workEndTime = document.getElementById('setWorkEndTime').value;
-    const emailDashboardEmails = document.getElementById('setEmailDashboardEmails').value;
-    const emailDashboardTime = document.getElementById('setEmailDashboardTime').value;
-    const emailDashboardEnabled = document.getElementById('setEmailDashboardEnabled').checked;
+    const reportEmails = document.getElementById('setReportEmails').value;
+    const dailyEnabled = document.getElementById('setDailyReport').checked;
+    const monthlyEnabled = document.getElementById('setMonthlyReport').checked;
     const notificationEmails = document.getElementById('setNotificationEmails').value;
     const requestNotificationsEnabled = document.getElementById('setRequestNotificationsEnabled').checked;
     const weekendDays = getWeekendDaysFromUI();
@@ -2778,9 +2778,9 @@ async function saveSettings() {
             settings: {
                 workStartTime: workStartTime,
                 workEndTime: workEndTime,
-                emailDashboardEmails: emailDashboardEmails,
-                emailDashboardTime: emailDashboardTime,
-                emailDashboardEnabled: emailDashboardEnabled ? "true" : "false",
+                reportEmails: reportEmails,
+                dailyReportEnabled: dailyEnabled ? "true" : "false",
+                monthlyReportEnabled: monthlyEnabled ? "true" : "false",
                 notificationEmails: notificationEmails,
                 requestNotificationsEnabled: requestNotificationsEnabled ? "true" : "false",
                 weekendDays: weekendDays
