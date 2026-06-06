@@ -933,22 +933,21 @@
                     </div>
 
                     <div class="glass-card" style="padding:25px;">
-                        <h3 style="margin-bottom:20px; color:var(--secondary);">إعدادات التقارير التلقائية والمزامنة
-                        </h3>
+                        <h3 style="margin-bottom:20px; color:var(--secondary);">إعدادات ملخص البريد والمساعد التلقائي 📧</h3>
                         <div class="input-group">
-                            <label>إيميلات استلام التقارير (مفصولة بفاصلة)</label>
-                            <textarea id="setReportEmails" placeholder="example@mail.com, boss@mail.com" rows="3"
-                                style="resize: vertical;"></textarea>
+                            <label>إيميلات استلام ملخص لوحة التحكم (مفصولة بفاصلة)</label>
+                            <textarea id="setEmailDashboardEmails" placeholder="example@mail.com, manager@mail.com" rows="3" style="resize: vertical;"></textarea>
+                        </div>
+                        <div class="input-group" style="margin-bottom:15px;">
+                            <label>وقت إرسال الملخص التلقائي يومياً (على رأس الساعة المحددة)</label>
+                            <input type="time" id="setEmailDashboardTime">
                         </div>
                         <div style="display:flex; gap:20px; margin-bottom:15px;">
                             <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-                                <input type="checkbox" id="setDailyReport"> تفعيل التقرير اليومي
-                            </label>
-                            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-                                <input type="checkbox" id="setMonthlyReport"> تفعيل التقرير الشهري
+                                <input type="checkbox" id="setEmailDashboardEnabled"> تفعيل إرسال الملخص تلقائياً يومياً
                             </label>
                         </div>
-                        <button class="btn-primary" onclick="saveSettings()">حفظ إعدادات التقارير</button>
+                        <button class="btn-primary" onclick="saveSettings()">حفظ إعدادات ملخص البريد</button>
 
                         <hr style="border-color: rgba(255,255,255,0.1); margin: 20px 0;">
 
