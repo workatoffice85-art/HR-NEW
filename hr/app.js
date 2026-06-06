@@ -2728,10 +2728,10 @@ function renderSettings(data) {
     document.getElementById('setWorkStartTime').value = start;
     document.getElementById('setWorkEndTime').value = end;
 
-    // Reports settings
-    document.getElementById('setReportEmails').value = data.reportEmails || "";
-    document.getElementById('setDailyReport').checked = data.dailyReportEnabled === "true";
-    document.getElementById('setMonthlyReport').checked = data.monthlyReportEnabled === "true";
+    // Email Dashboard settings
+    document.getElementById('setEmailDashboardEmails').value = data.emailDashboardEmails || "";
+    document.getElementById('setEmailDashboardTime').value = data.emailDashboardTime || "17:00";
+    document.getElementById('setEmailDashboardEnabled').checked = data.emailDashboardEnabled === "true";
 
     // Notification settings
     document.getElementById('setNotificationEmails').value = data.notificationEmails || "";
