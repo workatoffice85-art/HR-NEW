@@ -623,6 +623,26 @@ function saveSiteAllowances(employeeId, allowances) {
   }
 }
 
+function saveSiteAllowancesForSite(siteId, allowances) {
+  var sheet = getOrCreateSheet("siteAllowances", ["employeeId", "siteId", "transportPrice"]);
+  var rows = sheet.getDataRange().getValues();
+  var siteIdStr = String(siteId);
+  
+  // Remove existing for this site
+  for (var i = rows.length - 1; i >= 1; i--) {
+    if (String(rows[i][1]) === siteIdStr) {
+      sheet.deleteRow(i + 1);
+    }
+  }
+  
+  // Add new
+  if (allowances && allowances.length) {
+    allowances.forEach(function(item) {
+      sheet.appendRow([String(item.employeeId), siteIdStr, toNumberSafe(item.transportPrice, 0)]);
+    });
+  }
+}
+
 function getEmployeeTransportMap() {
   var sheet = getOrCreateSheet("employees",
     ["id","name","email","password","phone","role","assignedSites","faceDescriptor","transportPrice"]
@@ -1558,6 +1578,8 @@ function doPost(e) {
         data.mapLink || ""
       ]);
 
+      saveSiteAllowancesForSite(data.id, data.siteAllowances || []);
+
       return json({success:true, message: "تم إضافة الموقع بنجاح"});
     }
 
@@ -1568,6 +1590,9 @@ function doPost(e) {
       for (var i = 1; i < rows.length; i++) {
         if (String(rows[i][0]) === String(data.id)) {
           s.getRange(i + 1, 2, 1, 6).setValues([[data.name, data.latitude, data.longitude, data.radius, data.transportPrice, data.mapLink || ""]]);
+          
+          saveSiteAllowancesForSite(data.id, data.siteAllowances || []);
+
           return json({success:true, message: "تم تحديث الموقع بنجاح"});
         }
       }
@@ -1581,6 +1606,9 @@ function doPost(e) {
       for (var i = 1; i < rows.length; i++) {
         if (String(rows[i][0]) === String(data.id)) {
           s.deleteRow(i + 1);
+          
+          saveSiteAllowancesForSite(data.id, []);
+
           return json({success:true, message: "تم حذف الموقع بنجاح"});
         }
       }

@@ -42,6 +42,7 @@ let hrSession = null;
 let allAttendanceData = [];
 let allEmployees = [];
 let allSites = [];
+let currentSiteAllowances = [];
 let allSiteRequests = [];
 let allAllowanceRequests = [];
 let approvedAllowanceExtraMap = null;
@@ -2106,6 +2107,28 @@ function editSite(id) {
     document.getElementById('siteLat').value = site.latitude;
     document.getElementById('siteLng').value = site.longitude;
     document.getElementById('siteRadius').value = site.radius;
+
+    // Initialize currentSiteAllowances for this site
+    currentSiteAllowances = [];
+    const allowancesMap = {}; // price -> array of employeeIds
+    allEmployees.forEach(emp => {
+        const allowance = (emp.siteAllowances || []).find(a => String(a.siteId) === String(site.id));
+        if (allowance) {
+            const price = parseFloat(allowance.transportPrice);
+            if (!allowancesMap[price]) {
+                allowancesMap[price] = [];
+            }
+            allowancesMap[price].push(emp.id);
+        }
+    });
+    Object.keys(allowancesMap).forEach(price => {
+        currentSiteAllowances.push({
+            tempId: 'tier_' + Math.random().toString(36).substr(2, 9),
+            price: parseFloat(price),
+            employeeIds: allowancesMap[price]
+        });
+    });
+
     openSiteModal();
 }
 
@@ -2262,8 +2285,122 @@ async function saveEmployee() {
     document.getElementById('loader').classList.add('hidden');
 }
 
-function openSiteModal() { document.getElementById('siteModal').classList.remove('hidden'); }
-function closeSiteModal() { document.getElementById('siteModal').classList.add('hidden'); }
+function openSiteModal() { 
+    document.getElementById('siteModal').classList.remove('hidden'); 
+    renderSiteAllowancesTiers();
+}
+function closeSiteModal() { 
+    document.getElementById('siteModal').classList.add('hidden'); 
+    currentSiteAllowances = [];
+}
+
+function addSiteOpenModal() {
+    document.getElementById('editSiteId').value = '';
+    document.getElementById('siteModalTitle').innerText = 'إضافة موقع عمل جديد';
+    document.getElementById('siteName').value = '';
+    document.getElementById('siteMapLink').value = '';
+    document.getElementById('siteLat').value = '';
+    document.getElementById('siteLng').value = '';
+    document.getElementById('siteRadius').value = '20';
+    currentSiteAllowances = [];
+    openSiteModal();
+}
+
+function addSiteAllowanceTier() {
+    currentSiteAllowances.push({
+        tempId: 'tier_' + Math.random().toString(36).substr(2, 9),
+        price: 120,
+        employeeIds: []
+    });
+    renderSiteAllowancesTiers();
+}
+
+function renderSiteAllowancesTiers() {
+    const container = document.getElementById('siteAllowancesContainer');
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (currentSiteAllowances.length === 0) {
+        container.innerHTML = `
+            <div style="text-align: center; color: var(--text-muted); padding: 15px 10px; font-size: 0.85rem;">
+                لا توجد بدلات مخصصة مضافة لهذا الموقع بعد.
+            </div>
+        `;
+        return;
+    }
+
+    currentSiteAllowances.forEach((tier, index) => {
+        const tierEl = document.createElement('div');
+        tierEl.style.cssText = 'background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); padding: 12px; border-radius: 10px; display: flex; flex-direction: column; gap: 10px;';
+
+        const headerRow = document.createElement('div');
+        headerRow.style.cssText = 'display: flex; justify-content: space-between; align-items: center; gap: 10px;';
+
+        const inputGroup = document.createElement('div');
+        inputGroup.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+        
+        const priceInput = document.createElement('input');
+        priceInput.type = 'number';
+        priceInput.value = tier.price;
+        priceInput.style.cssText = 'width: 80px; padding: 4px 8px; background: rgba(0,0,0,0.3); border: 1px solid var(--card-border); color: #fff; border-radius: 6px; text-align: center;';
+        priceInput.onchange = (e) => {
+            const val = parseFloat(e.target.value) || 0;
+            tier.price = val;
+        };
+
+        const priceLabel = document.createElement('span');
+        priceLabel.innerText = 'ج.م بدل انتقال لـ:';
+        priceLabel.style.cssText = 'color: #cbd5e1; font-size: 0.85rem; font-weight: bold;';
+
+        inputGroup.appendChild(priceInput);
+        inputGroup.appendChild(priceLabel);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.innerText = '🗑️';
+        deleteBtn.style.cssText = 'background: transparent; border: none; cursor: pointer; font-size: 1.1rem;';
+        deleteBtn.onclick = () => {
+            currentSiteAllowances.splice(index, 1);
+            renderSiteAllowancesTiers();
+        };
+
+        headerRow.appendChild(inputGroup);
+        headerRow.appendChild(deleteBtn);
+
+        const badgesContainer = document.createElement('div');
+        badgesContainer.style.cssText = 'display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px;';
+
+        allEmployees.forEach(emp => {
+            const isSelected = tier.employeeIds.includes(emp.id);
+            const badge = document.createElement('span');
+            badge.innerText = emp.name;
+            
+            if (isSelected) {
+                badge.style.cssText = 'background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.35); color: #10b981; cursor: pointer; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: bold; transition: all 0.2s;';
+            } else {
+                badge.style.cssText = 'background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); color: var(--text-muted); cursor: pointer; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; transition: all 0.2s;';
+            }
+
+            badge.onclick = () => {
+                if (isSelected) {
+                    tier.employeeIds = tier.employeeIds.filter(id => id !== emp.id);
+                } else {
+                    currentSiteAllowances.forEach(t => {
+                        t.employeeIds = t.employeeIds.filter(id => id !== emp.id);
+                    });
+                    tier.employeeIds.push(emp.id);
+                }
+                renderSiteAllowancesTiers();
+            };
+
+            badgesContainer.appendChild(badge);
+        });
+
+        tierEl.appendChild(headerRow);
+        tierEl.appendChild(badgesContainer);
+        container.appendChild(tierEl);
+    });
+}
 
 function parseMapLink() {
     if (parseMapLinkTimer) clearTimeout(parseMapLinkTimer);
@@ -2368,12 +2505,26 @@ async function saveSite() {
     const radius = document.getElementById('siteRadius').value.trim();
     
     if(!name || !lat || !lng || !radius) return alert("الرجاء إكمال كافة البيانات");
+
+    const siteId = editId || Math.floor(10000 + Math.random() * 90000);
+    const allowancesToSave = [];
+    currentSiteAllowances.forEach(tier => {
+        const price = parseFloat(tier.price) || 0;
+        tier.employeeIds.forEach(empId => {
+            allowancesToSave.push({
+                employeeId: empId,
+                siteId: String(siteId),
+                transportPrice: price
+            });
+        });
+    });
     
     const payload = {
         action: editId ? 'updateSite' : 'saveSite',
-        id: editId || Math.floor(10000 + Math.random() * 90000), 
+        id: siteId, 
         name: name, latitude: lat, longitude: lng, radius: radius,
-        mapLink: document.getElementById('siteMapLink').value.trim()
+        mapLink: document.getElementById('siteMapLink').value.trim(),
+        siteAllowances: allowancesToSave
     };
     
     document.getElementById('loader').classList.remove('hidden');
@@ -2383,6 +2534,7 @@ async function saveSite() {
         if(result.success) {
             closeSiteModal();
             fetchSites();
+            fetchEmployees(true);
             // Clear inputs
             document.getElementById('siteName').value = '';
             document.getElementById('siteMapLink').value = '';

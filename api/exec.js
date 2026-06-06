@@ -2300,7 +2300,20 @@ export default async function handler(req, res) {
             };
             const { error } = await supabase.from('sites').insert([payload]);
             if (error) throw error;
+
+            const allowances = data.siteAllowances || [];
+            if (allowances.length > 0) {
+                const allowanceRows = allowances.map(a => ({
+                    employeeId: a.employeeId,
+                    siteId: String(data.id),
+                    transportPrice: a.transportPrice
+                }));
+                const { error: errAll } = await supabase.from('siteAllowances').insert(allowanceRows);
+                if (errAll) console.error("Allowances Save Failed:", errAll);
+            }
+
             invalidateCache('sites');
+            invalidateCache('employees');
             return res.status(200).json({ success: true, message: "تمت إضافة الموقع بنجاح" });
         }
 
@@ -2314,14 +2327,31 @@ export default async function handler(req, res) {
             };
             const { error } = await supabase.from('sites').update(payload).eq('id', data.id);
             if (error) throw error;
+
+            const allowances = data.siteAllowances || [];
+            const { error: errDel } = await supabase.from('siteAllowances').delete().eq('siteId', String(data.id));
+            if (!errDel && allowances.length > 0) {
+                const allowanceRows = allowances.map(a => ({
+                    employeeId: a.employeeId,
+                    siteId: String(data.id),
+                    transportPrice: a.transportPrice || 0
+                }));
+                const { error: errAll } = await supabase.from('siteAllowances').insert(allowanceRows);
+                if (errAll) console.error("Allowances Update Failed:", errAll);
+            }
+
             invalidateCache('sites');
+            invalidateCache('employees');
             return res.status(200).json({ success: true, message: "تم تحديث بيانات الموقع بنجاح" });
         }
 
         if (action === "deleteSite") {
+            const { error: errDel } = await supabase.from('siteAllowances').delete().eq('siteId', String(data.id));
+            if (errDel) console.error("Allowances Delete on Site Delete Failed:", errDel);
             const { error } = await supabase.from('sites').delete().eq('id', data.id);
             if (error) throw error;
             invalidateCache('sites');
+            invalidateCache('employees');
             return res.status(200).json({ success: true, message: "تم حذف الموقع بنجاح" });
         }
 
