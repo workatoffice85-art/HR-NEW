@@ -1763,11 +1763,12 @@ export default async function handler(req, res) {
             }
 
             // 1. Fetch data in parallel
+            // 1. Fetch data in parallel
             const [empRes, siteRes, attRes, leaveRes, allowRes, siteReqRes, deviceReqRes, allAllowancesRes] = await Promise.all([
                 supabase.from('employees').select('id, name, role'),
                 supabase.from('sites').select('*').eq('isTemporary', false),
                 supabase.from('attendance').select('*'),
-                supabase.from('leaveRequests').select('*').eq('status', 'pending'),
+                supabase.from('leaveRequests').select('*'), // Fetch all leave requests to filter today's approved vs pending in memory
                 supabase.from('allowanceRequests').select('*').eq('status', 'pending'),
                 supabase.from('siteRequests').select('*').eq('status', 'pending'),
                 supabase.from('device_change_requests').select('*').eq('status', 'pending'),
@@ -1776,12 +1777,20 @@ export default async function handler(req, res) {
 
             const today = getCairoDateString(new Date());
             const todayAtt = (attRes.data || []).filter(r => r.checkIn && r.checkIn.startsWith(today));
-            const presentCount = new Set(todayAtt.map(r => r.employeeId)).size;
-            const checkedOutCount = new Set(todayAtt.filter(r => r.checkOut).map(r => r.employeeId)).size;
-            const totalActiveEmps = (empRes.data || []).filter(e => e.role !== 'admin').length;
-            const absentCount = Math.max(0, totalActiveEmps - presentCount);
+            
+            // Filter out admin and hr from active employee list
+            const activeEmployees = (empRes.data || []).filter(e => e.role !== 'admin' && e.role !== 'hr');
+            const presentIds = new Set(todayAtt.map(r => String(r.employeeId)));
+            const presentCount = presentIds.size;
+            
+            const todayApprovedLeaves = (leaveRes.data || []).filter(r => r.status === 'approved' && r.leaveDate === today);
+            const leaveEmpIds = new Set(todayApprovedLeaves.map(l => String(l.employeeId)));
+            
+            // Absent means: not present AND not on approved leave today
+            const absentEmployeesList = activeEmployees.filter(e => !presentIds.has(String(e.id)) && !leaveEmpIds.has(String(e.id)));
+            const absentCount = absentEmployeesList.length;
 
-            const pendingLeaves = leaveRes.data || [];
+            const pendingLeaves = (leaveRes.data || []).filter(r => r.status === 'pending');
             const pendingAllowances = allowRes.data || [];
             const pendingSites = siteReqRes.data || [];
             const pendingDevices = deviceReqRes.data || [];
@@ -1793,48 +1802,133 @@ export default async function handler(req, res) {
             // 2. Generate secure tokens for actions with 24-hour expiration
             const expiryMs = 24 * 60 * 60 * 1000; // 24 hours
 
-            // Build Sites section details and edit links
-            let sitesHtml = '';
-            (siteRes.data || []).forEach(site => {
-                const siteAllowances = (allAllowancesRes.data || []).filter(a => String(a.siteId) === String(site.id));
-                const allowancesMap = {};
-                siteAllowances.forEach(a => {
-                    const price = parseFloat(a.transportPrice) || 0;
-                    if (!allowancesMap[price]) allowancesMap[price] = [];
-                    const emp = (empRes.data || []).find(e => String(e.id) === String(a.employeeId));
-                    if (emp) allowancesMap[price].push(emp.name);
-                });
+            const formatCairoTimeHelper = (isoString) => {
+                if (!isoString) return '-';
+                const match = isoString.match(/T(\d{2}):(\d{2}):(\d{2})/);
+                if (!match) return isoString;
+                let hours = parseInt(match[1], 10);
+                const minutes = match[2];
+                const period = hours >= 12 ? 'م' : 'ص';
+                if (hours > 12) hours -= 12;
+                if (hours === 0) hours = 12;
+                return `${hours}:${minutes} ${period}`;
+            };
 
-                let allowanceDetails = '';
-                Object.keys(allowancesMap).forEach(price => {
-                    allowanceDetails += `<div style="margin-top: 4px; font-size: 13px; color: #475569;">💰 فئة <strong>${price} ج.م</strong>: ${allowancesMap[price].join(', ')}</div>`;
-                });
-                if (allowanceDetails === '') {
-                    allowanceDetails = `<div style="margin-top: 4px; font-size: 13px; color: #94a3b8; font-style: italic;">لا توجد بدلات مخصصة</div>`;
-                }
-
-                // Generate secure link for editing allowances
-                const editToken = generateSecureToken(site.id, 'edit', 'editSiteAllowances', settings.emails[0], expiryMs);
-                const editLink = `${baseUrl}/confirm-action.html?token=${editToken}`;
-
-                sitesHtml += `
-                    <div style="border: 1px solid #e2e8f0; border-radius: 12px; padding: 15px; margin-bottom: 12px; background: #f8fafc;">
-                        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="direction: rtl;">
-                            <tr>
-                                <td align="right" style="font-weight: bold; font-size: 15px; color: #0f172a;">📍 ${site.name}</td>
-                                <td align="left">
-                                    <a href="${editLink}" target="_blank" style="background: #e2e8f0; color: #0f172a; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: bold; text-decoration: none; display: inline-block; border: 1px solid #cbd5e1;">📝 تعديل البدلات</a>
-                                </td>
-                            </tr>
-                        </table>
-                        <div style="margin-top: 8px; border-top: 1px dashed #e2e8f0; padding-top: 8px;">
-                            ${allowanceDetails}
-                        </div>
+            // Build Today's Present Employees HTML (replacing Sites HTML)
+            let presentHtml = '';
+            const presentEmployeesList = activeEmployees.filter(e => presentIds.has(String(e.id)));
+            if (presentEmployeesList.length === 0) {
+                presentHtml = `
+                    <div style="text-align: center; color: #64748b; padding: 15px; font-size: 14px; border: 1px dashed #cbd5e1; border-radius: 8px; background: #ffffff; font-family: 'Cairo', 'Segoe UI', sans-serif;">
+                        لا يوجد حضور مسجل اليوم حتى الآن.
                     </div>
                 `;
-            });
+            } else {
+                presentHtml = `
+                    <div style="border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background: #ffffff;">
+                        <table width="100%" cellpadding="12" cellspacing="0" border="0" style="direction: rtl; border-collapse: collapse; min-width: 100%;">
+                            <thead>
+                                <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+                                    <th align="right" style="font-size: 13px; color: #475569; font-weight: bold; font-family: 'Cairo', 'Segoe UI', sans-serif;">الموظف</th>
+                                    <th align="right" style="font-size: 13px; color: #475569; font-weight: bold; font-family: 'Cairo', 'Segoe UI', sans-serif;">الموقع</th>
+                                    <th align="center" style="font-size: 13px; color: #475569; font-weight: bold; font-family: 'Cairo', 'Segoe UI', sans-serif;">الحضور</th>
+                                    <th align="center" style="font-size: 13px; color: #475569; font-weight: bold; font-family: 'Cairo', 'Segoe UI', sans-serif;">الانصراف</th>
+                                    <th align="center" style="font-size: 13px; color: #475569; font-weight: bold; font-family: 'Cairo', 'Segoe UI', sans-serif;">الحالة</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                
+                presentEmployeesList.forEach((emp) => {
+                    const empAtts = todayAtt.filter(r => String(r.employeeId) === String(emp.id));
+                    empAtts.forEach((att) => {
+                        const checkInTime = formatCairoTimeHelper(att.checkIn);
+                        const checkOutTime = att.checkOut ? formatCairoTimeHelper(att.checkOut) : (att.status === 'no_checkout' ? 'لم ينصرف' : 'حاضر الآن');
+                        
+                        let statusText = 'حاضر';
+                        let statusColor = '#10b981';
+                        let statusBg = 'rgba(16, 185, 129, 0.1)';
+                        if (att.status === 'late') {
+                            statusText = 'متأخر';
+                            statusColor = '#ef4444';
+                            statusBg = 'rgba(239, 68, 68, 0.1)';
+                        } else if (att.status === 'overtime') {
+                            statusText = 'عمل إضافي';
+                            statusColor = '#3b82f6';
+                            statusBg = 'rgba(59, 130, 246, 0.1)';
+                        } else if (att.status === 'no_checkout') {
+                            statusText = 'لم ينصرف';
+                            statusColor = '#f59e0b';
+                            statusBg = 'rgba(245, 158, 11, 0.1)';
+                        }
+                        
+                        presentHtml += `
+                                <tr style="border-bottom: 1px solid #f1f5f9;">
+                                    <td align="right" style="font-size: 13px; color: #0f172a; font-weight: bold; font-family: 'Cairo', 'Segoe UI', sans-serif;">${emp.name}</td>
+                                    <td align="right" style="font-size: 13px; color: #475569; font-family: 'Cairo', 'Segoe UI', sans-serif;">${att.siteName || '-'}</td>
+                                    <td align="center" style="font-size: 13px; color: #475569; font-family: 'Cairo', 'Segoe UI', sans-serif;" dir="ltr">${checkInTime}</td>
+                                    <td align="center" style="font-size: 13px; color: #475569; font-family: 'Cairo', 'Segoe UI', sans-serif;" dir="ltr">${checkOutTime}</td>
+                                    <td align="center" style="font-size: 12px; font-family: 'Cairo', 'Segoe UI', sans-serif;">
+                                        <span style="color: ${statusColor}; background: ${statusBg}; padding: 4px 8px; border-radius: 6px; font-weight: bold; display: inline-block;">${statusText}</span>
+                                    </td>
+                                </tr>
+                        `;
+                    });
+                });
+                
+                presentHtml += `
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            }
 
-            // Build Pending Requests HTML
+            // Build Today's Absent Employees HTML
+            let absentHtml = '';
+            const allAbsentList = activeEmployees.filter(e => !presentIds.has(String(e.id)));
+            if (allAbsentList.length === 0) {
+                absentHtml = `
+                    <div style="text-align: center; color: #10b981; padding: 15px; font-size: 14px; border: 1px dashed #a7f3d0; border-radius: 8px; background: #ecfdf5; font-weight: bold; font-family: 'Cairo', 'Segoe UI', sans-serif;">
+                        لا يوجد غياب اليوم، جميع الموظفين حاضرين!
+                    </div>
+                `;
+            } else {
+                absentHtml = `
+                    <div style="border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background: #ffffff;">
+                        <table width="100%" cellpadding="12" cellspacing="0" border="0" style="direction: rtl; border-collapse: collapse; min-width: 100%;">
+                            <thead>
+                                <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+                                    <th align="right" style="font-size: 13px; color: #475569; font-weight: bold; font-family: 'Cairo', 'Segoe UI', sans-serif;">الموظف</th>
+                                    <th align="center" style="font-size: 13px; color: #475569; font-weight: bold; font-family: 'Cairo', 'Segoe UI', sans-serif;">الحالة</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                
+                allAbsentList.forEach(emp => {
+                    const isOnLeave = leaveEmpIds.has(String(emp.id));
+                    const statusText = isOnLeave ? 'إجازة معتمدة' : 'غائب';
+                    const statusColor = isOnLeave ? '#3b82f6' : '#ef4444';
+                    const statusBg = isOnLeave ? 'rgba(59, 130, 246, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+                    
+                    absentHtml += `
+                                <tr style="border-bottom: 1px solid #f1f5f9;">
+                                    <td align="right" style="font-size: 13px; color: #0f172a; font-weight: bold; font-family: 'Cairo', 'Segoe UI', sans-serif;">${emp.name}</td>
+                                    <td align="center" style="font-size: 12px; font-family: 'Cairo', 'Segoe UI', sans-serif;">
+                                        <span style="color: ${statusColor}; background: ${statusBg}; padding: 4px 8px; border-radius: 6px; font-weight: bold; display: inline-block;">${statusText}</span>
+                                    </td>
+                                </tr>
+                    `;
+                });
+                
+                absentHtml += `
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            }
+
+            // Build Pending Requests HTML (No garbled emojis)
             let requestsHtml = '';
 
             // 2.1 Leaves
@@ -1844,12 +1938,12 @@ export default async function handler(req, res) {
                 const approveLink = `${baseUrl}/confirm-action.html?token=${approveToken}`;
                 const rejectLink = `${baseUrl}/confirm-action.html?token=${rejectToken}`;
                 requestsHtml += `
-                    <div style="border-right: 4px solid #f59e0b; background: #fffbeb; padding: 15px; border-radius: 8px; margin-bottom: 12px; border-top: 1px solid #fef3c7; border-left: 1px solid #fef3c7; border-bottom: 1px solid #fef3c7; direction: rtl;">
-                        <div style="font-weight: bold; color: #b45309; font-size: 14px;">🌴 طلب إجازة - الموظف: ${req.employeeName}</div>
-                        <div style="font-size: 13px; color: #451a03; margin-top: 4px;">📅 تاريخ: ${req.leaveDate} - السبب: ${req.reason || 'لا يوجد'}</div>
+                    <div style="border-right: 4px solid #f59e0b; background: #fffbeb; padding: 15px; border-radius: 8px; margin-bottom: 12px; border-top: 1px solid #fef3c7; border-left: 1px solid #fef3c7; border-bottom: 1px solid #fef3c7; direction: rtl; font-family: 'Cairo', 'Segoe UI', sans-serif;">
+                        <div style="font-weight: bold; color: #b45309; font-size: 14px;">طلب إجازة - الموظف: ${req.employeeName}</div>
+                        <div style="font-size: 13px; color: #451a03; margin-top: 4px;">تاريخ: ${req.leaveDate} - السبب: ${req.reason || 'لا يوجد'}</div>
                         <div style="margin-top: 10px;">
-                            <a href="${approveLink}" target="_blank" style="background: #10b981; color: white; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: bold; text-decoration: none; display: inline-block; box-shadow: 0 2px 4px rgba(16,185,129,0.2);">🟢 موافقة</a>
-                            <a href="${rejectLink}" target="_blank" style="background: #ef4444; color: white; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: bold; text-decoration: none; display: inline-block; box-shadow: 0 2px 4px rgba(239,68,68,0.2); margin-right: 8px;">🔴 رفض</a>
+                            <a href="${approveLink}" target="_blank" style="background: #10b981; color: white; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: bold; text-decoration: none; display: inline-block; box-shadow: 0 2px 4px rgba(16,185,129,0.2); font-family: 'Cairo', 'Segoe UI', sans-serif;">موافقة</a>
+                            <a href="${rejectLink}" target="_blank" style="background: #ef4444; color: white; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: bold; text-decoration: none; display: inline-block; box-shadow: 0 2px 4px rgba(239,68,68,0.2); margin-right: 8px; font-family: 'Cairo', 'Segoe UI', sans-serif;">رفض</a>
                         </div>
                     </div>
                 `;
@@ -1862,12 +1956,12 @@ export default async function handler(req, res) {
                 const approveLink = `${baseUrl}/confirm-action.html?token=${approveToken}`;
                 const rejectLink = `${baseUrl}/confirm-action.html?token=${rejectToken}`;
                 requestsHtml += `
-                    <div style="border-right: 4px solid #f59e0b; background: #fffbeb; padding: 15px; border-radius: 8px; margin-bottom: 12px; border-top: 1px solid #fef3c7; border-left: 1px solid #fef3c7; border-bottom: 1px solid #fef3c7; direction: rtl;">
-                        <div style="font-weight: bold; color: #b45309; font-size: 14px;">💰 طلب زيادة بدلات - الموظف: ${req.employeeName}</div>
-                        <div style="font-size: 13px; color: #451a03; margin-top: 4px;">💵 القيمة: ${req.amount} ج.م - السبب: ${req.reason || 'لا يوجد'}</div>
+                    <div style="border-right: 4px solid #f59e0b; background: #fffbeb; padding: 15px; border-radius: 8px; margin-bottom: 12px; border-top: 1px solid #fef3c7; border-left: 1px solid #fef3c7; border-bottom: 1px solid #fef3c7; direction: rtl; font-family: 'Cairo', 'Segoe UI', sans-serif;">
+                        <div style="font-weight: bold; color: #b45309; font-size: 14px;">طلب زيادة بدلات - الموظف: ${req.employeeName}</div>
+                        <div style="font-size: 13px; color: #451a03; margin-top: 4px;">القيمة: ${req.amount} ج.م - السبب: ${req.reason || 'لا يوجد'}</div>
                         <div style="margin-top: 10px;">
-                            <a href="${approveLink}" target="_blank" style="background: #10b981; color: white; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: bold; text-decoration: none; display: inline-block; box-shadow: 0 2px 4px rgba(16,185,129,0.2);">🟢 موافقة</a>
-                            <a href="${rejectLink}" target="_blank" style="background: #ef4444; color: white; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: bold; text-decoration: none; display: inline-block; box-shadow: 0 2px 4px rgba(239,68,68,0.2); margin-right: 8px;">🔴 رفض</a>
+                            <a href="${approveLink}" target="_blank" style="background: #10b981; color: white; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: bold; text-decoration: none; display: inline-block; box-shadow: 0 2px 4px rgba(16,185,129,0.2); font-family: 'Cairo', 'Segoe UI', sans-serif;">موافقة</a>
+                            <a href="${rejectLink}" target="_blank" style="background: #ef4444; color: white; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: bold; text-decoration: none; display: inline-block; box-shadow: 0 2px 4px rgba(239,68,68,0.2); margin-right: 8px; font-family: 'Cairo', 'Segoe UI', sans-serif;">رفض</a>
                         </div>
                     </div>
                 `;
@@ -1880,12 +1974,12 @@ export default async function handler(req, res) {
                 const approveLink = `${baseUrl}/confirm-action.html?token=${approveToken}`;
                 const rejectLink = `${baseUrl}/confirm-action.html?token=${rejectToken}`;
                 requestsHtml += `
-                    <div style="border-right: 4px solid #f59e0b; background: #fffbeb; padding: 15px; border-radius: 8px; margin-bottom: 12px; border-top: 1px solid #fef3c7; border-left: 1px solid #fef3c7; border-bottom: 1px solid #fef3c7; direction: rtl;">
-                        <div style="font-weight: bold; color: #b45309; font-size: 14px;">📍 طلب تسجيل موقع جديد - الموظف: ${req.employeeName}</div>
-                        <div style="font-size: 13px; color: #451a03; margin-top: 4px;">🏢 الاسم المقترح: ${req.suggestedName} - الإحداثيات: (${req.latitude}, ${req.longitude})</div>
+                    <div style="border-right: 4px solid #f59e0b; background: #fffbeb; padding: 15px; border-radius: 8px; margin-bottom: 12px; border-top: 1px solid #fef3c7; border-left: 1px solid #fef3c7; border-bottom: 1px solid #fef3c7; direction: rtl; font-family: 'Cairo', 'Segoe UI', sans-serif;">
+                        <div style="font-weight: bold; color: #b45309; font-size: 14px;">طلب تسجيل موقع جديد - الموظف: ${req.employeeName}</div>
+                        <div style="font-size: 13px; color: #451a03; margin-top: 4px;">الاسم المقترح: ${req.suggestedName} - الإحداثيات: (${req.latitude}, ${req.longitude})</div>
                         <div style="margin-top: 10px;">
-                            <a href="${approveLink}" target="_blank" style="background: #10b981; color: white; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: bold; text-decoration: none; display: inline-block; box-shadow: 0 2px 4px rgba(16,185,129,0.2);">🟢 موافقة</a>
-                            <a href="${rejectLink}" target="_blank" style="background: #ef4444; color: white; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: bold; text-decoration: none; display: inline-block; box-shadow: 0 2px 4px rgba(239,68,68,0.2); margin-right: 8px;">🔴 رفض</a>
+                            <a href="${approveLink}" target="_blank" style="background: #10b981; color: white; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: bold; text-decoration: none; display: inline-block; box-shadow: 0 2px 4px rgba(16,185,129,0.2); font-family: 'Cairo', 'Segoe UI', sans-serif;">موافقة</a>
+                            <a href="${rejectLink}" target="_blank" style="background: #ef4444; color: white; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: bold; text-decoration: none; display: inline-block; box-shadow: 0 2px 4px rgba(239,68,68,0.2); margin-right: 8px; font-family: 'Cairo', 'Segoe UI', sans-serif;">رفض</a>
                         </div>
                     </div>
                 `;
@@ -1898,12 +1992,12 @@ export default async function handler(req, res) {
                 const approveLink = `${baseUrl}/confirm-action.html?token=${approveToken}`;
                 const rejectLink = `${baseUrl}/confirm-action.html?token=${rejectToken}`;
                 requestsHtml += `
-                    <div style="border-right: 4px solid #f59e0b; background: #fffbeb; padding: 15px; border-radius: 8px; margin-bottom: 12px; border-top: 1px solid #fef3c7; border-left: 1px solid #fef3c7; border-bottom: 1px solid #fef3c7; direction: rtl;">
-                        <div style="font-weight: bold; color: #b45309; font-size: 14px;">📱 طلب تغيير جهاز - الموظف: ${req.user_name}</div>
-                        <div style="font-size: 13px; color: #451a03; margin-top: 4px;">💻 جهاز جديد: ${req.new_device_model || 'Unknown'} (${req.new_os_type || 'Unknown'})${req.reason ? ' - السبب: ' + req.reason : ''}</div>
+                    <div style="border-right: 4px solid #f59e0b; background: #fffbeb; padding: 15px; border-radius: 8px; margin-bottom: 12px; border-top: 1px solid #fef3c7; border-left: 1px solid #fef3c7; border-bottom: 1px solid #fef3c7; direction: rtl; font-family: 'Cairo', 'Segoe UI', sans-serif;">
+                        <div style="font-weight: bold; color: #b45309; font-size: 14px;">طلب تغيير جهاز - الموظف: ${req.user_name}</div>
+                        <div style="font-size: 13px; color: #451a03; margin-top: 4px;">جهاز جديد: ${req.new_device_model || 'Unknown'} (${req.new_os_type || 'Unknown'})${req.reason ? ' - السبب: ' + req.reason : ''}</div>
                         <div style="margin-top: 10px;">
-                            <a href="${approveLink}" target="_blank" style="background: #10b981; color: white; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: bold; text-decoration: none; display: inline-block; box-shadow: 0 2px 4px rgba(16,185,129,0.2);">🟢 موافقة</a>
-                            <a href="${rejectLink}" target="_blank" style="background: #ef4444; color: white; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: bold; text-decoration: none; display: inline-block; box-shadow: 0 2px 4px rgba(239,68,68,0.2); margin-right: 8px;">🔴 رفض</a>
+                            <a href="${approveLink}" target="_blank" style="background: #10b981; color: white; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: bold; text-decoration: none; display: inline-block; box-shadow: 0 2px 4px rgba(16,185,129,0.2); font-family: 'Cairo', 'Segoe UI', sans-serif;">موافقة</a>
+                            <a href="${rejectLink}" target="_blank" style="background: #ef4444; color: white; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: bold; text-decoration: none; display: inline-block; box-shadow: 0 2px 4px rgba(239,68,68,0.2); margin-right: 8px; font-family: 'Cairo', 'Segoe UI', sans-serif;">رفض</a>
                         </div>
                     </div>
                 `;
@@ -1911,8 +2005,8 @@ export default async function handler(req, res) {
 
             if (requestsHtml === '') {
                 requestsHtml = `
-                    <div style="text-align: center; color: #64748b; padding: 20px; font-size: 14px; border: 1px dashed #e2e8f0; border-radius: 8px; background: #f8fafc;">
-                        ✅ لا توجد طلبات معلقة بانتظار المراجعة حالياً.
+                    <div style="text-align: center; color: #64748b; padding: 20px; font-size: 14px; border: 1px dashed #e2e8f0; border-radius: 8px; background: #f8fafc; font-family: 'Cairo', 'Segoe UI', sans-serif;">
+                        لا توجد طلبات معلقة بانتظار المراجعة حالياً.
                     </div>
                 `;
             }
@@ -1927,15 +2021,18 @@ export default async function handler(req, res) {
                 <meta charset="UTF-8">
                 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
                 <title>ملخص نظام الموارد البشرية</title>
+                <style>
+                    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
+                </style>
             </head>
-            <body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; direction: rtl;">
-                <div dir="rtl" style="max-width: 600px; margin: 20px auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.05); border: 1px solid #e2e8f0;">
+            <body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: 'Cairo', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; direction: rtl;">
+                <div dir="rtl" style="max-width: 600px; margin: 20px auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; font-family: 'Cairo', 'Segoe UI', sans-serif;">
                     <!-- Premium Header -->
                     <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 30px 20px; text-align: center;">
-                        <h2 style="margin: 0; color: #a3e635; font-size: 24px; font-weight: bold;">📊 لوحة تحكم البريد الإلكتروني الذكية</h2>
-                        <p style="margin: 5px 0 0 0; color: #94a3b8; font-size: 14px;">نظام الموارد البشرية الموحد | ملخص الحضور والطلبات</p>
-                        <div style="margin-top: 15px; display: inline-block; background: rgba(255,255,255,0.07); padding: 6px 16px; border-radius: 20px; color: #f8fafc; font-size: 13px; font-weight: bold;">
-                            📅 تاريخ التقرير: ${today}
+                        <h2 style="margin: 0; color: #a3e635; font-size: 24px; font-weight: bold; font-family: 'Cairo', 'Segoe UI', sans-serif;">لوحة تحكم البريد الإلكتروني الذكية</h2>
+                        <p style="margin: 5px 0 0 0; color: #94a3b8; font-size: 14px; font-family: 'Cairo', 'Segoe UI', sans-serif;">نظام الموارد البشرية الموحد | ملخص الحضور والطلبات</p>
+                        <div style="margin-top: 15px; display: inline-block; background: rgba(255,255,255,0.07); padding: 6px 16px; border-radius: 20px; color: #f8fafc; font-size: 13px; font-weight: bold; font-family: 'Cairo', 'Segoe UI', sans-serif;">
+                            تاريخ التقرير: ${today}
                         </div>
                     </div>
 
@@ -1944,21 +2041,27 @@ export default async function handler(req, res) {
                         <table width="100%" cellpadding="0" cellspacing="0" border="0" style="direction: rtl;">
                             <tr>
                                 <td width="31%" style="padding: 5px;">
-                                    <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 12px; padding: 12px; text-align: center;">
-                                        <div style="font-size: 12px; color: #065f46; font-weight: bold;">🟢 الحاضرون</div>
-                                        <div style="font-size: 22px; color: #10b981; font-weight: 800; margin-top: 4px;">${presentCount}</div>
+                                    <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 12px; padding: 12px; text-align: center; font-family: 'Cairo', 'Segoe UI', sans-serif;">
+                                        <div style="font-size: 12px; color: #065f46; font-weight: bold; font-family: 'Cairo', 'Segoe UI', sans-serif;">
+                                            <span style="color: #10b981; font-size: 14px; margin-left: 4px;">●</span>الحاضرون
+                                        </div>
+                                        <div style="font-size: 22px; color: #10b981; font-weight: 800; margin-top: 4px; font-family: 'Cairo', 'Segoe UI', sans-serif;">${presentCount}</div>
                                     </div>
                                 </td>
                                 <td width="31%" style="padding: 5px;">
-                                    <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 12px; padding: 12px; text-align: center;">
-                                        <div style="font-size: 12px; color: #991b1b; font-weight: bold;">🔴 المتغيبون</div>
-                                        <div style="font-size: 22px; color: #ef4444; font-weight: 800; margin-top: 4px;">${absentCount}</div>
+                                    <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 12px; padding: 12px; text-align: center; font-family: 'Cairo', 'Segoe UI', sans-serif;">
+                                        <div style="font-size: 12px; color: #991b1b; font-weight: bold; font-family: 'Cairo', 'Segoe UI', sans-serif;">
+                                            <span style="color: #ef4444; font-size: 14px; margin-left: 4px;">●</span>المتغيبون
+                                        </div>
+                                        <div style="font-size: 22px; color: #ef4444; font-weight: 800; margin-top: 4px; font-family: 'Cairo', 'Segoe UI', sans-serif;">${absentCount}</div>
                                     </div>
                                 </td>
                                 <td width="38%" style="padding: 5px;">
-                                    <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.2); border-radius: 12px; padding: 12px; text-align: center;">
-                                        <div style="font-size: 12px; color: #92400e; font-weight: bold;">🟡 طلبات معلقة</div>
-                                        <div style="font-size: 22px; color: #f59e0b; font-weight: 800; margin-top: 4px;">${totalPendingCount}</div>
+                                    <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.2); border-radius: 12px; padding: 12px; text-align: center; font-family: 'Cairo', 'Segoe UI', sans-serif;">
+                                        <div style="font-size: 12px; color: #92400e; font-weight: bold; font-family: 'Cairo', 'Segoe UI', sans-serif;">
+                                            <span style="color: #f59e0b; font-size: 14px; margin-left: 4px;">●</span>طلبات معلقة
+                                        </div>
+                                        <div style="font-size: 22px; color: #f59e0b; font-weight: 800; margin-top: 4px; font-family: 'Cairo', 'Segoe UI', sans-serif;">${totalPendingCount}</div>
                                     </div>
                                 </td>
                             </tr>
@@ -1970,29 +2073,41 @@ export default async function handler(req, res) {
                         
                         <!-- 1. PENDING REQUESTS -->
                         <div style="margin-top: 15px;">
-                            <h3 style="border-bottom: 2px solid #f59e0b; padding-bottom: 6px; color: #0f172a; font-size: 16px; font-weight: bold; margin-bottom: 15px;">🟡 الطلبات المعلقة والإجراءات السريعة</h3>
+                            <h3 style="border-bottom: 2px solid #f59e0b; padding-bottom: 6px; color: #0f172a; font-size: 16px; font-weight: bold; margin-bottom: 15px; font-family: 'Cairo', 'Segoe UI', sans-serif;">
+                                <span style="color: #f59e0b; font-size: 16px; margin-left: 4px;">●</span>الالطلبات المعلقة والإجراءات السريعة
+                            </h3>
                             ${requestsHtml}
                         </div>
 
-                        <!-- 2. SITES ALLOWANCES -->
+                        <!-- 2. TODAY'S PRESENT -->
                         <div style="margin-top: 30px;">
-                            <h3 style="border-bottom: 2px solid #1e293b; padding-bottom: 6px; color: #0f172a; font-size: 16px; font-weight: bold; margin-bottom: 15px;">📍 إدارة بدلات انتقال مواقع العمل</h3>
-                            ${sitesHtml}
+                            <h3 style="border-bottom: 2px solid #10b981; padding-bottom: 6px; color: #0f172a; font-size: 16px; font-weight: bold; margin-bottom: 15px; font-family: 'Cairo', 'Segoe UI', sans-serif;">
+                                <span style="color: #10b981; font-size: 16px; margin-left: 4px;">●</span>تفاصيل حضور اليوم
+                            </h3>
+                            ${presentHtml}
                         </div>
 
-                        <!-- 3. ACTIONS AND DIRECT LINKS -->
-                        <div style="margin-top: 30px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 15px; text-align: center;">
-                            <h4 style="margin: 0 0 10px 0; color: #0f172a; font-size: 14px; font-weight: bold;">📊 هل تود رؤية لوحة التحكم الكاملة والتقارير الحية؟</h4>
-                            <a href="${baseUrl}/hr/index.html" target="_blank" style="background: #10b981; color: white; padding: 10px 24px; border-radius: 8px; font-size: 14px; font-weight: bold; text-decoration: none; display: inline-block; box-shadow: 0 4px 12px rgba(16,185,129,0.3); border: 1px solid #059669;">📈 الدخول للوحة التحكم الحية</a>
-                            <div style="margin-top: 10px; font-size: 11px; color: #64748b;">
-                                ⚠️ ملاحظة أمنية: تنتهي صلاحية الروابط الفرعية لتعديل البدلات تلقائياً بعد مرور 24 ساعة من تاريخ الإرسال.
+                        <!-- 3. TODAY'S ABSENT -->
+                        <div style="margin-top: 30px;">
+                            <h3 style="border-bottom: 2px solid #ef4444; padding-bottom: 6px; color: #0f172a; font-size: 16px; font-weight: bold; margin-bottom: 15px; font-family: 'Cairo', 'Segoe UI', sans-serif;">
+                                <span style="color: #ef4444; font-size: 16px; margin-left: 4px;">●</span>تفاصيل غياب اليوم
+                            </h3>
+                            ${absentHtml}
+                        </div>
+
+                        <!-- 4. ACTIONS AND DIRECT LINKS -->
+                        <div style="margin-top: 30px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 15px; text-align: center; font-family: 'Cairo', 'Segoe UI', sans-serif;">
+                            <h4 style="margin: 0 0 10px 0; color: #0f172a; font-size: 14px; font-weight: bold; font-family: 'Cairo', 'Segoe UI', sans-serif;">هل تود رؤية لوحة التحكم الكاملة والتقارير الحية؟</h4>
+                            <a href="${baseUrl}/hr/index.html" target="_blank" style="background: #10b981; color: white; padding: 10px 24px; border-radius: 8px; font-size: 14px; font-weight: bold; text-decoration: none; display: inline-block; box-shadow: 0 4px 12px rgba(16,185,129,0.3); border: 1px solid #059669; font-family: 'Cairo', 'Segoe UI', sans-serif;">الدخول للوحة التحكم الحية</a>
+                            <div style="margin-top: 10px; font-size: 11px; color: #64748b; font-family: 'Cairo', 'Segoe UI', sans-serif;">
+                                تنبيه أمني: تنتهي صلاحية الروابط الفرعية لتعديل البدلات تلقائياً بعد مرور 24 ساعة من تاريخ الإرسال.
                             </div>
                         </div>
 
                     </div>
 
                     <!-- Footer -->
-                    <div style="background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px; text-align: center; font-size: 12px; color: #64748b; border-radius: 0 0 16px 16px;">
+                    <div style="background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px; text-align: center; font-size: 12px; color: #64748b; border-radius: 0 0 16px 16px; font-family: 'Cairo', 'Segoe UI', sans-serif;">
                         نظام الموارد البشرية الذكي | تم توليد وإرسال هذا الملخص تلقائياً بناءً على طلبك.<br>
                         © 2026 جميع الحقوق محفوظة لشركتكم.
                     </div>
@@ -2004,16 +2119,16 @@ export default async function handler(req, res) {
             const textBody = `
 لوحة تحكم البريد الإلكتروني الذكية لليوم ${today}
 ----------------------------------------
-🟢 عدد الحاضرين اليوم: ${presentCount}
-🔴 عدد المتغيبين: ${absentCount}
-🟡 عدد الطلبات المعلقة: ${totalPendingCount}
+حضور اليوم: ${presentCount}
+غياب اليوم: ${absentCount}
+الطلبات المعلقة: ${totalPendingCount}
 
-يرجى فتح البريد الإلكتروني في محرك يدعم قراءة رسائل HTML لتتمكن من مراجعة الإجراءات السريعة وتعديل بدلات المواقع.
+يرجى فتح البريد الإلكتروني في محرك يدعم قراءة رسائل HTML لتتمكن من مراجعة الإجراءات السريعة وتفاصيل الحضور والغياب.
             `.trim();
 
             const emailResult = await sendEmailNotification({
                 to: settings.emails,
-                subject: `📊 لوحة تحكم البريد الإلكتروني - ملخص الموارد البشرية ${today}`,
+                subject: `تقرير ملخص الموارد البشرية - حضور وانصراف ${today}`,
                 html: emailHtml,
                 text: textBody
             });
