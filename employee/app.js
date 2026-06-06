@@ -3261,6 +3261,17 @@ function renderMyRequestsList() {
                 
                 ${detailsHtml}
                 
+                ${req.status === 'pending' ? `
+                <div style="margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.05); display: flex; justify-content: flex-end;">
+                    <button onclick="sendReminder('${req.ids ? req.ids[0] : req.id}', '${req.type}', this)" 
+                            onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 4px 12px rgba(236, 72, 153, 0.2)';" 
+                            onmouseout="this.style.transform='none'; this.style.boxShadow='none';"
+                            style="background: linear-gradient(135deg, rgba(236, 72, 153, 0.12), rgba(245, 158, 11, 0.12)); border: 1px solid rgba(236, 72, 153, 0.35); color: #f59e0b; padding: 6px 14px; border-radius: 12px; font-size: 0.8rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s ease; outline: none;">
+                        ⏰ تذكير الإدارة
+                    </button>
+                </div>
+                ` : ''}
+                
                 <div style="margin-top: 10px; text-align: left; font-size: 0.75rem; color: var(--text-muted);">
                     تاريخ الطلب: ${dateStr}
                 </div>
@@ -3299,4 +3310,54 @@ function getRequestStatusMeta(status) {
         bg: 'rgba(245, 158, 11, 0.1)',
         border: 'rgba(245, 158, 11, 0.2)'
     };
+}
+
+async function sendReminder(requestId, requestType, button) {
+    if (!currentUser || !currentUser.id) {
+        alert("يجب تسجيل الدخول أولاً");
+        return;
+    }
+
+    const originalText = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '⏳ جاري الإرسال...';
+    button.style.opacity = '0.7';
+
+    try {
+        const payload = {
+            action: 'sendRequestReminder',
+            requestId: requestId,
+            requestType: requestType,
+            employeeId: currentUser.id,
+            employeeName: currentUser.name
+        };
+
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+
+        const result = await res.json();
+
+        if (result.success) {
+            alert('✅ ' + result.message);
+            button.innerHTML = '✅ تم إرسال التذكير';
+            button.style.background = 'rgba(16, 185, 129, 0.15)';
+            button.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+            button.style.color = '#10b981';
+            button.style.cursor = 'default';
+        } else {
+            alert('⚠️ ' + result.message);
+            button.disabled = false;
+            button.innerHTML = originalText;
+            button.style.opacity = '1';
+        }
+    } catch (e) {
+        console.error('Reminder error:', e);
+        alert('❌ حدث خطأ في الاتصال بالخادم. يرجى المحاولة مرة أخرى.');
+        button.disabled = false;
+        button.innerHTML = originalText;
+        button.style.opacity = '1';
+    }
 }

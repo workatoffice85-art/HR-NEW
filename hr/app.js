@@ -3578,9 +3578,11 @@ function renderNotificationsList(type = 'pc') {
         item.onmouseout = () => item.style.background = 'transparent';
         item.onclick = () => {
             markNotificationAsRead(notif.id);
-            if (notif.type === 'leave_request') showTab('leaveRequests');
-            else if (notif.type === 'site_request') showTab('siteRequests');
-            else if (notif.type === 'allowance_request') showTab('allowanceRequests');
+            const prefix = String(notif.relatedId || '');
+            if (notif.type === 'leave_request' || prefix.startsWith('LEAVE')) showTab('leaveRequests');
+            else if (notif.type === 'site_request' || prefix.startsWith('REQ')) showTab('siteRequests');
+            else if (notif.type === 'allowance_request' || prefix.startsWith('ALLOW')) showTab('allowanceRequests');
+            else if (notif.type === 'device_change_request' || prefix.startsWith('DEV')) showTab('deviceManagement');
             const dropId = type === 'pc' ? 'notificationDropdownPC' : 'notificationDropdownMobile';
             document.getElementById(dropId).classList.add('hidden');
         };
@@ -3608,6 +3610,7 @@ function getNotificationIcon(type) {
         'leave_request': '📅',
         'site_request': '📍',
         'allowance_request': '💰',
+        'request_reminder': '⏰',
         'default': '📢'
     };
     return icons[type] || icons['default'];

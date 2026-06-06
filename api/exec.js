@@ -597,6 +597,227 @@ async function sendRequestNotificationEmail(supabase, requestData, host) {
     };
 }
 
+/**
+ * Send request reminder notification email to HR
+ * @param {Object} supabase - Supabase client
+ * @param {Object} requestData - { type, employeeName, details, requestId }
+ * @param {string} host - Host header for generating links
+ */
+async function sendReminderNotificationEmail(supabase, requestData, host) {
+    const settings = await getNotificationSettings(supabase);
+
+    if (!settings.enabled || settings.emails.length === 0) {
+        console.log('Reminder email notifications disabled or no emails configured');
+        return { success: false, message: 'Notifications disabled' };
+    }
+
+    const { type, employeeName, details, requestId } = requestData;
+
+    const typeLabels = {
+        'leave': 'طلب إجازة',
+        'site': 'طلب تسجيل موقع',
+        'allowance': 'طلب زيادة بدلات',
+        'device': 'طلب تغيير جهاز'
+    };
+
+    const typeLabel = typeLabels[type] || 'طلب معلق';
+    const subject = `تذكير هام: ${typeLabel} معلق من ${employeeName}`;
+
+    // Generate secure links
+    const hostHeader = host || 'localhost:3000';
+    const protocol = hostHeader.includes('localhost') || hostHeader.includes('127.0.0.1') ? 'http' : 'https';
+    const baseUrl = `${protocol}://${hostHeader}`;
+
+    const results = [];
+    for (const email of settings.emails) {
+        const approveToken = generateSecureToken(requestId, 'approved', type, email);
+        const rejectToken = generateSecureToken(requestId, 'rejected', type, email);
+
+        const approveLink = `${baseUrl}/confirm-action.html?token=${approveToken}`;
+        const rejectLink = `${baseUrl}/confirm-action.html?token=${rejectToken}`;
+
+        const text = `
+مرحباً،
+
+هذا تذكير بخصوص ${typeLabel} المعلق في نظام الموارد البشرية.
+
+الموظف: ${employeeName}
+التفاصيل: ${details}
+معرف الطلب: ${requestId || 'N/A'}
+
+للموافقة أو الرفض المباشر عبر البريد الإلكتروني، يرجى الضغط على الروابط التالية:
+الموافقة: ${approveLink}
+الرفض: ${rejectLink}
+
+نظام الموارد البشرية
+        `.trim();
+
+        const html = `
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تذكير: ${typeLabel}</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
+        
+        .btn-approve {
+            transition: all 0.3s ease;
+        }
+        .btn-approve:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(5, 150, 105, 0.4) !important;
+        }
+        
+        .btn-reject {
+            transition: all 0.3s ease;
+        }
+        .btn-reject:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(220, 38, 38, 0.4) !important;
+        }
+    </style>
+</head>
+<body style="margin: 0; padding: 0; background-color: #fafafa; font-family: 'Cairo', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; direction: rtl;">
+    <div dir="rtl" style="max-width: 600px; margin: 30px auto; background-color: #fafafa; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.05); border: 1px solid #eef2f6; padding: 5px;">
+        <!-- Modern Premium Accent Bar -->
+        <div style="height: 6px; background: linear-gradient(90deg, #ec4899 0%, #f59e0b 100%); border-radius: 16px 16px 0 0;"></div>
+        
+        <!-- White Card Wrapper -->
+        <div style="background-color: #ffffff; padding: 35px 25px 25px 25px; border-radius: 0 0 12px 12px;">
+            
+            <!-- Header -->
+            <table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-bottom: 25px; direction: rtl;">
+                <tr>
+                    <td align="right" width="60" style="vertical-align: middle;">
+                        <div style="background: #fff5f5; width: 48px; height: 48px; border-radius: 12px; text-align: center; line-height: 48px; font-size: 16px; font-weight: 800; color: #f43f5e; font-family: 'Cairo', 'Segoe UI', sans-serif;">
+                            ⏰
+                        </div>
+                    </td>
+                    <td align="right" style="padding-right: 15px; vertical-align: middle;">
+                        <span style="color: #f43f5e; font-weight: bold; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 2px;">تذكير بطلب معلق</span>
+                        <h2 style="margin: 0; font-size: 20px; font-weight: 700; color: #0f172a;">تذكير: ${typeLabel}</h2>
+                    </td>
+                </tr>
+            </table>
+            
+            <!-- Details Table -->
+            <table cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse: separate; border-spacing: 0; border: 1px solid #f1f5f9; border-radius: 12px; overflow: hidden; margin-bottom: 25px; background-color: #ffffff; direction: rtl;">
+                <!-- Row 1: Employee Name -->
+                <tr>
+                    <td width="35%" style="padding: 14px 16px; background-color: #f8fafc; color: #64748b; font-weight: bold; font-size: 14px; border-bottom: 1px solid #f1f5f9; border-left: 1px solid #f1f5f9; text-align: right;">
+                        الموظف
+                    </td>
+                    <td style="padding: 14px 16px; color: #1e293b; font-weight: bold; font-size: 14px; border-bottom: 1px solid #f1f5f9; text-align: right;">
+                        ${employeeName}
+                    </td>
+                </tr>
+                <!-- Row 2: Request ID -->
+                <tr>
+                    <td width="35%" style="padding: 14px 16px; background-color: #f8fafc; color: #64748b; font-weight: bold; font-size: 14px; border-bottom: 1px solid #f1f5f9; border-left: 1px solid #f1f5f9; text-align: right;">
+                        معرف الطلب
+                    </td>
+                    <td style="padding: 14px 16px; color: #475569; font-family: monospace; font-weight: bold; font-size: 14px; border-bottom: 1px solid #f1f5f9; text-align: right;">
+                        ${requestId || 'N/A'}
+                    </td>
+                </tr>
+                <!-- Row 3: Details/Notes -->
+                <tr>
+                    <td colspan="2" style="padding: 18px 16px; background-color: #fffbeb; text-align: right;">
+                        <span style="color: #b45309; font-weight: bold; font-size: 13px; display: block; margin-bottom: 8px;">
+                            <span style="color: #d97706; margin-left: 6px; font-size: 10px; vertical-align: middle;">●</span> تفاصيل الطلب:
+                        </span>
+                        <div style="color: #78350f; font-size: 14px; line-height: 1.6; font-weight: 500;">
+                            ${details}
+                        </div>
+                    </td>
+                </tr>
+            </table>
+            
+            <!-- Decision Section Header -->
+            <div style="text-align: center; margin-bottom: 20px;">
+                <p style="margin: 0; font-size: 14px; font-weight: 600; color: #475569;">اتخاذ قرار سريع ومباشر:</p>
+            </div>
+
+            <!-- Action Buttons -->
+            <table cellpadding="0" cellspacing="0" border="0" width="100%" style="direction: rtl; margin-bottom: 30px;">
+                <tr>
+                    <td align="center">
+                        <table cellpadding="0" cellspacing="0" border="0" style="margin: 0 auto; width: 100%;">
+                            <tr>
+                                <!-- Approve Button -->
+                                <td align="center" width="50%" style="padding: 5px;">
+                                    <a href="${approveLink}" class="btn-approve" target="_blank" style="display: block; padding: 14px 20px; background: linear-gradient(135deg, #059669 0%, #10b981 100%); background-color: #059669; color: #ffffff; font-family: 'Segoe UI', Tahoma, sans-serif; font-size: 15px; font-weight: bold; text-decoration: none; border-radius: 12px; box-shadow: 0 4px 12px rgba(5, 150, 105, 0.25); text-align: center; border: 1px solid #047857;">
+                                        ✓ موافقة واعتماد
+                                    </a>
+                                </td>
+                                <!-- Reject Button -->
+                                <td align="center" width="50%" style="padding: 5px;">
+                                    <a href="${rejectLink}" class="btn-reject" target="_blank" style="display: block; padding: 14px 20px; background: linear-gradient(135deg, #dc2626 0%, #f43f5e 100%); background-color: #dc2626; color: #ffffff; font-family: 'Segoe UI', Tahoma, sans-serif; font-size: 15px; font-weight: bold; text-decoration: none; border-radius: 12px; box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25); text-align: center; border: 1px solid #b91c1c;">
+                                        ✕ رفض الطلب
+                                    </a>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
+            
+            <!-- Secure/Expiration Warning Callout -->
+            <div style="background-color: #fffbeb; border: 1px solid #fef3c7; border-radius: 12px; padding: 15px; margin-bottom: 20px; direction: rtl; text-align: right;">
+                <table cellpadding="0" cellspacing="0" border="0" width="100%">
+                    <tr>
+                        <td width="20" style="vertical-align: top; font-size: 14px; line-height: 20px; text-align: right; color: #d97706; font-weight: bold;">
+                            !
+                        </td>
+                        <td style="padding-right: 8px; font-size: 12px; color: #b45309; line-height: 1.6; text-align: right;">
+                            <strong>إشعار أمان:</strong> هذه روابط معالجة مشفرة وآمنة وصالحة للاستخدام مرة واحدة فقط. تنتهي صلاحية هذه الروابط تلقائياً بعد مرور <strong>48 ساعة</strong> من تاريخ الإرسال.
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+            <div style="text-align: center; border-top: 1px solid #f1f5f9; padding-top: 20px;">
+                <p style="color: #64748b; font-size: 13px; line-height: 1.5; margin: 0 0 10px 0;">
+                    يمكنك أيضاً مراجعة الطلبات المعلقة وتفاصيلها الكاملة عن طريق تسجيل الدخول إلى 
+                    <a href="${baseUrl}" target="_blank" style="color: #6366f1; text-decoration: none; font-weight: bold;">لوحة تحكم نظام الموارد البشرية</a>.
+                </p>
+            </div>
+        </div>
+        
+        <!-- Footer -->
+        <div style="background-color: #f8fafc; padding: 20px; text-align: center; border-top: 1px solid #f1f5f9; border-radius: 0 0 16px 16px;">
+            <p style="margin: 0 0 5px 0; color: #475569; font-size: 12px; font-weight: 600;">
+                نظام الموارد البشرية التابع لـ Demo Company
+            </p>
+            <p style="margin: 0; color: #94a3b8; font-size: 11px;">
+                &copy; 2026 جميع الحقوق محفوظة. تم إرسال هذا البريد التلقائي لمديري النظام.
+            </p>
+        </div>
+    </div>
+</body>
+</html>
+        `.trim();
+
+        const res = await sendEmailNotification({
+            to: [email],
+            subject,
+            text,
+            html
+        });
+        results.push(res);
+    }
+
+    const allSuccess = results.every(r => r.success);
+    return {
+        success: allSuccess,
+        message: allSuccess ? 'All emails sent' : 'Some emails failed',
+        details: results
+    };
+}
+
 // ============================================
 // DEVICE VERIFICATION FUNCTIONS
 // ============================================
@@ -3019,6 +3240,104 @@ export default async function handler(req, res) {
             );
 
             return res.status(200).json(result);
+        }
+
+        // --- SEND REQUEST REMINDER (Employee) ---
+        if (action === "sendRequestReminder") {
+            const { requestId, requestType, employeeId, employeeName } = data;
+
+            if (!requestId || !requestType || !employeeId) {
+                return res.status(200).json({ success: false, message: "بيانات غير مكتملة" });
+            }
+
+            let requestTable = '';
+            if (requestType === 'leave') requestTable = 'leaveRequests';
+            else if (requestType === 'allowance') requestTable = 'allowanceRequests';
+            else if (requestType === 'site') requestTable = 'siteRequests';
+            else if (requestType === 'device') requestTable = 'device_change_requests';
+            else {
+                return res.status(200).json({ success: false, message: "نوع الطلب غير صحيح" });
+            }
+
+            // Fetch request details
+            const { data: request, error: fetchError } = await supabase
+                .from(requestTable)
+                .select('*')
+                .eq('id', requestId)
+                .maybeSingle();
+
+            if (fetchError || !request) {
+                return res.status(200).json({ success: false, message: "الطلب غير موجود" });
+            }
+
+            if (request.status !== 'pending') {
+                return res.status(200).json({ success: false, message: "لا يمكن إرسال تذكير لطلب غير معلق" });
+            }
+
+            // Rate-limit reminders: check if a reminder was sent in the last 10 minutes
+            const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+            const { data: recentNotifs } = await supabase
+                .from('notifications')
+                .select('createdAt')
+                .eq('relatedId', requestId)
+                .eq('type', 'request_reminder')
+                .gte('createdAt', tenMinutesAgo);
+
+            if (recentNotifs && recentNotifs.length > 0) {
+                return res.status(200).json({ success: false, message: "لقد قمت بإرسال تذكير مؤخراً. يرجى الانتظار قليلاً قبل المحاولة مرة أخرى." });
+            }
+
+            // Format details for notification and email
+            let details = '';
+            const typeLabels = {
+                'leave': 'طلب إجازة',
+                'site': 'طلب تسجيل موقع جديد',
+                'allowance': 'طلب زيادة بدلات',
+                'device': 'طلب تغيير جهاز'
+            };
+            const typeLabel = typeLabels[requestType] || 'طلب معلق';
+
+            if (requestType === 'leave') {
+                details = `تاريخ الإجازة: ${request.leaveDate} - السبب: ${request.reason}`;
+            } else if (requestType === 'allowance') {
+                details = `الموقع: ${request.siteName || '-'} - المبلغ: ${request.amount} ج.م - ملاحظة: ${request.note || 'لا يوجد'}`;
+            } else if (requestType === 'site') {
+                details = `اسم الموقع المقترح: ${request.suggestedName} - ملاحظة: ${request.note || 'لا يوجد'}`;
+            } else if (requestType === 'device') {
+                details = `الجهاز الجديد: ${request.new_device_model || 'غير معروف'} - سبب التغيير: ${request.reason || 'لا يوجد'}`;
+            }
+
+            // Insert notification for HR
+            const notifId = "NOTIF" + Math.floor(10000 + Math.random() * 90000);
+            const dateVal = request.createdAt || request.timestamp || request.created_at;
+            const formattedDate = new Date(dateVal).toLocaleDateString('ar-EG', { timeZone: 'Africa/Cairo' });
+            
+            const { error: notifError } = await supabase.from('notifications').insert([{
+                id: notifId,
+                userRole: 'hr',
+                title: 'تذكير بطلب معلق',
+                message: `تذكير: الموظف ${employeeName} يذكرك بـ ${typeLabel} المعلق المقدم بتاريخ ${formattedDate}`,
+                type: 'request_reminder',
+                relatedId: requestId,
+                isRead: false,
+                createdAt: new Date().toISOString()
+            }]);
+
+            if (notifError) throw notifError;
+
+            // Send email notification to HR
+            try {
+                await sendReminderNotificationEmail(supabase, {
+                    type: requestType,
+                    employeeName: employeeName,
+                    details: details,
+                    requestId: requestId
+                }, req.headers.host);
+            } catch (emailErr) {
+                console.error("Error sending reminder email:", emailErr);
+            }
+
+            return res.status(200).json({ success: true, message: "تم إرسال التذكير بنجاح للإدارة" });
         }
 
         // --- GET DEVICE CHANGE REQUESTS (Admin) ---
