@@ -267,6 +267,167 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        /* Custom scrollbar for allowances container */
+        #siteAllowancesContainer::-webkit-scrollbar {
+            width: 6px;
+        }
+        #siteAllowancesContainer::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 10px;
+        }
+        #siteAllowancesContainer::-webkit-scrollbar-thumb {
+            background: rgba(94, 173, 50, 0.3);
+            border-radius: 10px;
+        }
+        #siteAllowancesContainer::-webkit-scrollbar-thumb:hover {
+            background: rgba(94, 173, 50, 0.6);
+        }
+
+        /* Allowances Custom UI classes */
+        .allowance-tier-card {
+            background: rgba(30, 41, 59, 0.45);
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            padding: 16px;
+            border-radius: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .allowance-tier-card:hover {
+            border-color: rgba(94, 173, 50, 0.2);
+            box-shadow: 0 6px 24px rgba(94, 173, 50, 0.05);
+            background: rgba(30, 41, 59, 0.55);
+        }
+        
+        .tier-price-wrapper {
+            display: flex;
+            align-items: center;
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 10px;
+            overflow: hidden;
+            transition: all 0.3s;
+        }
+        .tier-price-wrapper:focus-within {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(94, 173, 50, 0.2);
+        }
+        
+        .tier-price-suffix {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-muted);
+            padding: 6px 12px;
+            font-size: 0.85rem;
+            border-left: 1px solid rgba(255, 255, 255, 0.1);
+            font-weight: bold;
+        }
+        
+        .tier-price-input {
+            border: none !important;
+            background: transparent !important;
+            color: white !important;
+            width: 90px !important;
+            text-align: center !important;
+            font-weight: bold !important;
+            font-size: 1rem !important;
+            outline: none !important;
+            padding: 6px 10px !important;
+            margin: 0 !important;
+            box-shadow: none !important;
+        }
+        
+        .tier-delete-btn {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .tier-delete-btn:hover {
+            background: #ef4444;
+            color: white;
+            transform: scale(1.08);
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+        }
+
+        .tier-badge {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: #94a3b8;
+            cursor: pointer;
+            padding: 6px 14px;
+            border-radius: 30px;
+            font-size: 0.8rem;
+            user-select: none;
+            display: inline-flex;
+            align-items: center;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .tier-badge:hover {
+            background: rgba(255, 255, 255, 0.07);
+            border-color: rgba(255, 255, 255, 0.15);
+            color: #f1f5f9;
+            transform: translateY(-1px);
+        }
+        
+        .tier-badge.selected {
+            background: rgba(94, 173, 50, 0.12);
+            border: 1px solid rgba(94, 173, 50, 0.45);
+            color: #a3e635;
+            font-weight: bold;
+            box-shadow: 0 2px 10px rgba(94, 173, 50, 0.15);
+        }
+        .tier-badge.selected:hover {
+            background: rgba(94, 173, 50, 0.18);
+            transform: translateY(-1px);
+        }
+        
+        .tier-badge-check {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(94, 173, 50, 0.2);
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            font-size: 8px;
+            margin-left: 6px;
+            margin-right: -4px;
+            font-weight: bold;
+        }
+        
+        .btn-add-tier {
+            margin-top: 12px;
+            background: rgba(94, 173, 50, 0.12) !important;
+            border: 1px solid rgba(94, 173, 50, 0.3) !important;
+            color: #a3e635 !important;
+            width: 100% !important;
+            padding: 10px 15px !important;
+            border-radius: 10px !important;
+            font-size: 0.9rem !important;
+            font-weight: bold !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            gap: 8px !important;
+            cursor: pointer !important;
+            transition: all 0.2s !important;
+        }
+        .btn-add-tier:hover {
+            background: rgba(94, 173, 50, 0.2) !important;
+            border-color: rgba(94, 173, 50, 0.5) !important;
+            box-shadow: 0 4px 15px rgba(94, 173, 50, 0.15) !important;
+            transform: translateY(-1px) !important;
+        }
     </style>
 </head>
 
@@ -1085,11 +1246,11 @@
             <!-- البدلات المخصصة للموظفين -->
             <div class="input-group" style="margin-top: 20px;">
                 <label style="font-weight: bold; color: var(--secondary); margin-bottom: 10px; display: block;">💰 بدلات الموظفين المخصصة لهذا الموقع</label>
-                <div id="siteAllowancesContainer" style="background: rgba(0, 0, 0, 0.2); padding: 15px; border-radius: 12px; border: 1px solid var(--card-border); max-height: 250px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px;">
+                <div id="siteAllowancesContainer" style="background: rgba(15, 23, 42, 0.4); padding: 15px; border-radius: 12px; border: 1px solid var(--card-border); max-height: 360px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px;">
                     <!-- Price tiers will be rendered here dynamically -->
                 </div>
-                <button type="button" class="btn-primary" onclick="addSiteAllowanceTier()" style="margin-top: 10px; background: rgba(99, 102, 241, 0.15); border: 1px solid rgba(99, 102, 241, 0.4); color: #818cf8; width: auto; padding: 6px 15px; border-radius: 10px; font-size: 0.85rem; font-weight: bold; display: flex; align-items: center; gap: 6px; cursor: pointer; transition: all 0.2s;">
-                    + إضافة فئة بدل (سعر انتقال)
+                <button type="button" class="btn-add-tier" onclick="addSiteAllowanceTier()">
+                    <span>➕ إضافة فئة بدل (سعر انتقال)</span>
                 </button>
             </div>
 

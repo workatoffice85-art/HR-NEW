@@ -2322,8 +2322,8 @@ function renderSiteAllowancesTiers() {
 
     if (currentSiteAllowances.length === 0) {
         container.innerHTML = `
-            <div style="text-align: center; color: var(--text-muted); padding: 15px 10px; font-size: 0.85rem;">
-                لا توجد بدلات مخصصة مضافة لهذا الموقع بعد.
+            <div style="text-align: center; color: var(--text-muted); padding: 25px 10px; font-size: 0.9rem;">
+                ℹ️ لا توجد فئات بدلات انتقالات مخصصة مضافة لهذا الموقع بعد.
             </div>
         `;
         return;
@@ -2331,34 +2331,52 @@ function renderSiteAllowancesTiers() {
 
     currentSiteAllowances.forEach((tier, index) => {
         const tierEl = document.createElement('div');
-        tierEl.style.cssText = 'background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); padding: 12px; border-radius: 10px; display: flex; flex-direction: column; gap: 10px;';
+        tierEl.className = 'allowance-tier-card';
 
         const headerRow = document.createElement('div');
-        headerRow.style.cssText = 'display: flex; justify-content: space-between; align-items: center; gap: 10px;';
+        headerRow.style.cssText = 'display: flex; justify-content: space-between; align-items: center; gap: 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.05); padding-bottom: 10px;';
 
         const inputGroup = document.createElement('div');
-        inputGroup.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+        inputGroup.style.cssText = 'display: flex; align-items: center; gap: 10px;';
         
+        const priceLabel = document.createElement('span');
+        priceLabel.innerText = 'فئة بدل الانتقال:';
+        priceLabel.style.cssText = 'color: #cbd5e1; font-size: 0.9rem; font-weight: bold;';
+
+        const priceWrapper = document.createElement('div');
+        priceWrapper.className = 'tier-price-wrapper';
+
         const priceInput = document.createElement('input');
         priceInput.type = 'number';
+        priceInput.className = 'tier-price-input';
         priceInput.value = tier.price;
-        priceInput.style.cssText = 'width: 80px; padding: 4px 8px; background: rgba(0,0,0,0.3); border: 1px solid var(--card-border); color: #fff; border-radius: 6px; text-align: center;';
         priceInput.onchange = (e) => {
             const val = parseFloat(e.target.value) || 0;
             tier.price = val;
         };
 
-        const priceLabel = document.createElement('span');
-        priceLabel.innerText = 'ج.م بدل انتقال لـ:';
-        priceLabel.style.cssText = 'color: #cbd5e1; font-size: 0.85rem; font-weight: bold;';
+        const priceSuffix = document.createElement('span');
+        priceSuffix.className = 'tier-price-suffix';
+        priceSuffix.innerText = 'ج.م';
 
-        inputGroup.appendChild(priceInput);
+        priceWrapper.appendChild(priceInput);
+        priceWrapper.appendChild(priceSuffix);
+
         inputGroup.appendChild(priceLabel);
+        inputGroup.appendChild(priceWrapper);
 
         const deleteBtn = document.createElement('button');
         deleteBtn.type = 'button';
-        deleteBtn.innerText = '🗑️';
-        deleteBtn.style.cssText = 'background: transparent; border: none; cursor: pointer; font-size: 1.1rem;';
+        deleteBtn.className = 'tier-delete-btn';
+        deleteBtn.innerHTML = `
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                <line x1="10" y1="11" x2="10" y2="17"></line>
+                <line x1="14" y1="11" x2="14" y2="17"></line>
+            </svg>
+        `;
+        deleteBtn.title = 'حذف هذه الفئة';
         deleteBtn.onclick = () => {
             currentSiteAllowances.splice(index, 1);
             renderSiteAllowancesTiers();
@@ -2367,18 +2385,29 @@ function renderSiteAllowancesTiers() {
         headerRow.appendChild(inputGroup);
         headerRow.appendChild(deleteBtn);
 
+        // Section for employees
+        const empSection = document.createElement('div');
+        empSection.style.cssText = 'display: flex; flex-direction: column; gap: 8px;';
+
+        const empLabel = document.createElement('span');
+        empLabel.innerText = '👤 الموظفون المستحقون لهذه الفئة:';
+        empLabel.style.cssText = 'color: var(--text-muted); font-size: 0.75rem;';
+
         const badgesContainer = document.createElement('div');
-        badgesContainer.style.cssText = 'display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px;';
+        badgesContainer.style.cssText = 'display: flex; flex-wrap: wrap; gap: 8px;';
 
         allEmployees.forEach(emp => {
             const isSelected = tier.employeeIds.includes(emp.id);
             const badge = document.createElement('span');
-            badge.innerText = emp.name;
+            badge.className = 'tier-badge' + (isSelected ? ' selected' : '');
             
             if (isSelected) {
-                badge.style.cssText = 'background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.35); color: #10b981; cursor: pointer; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: bold; transition: all 0.2s;';
+                badge.innerHTML = `
+                    <span class="tier-badge-check">✓</span>
+                    <span>${emp.name}</span>
+                `;
             } else {
-                badge.style.cssText = 'background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); color: var(--text-muted); cursor: pointer; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; transition: all 0.2s;';
+                badge.innerText = emp.name;
             }
 
             badge.onclick = () => {
@@ -2396,8 +2425,11 @@ function renderSiteAllowancesTiers() {
             badgesContainer.appendChild(badge);
         });
 
+        empSection.appendChild(empLabel);
+        empSection.appendChild(badgesContainer);
+
         tierEl.appendChild(headerRow);
-        tierEl.appendChild(badgesContainer);
+        tierEl.appendChild(empSection);
         container.appendChild(tierEl);
     });
 }
