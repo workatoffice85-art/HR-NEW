@@ -1,3 +1,127 @@
+// Premium Custom Toast Notifications override for window.alert
+(function () {
+    const style = document.createElement('style');
+    style.innerHTML = `
+        #custom-toast-container {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 999999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+            width: 90%;
+            max-width: 400px;
+            font-family: 'Tajawal', sans-serif;
+        }
+        .custom-toast {
+            background: rgba(30, 41, 59, 0.95);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: #f8fafc;
+            padding: 14px 20px;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            pointer-events: auto;
+            direction: rtl;
+            transform: translateY(-20px);
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .custom-toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+        .custom-toast.success {
+            border-color: rgba(94, 173, 50, 0.45);
+            box-shadow: 0 10px 25px -5px rgba(94, 173, 50, 0.2);
+        }
+        .custom-toast.error {
+            border-color: rgba(239, 68, 68, 0.45);
+            box-shadow: 0 10px 25px -5px rgba(239, 68, 68, 0.2);
+        }
+        .custom-toast.info {
+            border-color: rgba(99, 102, 241, 0.45);
+            box-shadow: 0 10px 25px -5px rgba(99, 102, 241, 0.2);
+        }
+        .custom-toast-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            font-size: 0.8rem;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+        .custom-toast-icon.success {
+            background: rgba(94, 173, 50, 0.2);
+            color: #a3e635;
+        }
+        .custom-toast-icon.error {
+            background: rgba(239, 68, 68, 0.2);
+            color: #f87171;
+        }
+        .custom-toast-icon.info {
+            background: rgba(99, 102, 241, 0.2);
+            color: #818cf8;
+        }
+    `;
+    document.head.appendChild(style);
+
+    let container = document.getElementById('custom-toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'custom-toast-container';
+        document.body.appendChild(container);
+    }
+
+    window.alert = function (message) {
+        if (!message) return;
+        const msgStr = String(message).trim();
+
+        let type = 'info';
+        let icon = 'ℹ️';
+        let cleanMsg = msgStr;
+
+        if (msgStr.startsWith('✅') || msgStr.includes('نجاح') || msgStr.includes('تم ')) {
+            type = 'success';
+            icon = '✓';
+            cleanMsg = msgStr.replace(/^[✅\s]+/, '');
+        } else if (msgStr.startsWith('❌') || msgStr.includes('خطأ') || msgStr.includes('فشل') || msgStr.includes('عذراً') || msgStr.includes('الرجاء') || msgStr.includes('يرجى')) {
+            type = 'error';
+            icon = '✕';
+            cleanMsg = msgStr.replace(/^[❌\s]+/, '');
+        }
+
+        const toast = document.createElement('div');
+        toast.className = `custom-toast ${type}`;
+
+        toast.innerHTML = `
+            <span class="custom-toast-icon ${type}">${icon}</span>
+            <span style="flex: 1; line-height: 1.4;">${cleanMsg}</span>
+        `;
+
+        container.appendChild(toast);
+
+        setTimeout(() => toast.classList.add('show'), 10);
+
+        setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => toast.remove(), 400);
+        }, 3500);
+    };
+})();
+
 const API_URL = '/api/exec';
 // const OLD_BACKUP_API = 'https://script.google.com/macros/s/AKfycbwNhaRKDP-7M4dXSQend8RbYPkXRgs5nzN0-BmNzxEO8IkBN9lt6KDtJCdOqpovhJEY1Q/exec';
 
@@ -60,13 +184,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const now = new Date();
     const todayStr = now.toISOString().split('T')[0];
     const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-    
+
     document.getElementById('attendanceDateFilter').value = todayStr;
     document.getElementById('reportStartDate').value = firstDayOfMonth;
     document.getElementById('reportEndDate').value = todayStr;
     document.getElementById('employeeReportStartDate').value = firstDayOfMonth;
     document.getElementById('employeeReportEndDate').value = todayStr;
-    
+
     checkSession();
 });
 
@@ -79,7 +203,7 @@ function checkSession() {
         document.getElementById('hrLoginSection').classList.add('hidden');
         document.getElementById('dashboardSection').classList.remove('hidden');
         initDashboard();
-        
+
         // Restore active tab
         const savedTab = localStorage.getItem('hrActiveTab');
         if (savedTab) {
@@ -103,7 +227,7 @@ async function loginHR() {
             headers: { 'Content-Type': 'text/plain' }
         });
         const result = await response.json();
-        
+
         if (result.success) {
             localStorage.setItem('hrSession', JSON.stringify(result.data));
             checkSession();
@@ -255,7 +379,7 @@ async function initDashboard(forceRefresh = false) {
     } catch (e) {
         console.error("Initial load failed", e);
     }
-    
+
     const loader = document.getElementById('loader');
     if (loader) loader.classList.add('hidden');
 }
@@ -284,16 +408,37 @@ async function fetchAttendance(force = false) {
     try {
         const res = await fetch(`${API_URL}?action=getAttendance`);
         const result = await res.json();
-        if(result.success) {
+        if (result.success) {
             allAttendanceData = result.data;
             renderAttendanceTable(allAttendanceData);
         }
-    } catch(e) { console.error(e); }
+    } catch (e) { console.error(e); }
     document.getElementById('loader').classList.add('hidden');
 }
 
 async function refreshData() {
     await initDashboard(true);
+}
+
+async function sendEmailDashboard() {
+    document.getElementById('loader').classList.remove('hidden');
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'sendEmailDashboard' }),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+        if (result.success) {
+            alert("✅ " + (result.message || "تم إرسال ملخص لوحة التحكم للبريد الإلكتروني بنجاح."));
+        } else {
+            alert("❌ فشل الإرسال: " + result.message);
+        }
+    } catch (e) {
+        console.error(e);
+        alert("❌ خطأ في الاتصال بالخادم.");
+    }
+    document.getElementById('loader').classList.add('hidden');
 }
 
 // Helper: Extract Cairo time from ISO string (format: 2026-04-26T09:34:48+02:00)
@@ -303,16 +448,16 @@ function formatCairoTime(isoString) {
     // Match the time part before the timezone offset: T09:34:48+02:00 -> 09:34:48
     const match = isoString.match(/T(\d{2}):(\d{2}):(\d{2})/);
     if (!match) return isoString;
-    
+
     let hours = parseInt(match[1], 10);
     const minutes = match[2];
     const seconds = match[3];
-    
+
     // Convert to 12-hour format with AM/PM
     const period = hours >= 12 ? 'م' : 'ص';
     if (hours > 12) hours -= 12;
     if (hours === 0) hours = 12;
-    
+
     return `${hours}:${minutes}:${seconds} ${period}`;
 }
 
@@ -339,7 +484,7 @@ function renderAttendanceTable(data) {
     const filterDate = document.getElementById('attendanceDateFilter').value;
     const tbody = document.getElementById('attendanceTableBody');
     tbody.innerHTML = '';
-    
+
     // Filter by date if selected
     let filtered = data;
     if (filterDate) {
@@ -352,11 +497,11 @@ function renderAttendanceTable(data) {
     // Calculate attendance stats (excluding HR employees)
     const employeeOnlyList = allEmployees.filter(e => e.role !== 'hr');
     const employeeOnlyIds = new Set(employeeOnlyList.map(e => String(e.id)));
-    
+
     const filterDateStr = filterDate || new Date().toISOString().split('T')[0];
     const approvedLeaveEmployeeIds = new Set(
         allLeaveRequests.filter(req => req.leaveDate === filterDateStr && req.status === 'approved')
-                        .map(req => String(req.employeeId))
+            .map(req => String(req.employeeId))
     );
 
     const presentEmployeeIds = new Set();
@@ -367,12 +512,12 @@ function renderAttendanceTable(data) {
     });
     const presentCount = presentEmployeeIds.size;
     const totalEmployees = employeeOnlyList.length;
-    
+
     // Absent means: not present AND not on approved leave
     const absentEmployeeIds = employeeOnlyList
         .filter(emp => !presentEmployeeIds.has(String(emp.id)) && !approvedLeaveEmployeeIds.has(String(emp.id)))
         .map(emp => String(emp.id));
-    
+
     const absentCount = absentEmployeeIds.length;
 
     // Update stats display
@@ -396,7 +541,7 @@ function renderAttendanceTable(data) {
                 </tr>
             `);
         });
-        
+
         // Also show employees on approved leave as a separate group or just informational?
         // Let's add them with a different style to be clear
         employeeOnlyList.filter(emp => approvedLeaveEmployeeIds.has(String(emp.id)) && !presentEmployeeIds.has(String(emp.id))).forEach(emp => {
@@ -428,9 +573,9 @@ function renderAttendanceTable(data) {
         } else if (record.checkOut) {
             checkOutTime = formatCairoTime(record.checkOut);
         }
-        
+
         const statusMeta = getStatusMeta(record.status, record.checkIn ? record.checkIn.slice(0, 10) : null);
-        
+
         html.push(`
             <tr>
                 <td data-label="الموظف">${record.employeeName}</td>
@@ -534,11 +679,11 @@ function getApprovedAllowanceExtra(employeeId, siteId, dateKey) {
 
 function getCurrentTransportPrice(record) {
     const employee = allEmployees.find(e => String(e.id) === String(record.employeeId));
-    const allowance = employee && employee.siteAllowances ? 
+    const allowance = employee && employee.siteAllowances ?
         employee.siteAllowances.find(a => String(a.siteId) === String(record.siteId)) : null;
-    
+
     const recordPrice = toTransportNumber(record.transportPrice);
-    
+
     // If no site override, keep stored value (already includes any approved increases).
     if (!allowance) return recordPrice;
 
@@ -806,7 +951,7 @@ async function generateEmployeeDetailedReport() {
     // --- SMART RETRIEVAL LAYER FOR OLD ARCHIVED ATTENDANCE ---
     const retentionCutoff = new Date();
     retentionCutoff.setDate(retentionCutoff.getDate() - 365);
-    
+
     if (startDate < retentionCutoff) {
         const loader = document.getElementById('loader');
         if (loader) loader.classList.remove('hidden');
@@ -885,18 +1030,18 @@ async function generateEmployeeDetailedReport() {
 
     const workingDaysCount = getWorkingDaysCount(startDate, endDate);
     const daysPresent = presentDates.size;
-    
+
     // Calculate approved leaves on working days to subtract from absence
     const weekendDays = getWeekendDaysFromSettings();
     const holidayDatesSet = new Set(allOfficialHolidays.map(h => h.holidayDate ? h.holidayDate.split('T')[0] : null).filter(Boolean));
-    
+
     const approvedLeavesOnWorkingDaysCount = allLeaveRequests.filter(req => {
         return String(req.employeeId) === String(employeeId) &&
-               req.leaveDate >= startStr && req.leaveDate <= endStr &&
-               req.status === 'approved' &&
-               !weekendDays.includes(new Date(req.leaveDate).getDay()) &&
-               !holidayDatesSet.has(req.leaveDate) &&
-               !presentDates.has(req.leaveDate);
+            req.leaveDate >= startStr && req.leaveDate <= endStr &&
+            req.status === 'approved' &&
+            !weekendDays.includes(new Date(req.leaveDate).getDay()) &&
+            !holidayDatesSet.has(req.leaveDate) &&
+            !presentDates.has(req.leaveDate);
     }).length;
 
     const daysAbsent = Math.max(workingDaysCount - daysPresent - approvedLeavesOnWorkingDaysCount, 0);
@@ -911,25 +1056,25 @@ async function generateEmployeeDetailedReport() {
     // Calculate leave requests for this employee in the date range
     const employeeLeaveRequests = allLeaveRequests.filter(req => {
         return String(req.employeeId) === String(employeeId) &&
-               req.leaveDate >= startStr && req.leaveDate <= endStr;
+            req.leaveDate >= startStr && req.leaveDate <= endStr;
     });
     const leaveRequestsCount = employeeLeaveRequests.length;
 
     // Calculate paid allowances per unique day (maximum paidAmount/transportPrice for the day if isPaid is true)
     const dailyPaidTransport = {};
     const dailyTotalTransport = {};
-    
+
     sortedRecords.forEach(record => {
         const dateStr = record.checkIn ? record.checkIn.slice(0, 10) : '';
         if (!dateStr) return;
 
         const dayKey = `${String(record.employeeId || '')}|${dateStr}`;
         const transportValue = getCurrentTransportPrice(record);
-        
+
         if (!(dayKey in dailyTotalTransport) || transportValue > dailyTotalTransport[dayKey]) {
             dailyTotalTransport[dayKey] = transportValue;
         }
-        
+
         if (record.isPaid) {
             const paidValue = parseFloat(record.paidAmount || record.transportPrice || 0);
             if (!(dayKey in dailyPaidTransport) || paidValue > dailyPaidTransport[dayKey]) {
@@ -1002,8 +1147,8 @@ async function generateEmployeeDetailedReport() {
 
     // Map approved leave requests by date
     const approvedLeavesByDate = {};
-    allLeaveRequests.filter(req => 
-        String(req.employeeId) === String(employeeId) && 
+    allLeaveRequests.filter(req =>
+        String(req.employeeId) === String(employeeId) &&
         req.status === 'approved'
     ).forEach(req => {
         approvedLeavesByDate[req.leaveDate] = req;
@@ -1018,7 +1163,7 @@ async function generateEmployeeDetailedReport() {
     });
 
     const detailedHtml = [];
-    
+
     // Iterate from End Date back to Start Date
     let currentLoopDate = new Date(endDate);
     currentLoopDate.setHours(0, 0, 0, 0);
@@ -1028,7 +1173,7 @@ async function generateEmployeeDetailedReport() {
     while (currentLoopDate >= stopLoopDate) {
         const dateKey = getLocalDateKey(currentLoopDate);
         const displayDate = formatCairoDate(dateKey);
-        
+
         if (attendanceByDate[dateKey]) {
             // Show attendance records (present, late, overtime, etc.)
             attendanceByDate[dateKey].forEach(record => {
@@ -1041,7 +1186,7 @@ async function generateEmployeeDetailedReport() {
                 }
                 const statusMeta = getStatusMeta(record.status, dateKey);
                 const currentTransport = getCurrentTransportPrice(record);
-                
+
                 let paymentStatusHtml = '';
                 if (record.isPaid) {
                     paymentStatusHtml = `
@@ -1103,7 +1248,7 @@ async function generateEmployeeDetailedReport() {
             }
             // Weekends and Holidays without attendance are not shown to keep the table clean
         }
-        
+
         currentLoopDate.setDate(currentLoopDate.getDate() - 1);
     }
     tbody.innerHTML = detailedHtml.join('');
@@ -1201,18 +1346,18 @@ async function sendEmployeeDetailedReport() {
 async function generateReport() {
     const startStr = document.getElementById('reportStartDate').value;
     const endStr = document.getElementById('reportEndDate').value;
-    
-    if(!startStr || !endStr) return;
-    
+
+    if (!startStr || !endStr) return;
+
     const startDate = new Date(startStr);
-    startDate.setHours(0,0,0,0);
+    startDate.setHours(0, 0, 0, 0);
     const endDate = new Date(endStr);
-    endDate.setHours(23,59,59,999);
+    endDate.setHours(23, 59, 59, 999);
 
     // --- SMART RETRIEVAL LAYER FOR OLD ARCHIVED ATTENDANCE (GENERAL REPORT) ---
     const retentionCutoff = new Date();
     retentionCutoff.setDate(retentionCutoff.getDate() - 365);
-    
+
     if (startDate < retentionCutoff) {
         const loader = document.getElementById('loader');
         if (loader) loader.classList.remove('hidden');
@@ -1249,7 +1394,7 @@ async function generateReport() {
     // --- END OF SMART RETRIEVAL LAYER ---
 
     if (allAttendanceData.length === 0) return;
-    
+
 
     // Filter records for the range (using Cairo-normalized dates)
     const filtered = allAttendanceData.filter(record => {
@@ -1263,22 +1408,22 @@ async function generateReport() {
         const empId = record.employeeId;
         const recordDate = record.checkIn ? record.checkIn.slice(0, 10) : '';
 
-        if(!reportAcc[empId]) {
-             reportAcc[empId] = {
-                 name: record.employeeName,
-                 uniqueDates: new Set(),
-                 lateDates: new Set(),
-                 overtimeDates: new Set(),
-                 noCheckoutDates: new Set(),
-                 transportByDate: {},
-                 daysPresent: 0,
-                 lates: 0,
-                 overtime: 0,
-                 noCheckout: 0,
-                 totalTransport: 0
-             };
+        if (!reportAcc[empId]) {
+            reportAcc[empId] = {
+                name: record.employeeName,
+                uniqueDates: new Set(),
+                lateDates: new Set(),
+                overtimeDates: new Set(),
+                noCheckoutDates: new Set(),
+                transportByDate: {},
+                daysPresent: 0,
+                lates: 0,
+                overtime: 0,
+                noCheckout: 0,
+                totalTransport: 0
+            };
         }
-        
+
         const empStats = reportAcc[empId];
 
         // Determine if this is an overtime day (weekend/holiday work)
@@ -1302,19 +1447,19 @@ async function generateReport() {
             }
         }
 
-        if(record.status === 'late') {
+        if (record.status === 'late') {
             if (!empStats.lateDates.has(recordDate)) {
                 empStats.lateDates.add(recordDate);
                 empStats.lates += 1;
             }
         }
-        if(isOvertimeDay) {
+        if (isOvertimeDay) {
             if (!empStats.overtimeDates.has(recordDate)) {
                 empStats.overtimeDates.add(recordDate);
                 empStats.overtime += 1;
             }
         }
-        if(record.status === 'no_checkout') {
+        if (record.status === 'no_checkout') {
             if (!empStats.noCheckoutDates.has(recordDate)) {
                 empStats.noCheckoutDates.add(recordDate);
                 empStats.noCheckout += 1;
@@ -1322,11 +1467,11 @@ async function generateReport() {
         }
         // Get current transport price from siteAllowances (reflects latest changes)
         const employee = allEmployees.find(e => String(e.id) === String(empId));
-        const allowance = employee && employee.siteAllowances ? 
+        const allowance = employee && employee.siteAllowances ?
             employee.siteAllowances.find(a => String(a.siteId) === String(record.siteId)) : null;
-        const transportValue = allowance ? parseFloat(allowance.transportPrice || 0) : 
+        const transportValue = allowance ? parseFloat(allowance.transportPrice || 0) :
             toTransportNumber(record.transportPrice);
-        
+
         if (!(recordDate in empStats.transportByDate)) {
             empStats.transportByDate[recordDate] = transportValue;
         } else if (transportValue > empStats.transportByDate[recordDate]) {
@@ -1362,22 +1507,22 @@ async function generateReport() {
     for (let empId in reportAcc) {
         const data = reportAcc[empId];
         kpiTotalLates += data.lates;
-        
+
         // Calculate approved leaves for this employee in the selected range to subtract from absence
         const weekendDays = getWeekendDaysFromSettings();
         const holidayDatesSet = new Set(allOfficialHolidays.map(h => h.holidayDate ? h.holidayDate.split('T')[0] : null).filter(Boolean));
-        
+
         const approvedLeavesCount = allLeaveRequests.filter(req => {
             return String(req.employeeId) === String(empId) &&
-                   req.leaveDate >= startStr && req.leaveDate <= endStr &&
-                   req.status === 'approved' &&
-                   !weekendDays.includes(new Date(req.leaveDate).getDay()) &&
-                   !holidayDatesSet.has(req.leaveDate) &&
-                   !data.uniqueDates.has(req.leaveDate); // Only if not already present
+                req.leaveDate >= startStr && req.leaveDate <= endStr &&
+                req.status === 'approved' &&
+                !weekendDays.includes(new Date(req.leaveDate).getDay()) &&
+                !holidayDatesSet.has(req.leaveDate) &&
+                !data.uniqueDates.has(req.leaveDate); // Only if not already present
         }).length;
 
         const absentDays = Math.max(workingDaysCount - data.daysPresent - approvedLeavesCount, 0);
-        
+
         names.push(data.name);
         lates.push(data.lates);
 
@@ -1407,25 +1552,25 @@ async function generateReport() {
 async function sendCustomReport() {
     const startStr = document.getElementById('reportStartDate').value;
     const endStr = document.getElementById('reportEndDate').value;
-    
-    if(!startStr || !endStr) return alert("يرجى اختيار الفترة الزمنية أولاً");
 
-    if(!confirm("هل تريد إرسال هذا التقرير للإيميلات المسجلة في الإعدادات؟")) return;
+    if (!startStr || !endStr) return alert("يرجى اختيار الفترة الزمنية أولاً");
+
+    if (!confirm("هل تريد إرسال هذا التقرير للإيميلات المسجلة في الإعدادات؟")) return;
 
     document.getElementById('loader').classList.remove('hidden');
     try {
         const res = await fetch(API_URL, {
             method: 'POST',
-            body: JSON.stringify({ 
-                action: 'sendManualReport', 
-                startDate: startStr, 
-                endDate: endStr 
+            body: JSON.stringify({
+                action: 'sendManualReport',
+                startDate: startStr,
+                endDate: endStr
             }),
             headers: { 'Content-Type': 'text/plain' }
         });
         const result = await res.json();
         alert(result.success ? "✅ تم إرسال التقرير بنجاح" : "❌ فشل الإرسال: " + result.message);
-    } catch(e) { alert("خطأ في الاتصال"); }
+    } catch (e) { alert("خطأ في الاتصال"); }
     document.getElementById('loader').classList.add('hidden');
 }
 
@@ -1959,8 +2104,8 @@ function exportEmployeeDetailedToExcel() {
 function updateCharts(labels, latesData) {
     const ctxLates = document.getElementById('latesChart').getContext('2d');
 
-    if(latesChartInstance) latesChartInstance.destroy();
-    
+    if (latesChartInstance) latesChartInstance.destroy();
+
     latesChartInstance = new Chart(ctxLates, {
         type: 'doughnut',
         data: {
@@ -1990,12 +2135,12 @@ async function fetchEmployees(force = false) {
     try {
         const res = await fetch(`${API_URL}?action=getEmployees`);
         const result = await res.json();
-        if(result.success) {
+        if (result.success) {
             allEmployees = result.data;
             populateEmployeeDetailEmployees();
             renderEmployeesTable(allEmployees);
         }
-    } catch(e) { console.error(e); }
+    } catch (e) { console.error(e); }
     document.getElementById('loader').classList.add('hidden');
 }
 
@@ -2029,11 +2174,11 @@ async function fetchSites(force = false) {
     try {
         const res = await fetch(`${API_URL}?action=getSites`);
         const result = await res.json();
-        if(result.success) {
+        if (result.success) {
             allSites = result.data;
             renderSitesTable(allSites);
         }
-    } catch(e) { console.error("Fetch Sites Error:", e); }
+    } catch (e) { console.error("Fetch Sites Error:", e); }
     document.getElementById('loader').classList.add('hidden');
 }
 
@@ -2068,7 +2213,7 @@ function renderSitesTable(data) {
 
 async function editEmployee(id) {
     const emp = allEmployees.find(e => String(e.id) === String(id));
-    if(!emp) return;
+    if (!emp) return;
     document.getElementById('editEmpId').value = emp.id;
     document.getElementById('empModalTitle').innerText = 'تعديل بيانات موظف';
     document.getElementById('empName').value = emp.name;
@@ -2079,23 +2224,23 @@ async function editEmployee(id) {
     document.getElementById('empRole').value = emp.role;
     document.getElementById('empSalary').value = emp.salary || 0;
     document.getElementById('empTransportPrice').value = emp.transportPrice || 0;
-    
+
     // Assigned sites - normalize to array for openEmployeeModal
     const assigned = Array.isArray(emp.assignedSites) ? emp.assignedSites : (emp.assignedSites ? String(emp.assignedSites).split(',').map(s => s.trim()).filter(Boolean) : []);
     document.getElementById('empSites').value = assigned.join(',');
-    
+
     // Create a normalized emp object with array assignedSites for openEmployeeModal
     const normalizedEmp = {
         ...emp,
         assignedSites: assigned
     };
-    
+
     await openEmployeeModal('edit', normalizedEmp);
 }
 
 function editSite(id) {
     const site = allSites.find(s => String(s.id) === String(id));
-    if(!site) return;
+    if (!site) return;
     if (site.isTemporary) {
         alert('هذا موقع مؤقت (موافقة اليوم فقط) ولا يمكن تعديله من إدارة المواقع.');
         return;
@@ -2138,17 +2283,17 @@ function toggleAdvancedEmpOptions() {
 }
 
 async function deleteEntity(action, id, name) {
-    if(!confirm(`هل أنت متأكد من حذف "${name}"؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
-    
+    if (!confirm(`هل أنت متأكد من حذف "${name}"؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
+
     document.getElementById('loader').classList.remove('hidden');
     try {
-        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action, id }), headers:{'Content-Type':'text/plain'} });
+        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action, id }), headers: { 'Content-Type': 'text/plain' } });
         const result = await res.json();
-        if(result.success) {
-            if(action === 'deleteEmployee') fetchEmployees();
+        if (result.success) {
+            if (action === 'deleteEmployee') fetchEmployees();
             else fetchSites();
         } else alert("خطأ في الحذف: " + result.message);
-    } catch(e) { console.error(e); alert("خطأ في الاتصال"); }
+    } catch (e) { console.error(e); alert("خطأ في الاتصال"); }
     document.getElementById('loader').classList.add('hidden');
 }
 
@@ -2171,7 +2316,7 @@ async function openEmployeeModal(mode = 'add', emp = null) {
     // Render Sites List
     const container = document.getElementById('empSitesContainer');
     container.innerHTML = '<div style="color: var(--text-muted); font-size: 0.85rem; text-align: center;">جاري تحميل المواقع...</div>';
-    
+
     if (!allSites.length) {
         await fetchSites();
     }
@@ -2226,11 +2371,11 @@ async function saveEmployee() {
     const phone = document.getElementById('empPhone').value.trim();
     const pass = document.getElementById('empPass').value.trim();
     const role = document.getElementById('empRole').value;
-    
+
     // Collect sites and allowances
     const selectedSites = [];
     const siteAllowances = [];
-    
+
     document.querySelectorAll('#empSitesContainer > div').forEach(div => {
         const checkbox = div.querySelector('.site-checkbox');
         const priceInput = div.querySelector('.site-price-input');
@@ -2242,32 +2387,32 @@ async function saveEmployee() {
         }
     });
 
-    if(!phone) return alert("أدخل رقم الهاتف");
-    if(!name || !email) return alert("أكمل البيانات");
-    
+    if (!phone) return alert("أدخل رقم الهاتف");
+    if (!name || !email) return alert("أكمل البيانات");
+
     const autoGeneratedPassword = (!editId && !pass)
         ? ('TMP' + Math.floor(100000 + Math.random() * 900000))
         : '';
-    
+
     const payload = {
         action: editId ? 'updateEmployee' : 'saveEmployee',
         id: editId || ('EMP' + Math.floor(1000 + Math.random() * 9000)),
-        name: name, 
-        email: email, 
-        password: pass || autoGeneratedPassword, 
-        phone: phone, 
+        name: name,
+        email: email,
+        password: pass || autoGeneratedPassword,
+        phone: phone,
         role: role,
         assignedSites: selectedSites.join(','),
         siteAllowances: siteAllowances,
         salary: document.getElementById('empSalary').value || 0,
         transportPrice: document.getElementById('empTransportPrice').value || 0
     };
-    
+
     document.getElementById('loader').classList.remove('hidden');
     try {
-        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers:{'Content-Type':'text/plain'} });
+        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'text/plain' } });
         const result = await res.json();
-        if(result.success) {
+        if (result.success) {
             if (autoGeneratedPassword) {
                 alert(`تم إنشاء كلمة مرور مؤقتة تلقائيًا: ${autoGeneratedPassword}`);
             }
@@ -2278,19 +2423,19 @@ async function saveEmployee() {
                 generateReport();
             }
         } else alert("خطأ في الحفظ: " + result.message);
-    } catch(e) {
+    } catch (e) {
         console.error(e);
         alert("خطأ في الاتصال: " + e.message);
     }
     document.getElementById('loader').classList.add('hidden');
 }
 
-function openSiteModal() { 
-    document.getElementById('siteModal').classList.remove('hidden'); 
+function openSiteModal() {
+    document.getElementById('siteModal').classList.remove('hidden');
     renderSiteAllowancesTiers();
 }
-function closeSiteModal() { 
-    document.getElementById('siteModal').classList.add('hidden'); 
+function closeSiteModal() {
+    document.getElementById('siteModal').classList.add('hidden');
     currentSiteAllowances = [];
 }
 
@@ -2338,7 +2483,7 @@ function renderSiteAllowancesTiers() {
 
         const inputGroup = document.createElement('div');
         inputGroup.style.cssText = 'display: flex; align-items: center; gap: 8px;';
-        
+
         const priceInput = document.createElement('input');
         priceInput.type = 'number';
         priceInput.value = tier.price;
@@ -2374,7 +2519,7 @@ function renderSiteAllowancesTiers() {
             const isSelected = tier.employeeIds.includes(emp.id);
             const badge = document.createElement('span');
             badge.innerText = emp.name;
-            
+
             if (isSelected) {
                 badge.style.cssText = 'background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.35); color: #10b981; cursor: pointer; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: bold; transition: all 0.2s;';
             } else {
@@ -2430,7 +2575,7 @@ async function runParseMapLink() {
     if (!extracted && shouldAskBackend) {
         try {
             const res = await fetch(API_URL, {
-                method: 'POST', body: JSON.stringify({ action: 'resolveMapLink', link: link }), headers:{'Content-Type':'text/plain'}
+                method: 'POST', body: JSON.stringify({ action: 'resolveMapLink', link: link }), headers: { 'Content-Type': 'text/plain' }
             });
             const result = await res.json();
             if (currentRequestId !== parseMapLinkRequestId) return;
@@ -2472,7 +2617,7 @@ function extractLatLngFromUrl(url) {
         if (decoded !== url) candidates.push(decoded);
         const decodedTwice = decodeURIComponent(decoded);
         if (decodedTwice !== decoded && decodedTwice !== url) candidates.push(decodedTwice);
-    } catch (e) {}
+    } catch (e) { }
 
     const patterns = [
         /@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/,
@@ -2503,8 +2648,8 @@ async function saveSite() {
     const lat = document.getElementById('siteLat').value.trim();
     const lng = document.getElementById('siteLng').value.trim();
     const radius = document.getElementById('siteRadius').value.trim();
-    
-    if(!name || !lat || !lng || !radius) return alert("الرجاء إكمال كافة البيانات");
+
+    if (!name || !lat || !lng || !radius) return alert("الرجاء إكمال كافة البيانات");
 
     const siteId = editId || Math.floor(10000 + Math.random() * 90000);
     const allowancesToSave = [];
@@ -2518,20 +2663,20 @@ async function saveSite() {
             });
         });
     });
-    
+
     const payload = {
         action: editId ? 'updateSite' : 'saveSite',
-        id: siteId, 
+        id: siteId,
         name: name, latitude: lat, longitude: lng, radius: radius,
         mapLink: document.getElementById('siteMapLink').value.trim(),
         siteAllowances: allowancesToSave
     };
-    
+
     document.getElementById('loader').classList.remove('hidden');
     try {
-        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers:{'Content-Type':'text/plain'} });
+        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload), headers: { 'Content-Type': 'text/plain' } });
         const result = await res.json();
-        if(result.success) {
+        if (result.success) {
             closeSiteModal();
             fetchSites();
             fetchEmployees(true);
@@ -2541,8 +2686,8 @@ async function saveSite() {
             document.getElementById('siteLat').value = '';
             document.getElementById('siteLng').value = '';
             document.getElementById('siteRadius').value = '20';
-        } else { alert("خطأ في الحفظ: " + (result.message||'')); }
-    } catch(e) { console.error(e); alert("خطأ في الاتصال: " + e.message); }
+        } else { alert("خطأ في الحفظ: " + (result.message || '')); }
+    } catch (e) { console.error(e); alert("خطأ في الاتصال: " + e.message); }
     document.getElementById('loader').classList.add('hidden');
 }
 
@@ -2575,14 +2720,14 @@ function renderSettings(data) {
     // Ensure time values are in HH:mm format for input[type="time"]
     let start = data.workStartTime || "09:00";
     let end = data.workEndTime || "17:00";
-    
+
     // Basic normalization just in case
     if (start.match(/^\d:\d\d$/)) start = "0" + start;
     if (end.match(/^\d:\d\d$/)) end = "0" + end;
 
     document.getElementById('setWorkStartTime').value = start;
     document.getElementById('setWorkEndTime').value = end;
-    
+
     // Reports settings
     document.getElementById('setReportEmails').value = data.reportEmails || "";
     document.getElementById('setDailyReport').checked = data.dailyReportEnabled === "true";
@@ -2619,9 +2764,9 @@ function getWeekendDaysFromUI() {
 async function saveSettings() {
     const workStartTime = document.getElementById('setWorkStartTime').value;
     const workEndTime = document.getElementById('setWorkEndTime').value;
-    const reportEmails = document.getElementById('setReportEmails').value;
-    const dailyEnabled = document.getElementById('setDailyReport').checked;
-    const monthlyEnabled = document.getElementById('setMonthlyReport').checked;
+    const emailDashboardEmails = document.getElementById('setEmailDashboardEmails').value;
+    const emailDashboardTime = document.getElementById('setEmailDashboardTime').value;
+    const emailDashboardEnabled = document.getElementById('setEmailDashboardEnabled').checked;
     const notificationEmails = document.getElementById('setNotificationEmails').value;
     const requestNotificationsEnabled = document.getElementById('setRequestNotificationsEnabled').checked;
     const weekendDays = getWeekendDaysFromUI();
@@ -2633,9 +2778,9 @@ async function saveSettings() {
             settings: {
                 workStartTime: workStartTime,
                 workEndTime: workEndTime,
-                reportEmails: reportEmails,
-                dailyReportEnabled: dailyEnabled ? "true" : "false",
-                monthlyReportEnabled: monthlyEnabled ? "true" : "false",
+                emailDashboardEmails: emailDashboardEmails,
+                emailDashboardTime: emailDashboardTime,
+                emailDashboardEnabled: emailDashboardEnabled ? "true" : "false",
                 notificationEmails: notificationEmails,
                 requestNotificationsEnabled: requestNotificationsEnabled ? "true" : "false",
                 weekendDays: weekendDays
@@ -2648,7 +2793,7 @@ async function saveSettings() {
             headers: { 'Content-Type': 'text/plain' }
         });
         const result = await res.json();
-        
+
         if (result.success) {
             alert("✅ تم حفظ الإعدادات بنجاح");
         } else {
@@ -2713,7 +2858,7 @@ async function triggerSmartSync() {
 }
 
 async function setupTriggers() {
-    if(!confirm("سيتم الآن تفعيل مواعيد إرسال التقارير التلقائية. هل أنت متأكد؟")) return;
+    if (!confirm("سيتم الآن تفعيل مواعيد إرسال التقارير التلقائية. هل أنت متأكد؟")) return;
     document.getElementById('loader').classList.remove('hidden');
     try {
         const res = await fetch(API_URL, {
@@ -2723,7 +2868,7 @@ async function setupTriggers() {
         });
         const result = await res.json();
         alert(result.success ? "✅ تم تفعيل المواعيد بنجاح" : "❌ فشل التفعيل");
-    } catch(e) { alert("خطأ في الاتصال"); }
+    } catch (e) { alert("خطأ في الاتصال"); }
     document.getElementById('loader').classList.add('hidden');
 }
 
@@ -2879,18 +3024,18 @@ async function fetchSiteRequests(force = false) {
     try {
         const res = await fetch(`${API_URL}?action=getSiteRequests`);
         const result = await res.json();
-        if(result.success) {
+        if (result.success) {
             allSiteRequests = result.data;
             renderSiteRequestsTable(allSiteRequests);
         }
-    } catch(e) { console.error("Fetch Site Requests error:", e); }
+    } catch (e) { console.error("Fetch Site Requests error:", e); }
     document.getElementById('loader').classList.add('hidden');
 }
 
 function renderSiteRequestsTable(data) {
     const tbody = document.getElementById('siteRequestsTableBody');
     tbody.innerHTML = '';
-    
+
     const html = [];
     [...data].reverse().forEach(req => {
         let statusText = 'قيد الانتظار';
@@ -2978,11 +3123,11 @@ async function confirmApproval(mode) {
     try {
         const res = await fetch(API_URL, {
             method: 'POST',
-            body: JSON.stringify({ 
-                action: 'approveSiteRequest', 
-                id: id, 
-                name: name, 
-                transportPrice: transportPrice, 
+            body: JSON.stringify({
+                action: 'approveSiteRequest',
+                id: id,
+                name: name,
+                transportPrice: transportPrice,
                 radius: radius,
                 mode: mode,
                 mapLink: mapLink,
@@ -2991,40 +3136,40 @@ async function confirmApproval(mode) {
             headers: { 'Content-Type': 'text/plain' }
         });
         const result = await res.json();
-        if(result.success) {
+        if (result.success) {
             alert(result.message);
             closeApproveModal();
             await Promise.all([fetchSiteRequests(true), fetchSites(true)]);
         } else alert("خطأ: " + result.message);
-    } catch(e) { console.error(e); alert("خطأ في الاتصال"); }
+    } catch (e) { console.error(e); alert("خطأ في الاتصال"); }
     document.getElementById('loader').classList.add('hidden');
 }
 
 async function rejectRequest(id) {
-    if(!confirm("هل أنت متأكد من رفض هذا الموقع؟")) return;
+    if (!confirm("هل أنت متأكد من رفض هذا الموقع؟")) return;
 
     document.getElementById('loader').classList.remove('hidden');
     try {
         const res = await fetch(API_URL, {
             method: 'POST',
-            body: JSON.stringify({ 
-                action: 'rejectSiteRequest', 
+            body: JSON.stringify({
+                action: 'rejectSiteRequest',
                 id: id,
                 approvedBy: hrSession ? hrSession.name : 'HR Admin'
             }),
             headers: { 'Content-Type': 'text/plain' }
         });
         const result = await res.json();
-        if(result.success) {
+        if (result.success) {
             alert(result.message);
             await fetchSiteRequests(true);
         } else alert("خطأ: " + result.message);
-    } catch(e) { console.error(e); alert("خطأ في الاتصال"); }
+    } catch (e) { console.error(e); alert("خطأ في الاتصال"); }
     document.getElementById('loader').classList.add('hidden');
 }
 
 async function clearProcessedRequests() {
-    if(!confirm("هل أنت متأكد من مسح جميع الطلبات التي تمت الموافقة عليها أو رفضها أو انتهت صلاحتها؟ هذا الإجراء لا يمكن التراجع عنه.")) return;
+    if (!confirm("هل أنت متأكد من مسح جميع الطلبات التي تمت الموافقة عليها أو رفضها أو انتهت صلاحتها؟ هذا الإجراء لا يمكن التراجع عنه.")) return;
 
     document.getElementById('loader').classList.remove('hidden');
     try {
@@ -3034,11 +3179,11 @@ async function clearProcessedRequests() {
             headers: { 'Content-Type': 'text/plain' }
         });
         const result = await res.json();
-        if(result.success) {
+        if (result.success) {
             alert(result.message);
             await initDashboard(true); // Refresh all data to sync
         } else alert("خطأ: " + result.message);
-    } catch(e) { console.error(e); alert("خطأ في الاتصال"); }
+    } catch (e) { console.error(e); alert("خطأ في الاتصال"); }
     document.getElementById('loader').classList.add('hidden');
 }
 
@@ -3189,7 +3334,7 @@ async function deleteAllowanceRequest(id, employeeName) {
 }
 
 async function clearProcessedAllowances() {
-    if(!confirm("هل أنت متأكد من مسح جميع طلبات زيادة البدلات التي تمت الموافقة عليها أو رفضها؟ هذا الإجراء لا يمكن التراجع عنه.")) return;
+    if (!confirm("هل أنت متأكد من مسح جميع طلبات زيادة البدلات التي تمت الموافقة عليها أو رفضها؟ هذا الإجراء لا يمكن التراجع عنه.")) return;
 
     document.getElementById('loader').classList.remove('hidden');
     try {
@@ -3199,11 +3344,11 @@ async function clearProcessedAllowances() {
             headers: { 'Content-Type': 'text/plain' }
         });
         const result = await res.json();
-        if(result.success) {
+        if (result.success) {
             alert(result.message);
             await fetchAllowanceRequests(true); // Refresh data
         } else alert("خطأ: " + result.message);
-    } catch(e) { console.error(e); alert("خطأ في الاتصال"); }
+    } catch (e) { console.error(e); alert("خطأ في الاتصال"); }
     document.getElementById('loader').classList.add('hidden');
 }
 
@@ -3420,18 +3565,18 @@ async function fetchDeviceChangeRequests() {
 function renderDeviceChangeRequests(requests) {
     const tbody = document.getElementById('deviceRequestsTableBody');
     tbody.innerHTML = '';
-    
+
     if (requests.length === 0) {
         tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--text-muted);">لا توجد طلبات</td></tr>`;
         return;
     }
-    
+
     const html = [];
     requests.forEach(req => {
         let statusText = '';
         let statusColor = '';
         let actions = '';
-        
+
         if (req.status === 'pending') {
             statusText = 'قيد الانتظار';
             statusColor = '#f59e0b';
@@ -3448,7 +3593,7 @@ function renderDeviceChangeRequests(requests) {
             statusColor = 'var(--danger)';
             actions = '<span style="color:var(--text-muted); font-size:0.8rem;">تم الرفض</span>';
         }
-        
+
         let statusHtml = `<span style="color:${statusColor}">${statusText}</span>`;
         if (req.status !== 'pending' && req.processed_by) {
             statusHtml += `<br><small style="color:var(--text-muted); font-size:0.8rem;">بواسطة: ${req.processed_by}</small>`;
@@ -3460,7 +3605,7 @@ function renderDeviceChangeRequests(requests) {
         const createdAt = formatCairoDate(req.created_at) + ' ' + formatCairoTime(req.created_at);
         const oldDeviceVal = req.old_device_id || 'لا يوجد';
         const newDeviceVal = req.new_device_id || 'غير معروف';
-        
+
         html.push(`
             <tr>
                 <td data-label="الموظف">${req.user_name || req.user_id}</td>
@@ -3478,7 +3623,7 @@ function renderDeviceChangeRequests(requests) {
 
 async function approveDeviceChangeRequest(requestId) {
     if (!confirm('هل أنت متأكد من الموافقة على تغيير الجهاز؟ سيتم إلغاء تفعيل الجهاز القديم وتفعيل الجهاز الجديد.')) return;
-    
+
     document.getElementById('loader').classList.remove('hidden');
     try {
         const res = await fetch(API_URL, {
@@ -3509,7 +3654,7 @@ async function approveDeviceChangeRequest(requestId) {
 async function rejectDeviceChangeRequest(requestId) {
     const adminNote = prompt('سبب الرفض (اختياري):');
     if (adminNote === null) return; // Cancelled
-    
+
     document.getElementById('loader').classList.remove('hidden');
     try {
         const res = await fetch(API_URL, {
@@ -3558,19 +3703,19 @@ async function fetchAllDevices() {
 function renderDevicesTable(devices) {
     const tbody = document.getElementById('devicesTableBody');
     tbody.innerHTML = '';
-    
+
     if (devices.length === 0) {
         tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--text-muted);">لا توجد أجهزة مسجلة</td></tr>`;
         return;
     }
-    
+
     const html = [];
     devices.forEach(device => {
         const statusText = device.is_active ? 'نشط' : 'غير نشط';
         const statusColor = device.is_active ? 'var(--secondary)' : 'var(--text-muted)';
         const createdAt = formatCairoDate(device.created_at) + ' ' + formatCairoTime(device.created_at);
         const deviceIdVal = device.device_id || '-';
-        
+
         html.push(`
             <tr>
                 <td data-label="الموظف">${device.userName || device.user_id}</td>
@@ -3619,7 +3764,7 @@ async function deleteDevice(deviceId, userId, deviceIdString) {
 
 async function clearProcessedDeviceRequests() {
     if (!confirm('هل أنت متأكد من مسح جميع طلبات تغيير الجهاز التي تمت الموافقة عليها أو رفضها؟ هذا الإجراء لا يمكن التراجع عنه.')) return;
-    
+
     document.getElementById('loader').classList.remove('hidden');
     try {
         const res = await fetch(API_URL, {
@@ -3648,7 +3793,7 @@ let notificationsInterval = null;
 function initNotifications() {
     // Fetch notifications immediately
     fetchNotifications();
-    
+
     // Set up periodic fetching every 2 minutes
     if (notificationsInterval) clearInterval(notificationsInterval);
     notificationsInterval = setInterval(fetchNotifications, 2 * 60 * 1000);
@@ -3656,11 +3801,11 @@ function initNotifications() {
 
 async function fetchNotifications() {
     if (!hrSession) return;
-    
+
     try {
         const res = await fetch(`${API_URL}?action=getNotifications&userRole=hr`);
         const result = await res.json();
-        
+
         if (result.success) {
             notificationsData = result.notifications || [];
             updateNotificationBadge();
@@ -3696,9 +3841,9 @@ function toggleNotifications(type = 'pc') {
     const id = type === 'pc' ? 'notificationDropdownPC' : 'notificationDropdownMobile';
     const dropdown = document.getElementById(id);
     if (!dropdown) return;
-    
+
     const isHidden = dropdown.classList.contains('hidden');
-    
+
     // Close other dropdown if open
     const otherId = type === 'pc' ? 'notificationDropdownMobile' : 'notificationDropdownPC';
     const other = document.getElementById(otherId);
@@ -3716,12 +3861,12 @@ function renderNotificationsList(type = 'pc') {
     const listId = type === 'pc' ? 'notificationListPC' : 'notificationListMobile';
     const list = document.getElementById(listId);
     if (!list) return;
-    
+
     if (notificationsData.length === 0) {
         list.innerHTML = '<p style="text-align:center; color:var(--text-muted); padding:20px;">لا توجد إشعارات جديدة</p>';
         return;
     }
-    
+
     list.innerHTML = '';
     notificationsData.forEach(notif => {
         const item = document.createElement('div');
@@ -3738,10 +3883,10 @@ function renderNotificationsList(type = 'pc') {
             const dropId = type === 'pc' ? 'notificationDropdownPC' : 'notificationDropdownMobile';
             document.getElementById(dropId).classList.add('hidden');
         };
-        
+
         const icon = getNotificationIcon(notif.type);
         const timeAgo = formatTimeAgo(notif.createdAt);
-        
+
         item.innerHTML = `
             <div style="display:flex; align-items:flex-start; gap:10px;">
                 <span style="font-size:20px;">${icon}</span>
@@ -3775,7 +3920,7 @@ function formatTimeAgo(dateString) {
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
-    
+
     if (diffMins < 1) return 'الآن';
     if (diffMins < 60) return `منذ ${diffMins} دقيقة`;
     if (diffHours < 24) return `منذ ${diffHours} ساعة`;
@@ -3791,7 +3936,7 @@ async function markNotificationAsRead(notificationId) {
             headers: { 'Content-Type': 'text/plain' }
         });
         const result = await res.json();
-        
+
         if (result.success) {
             // Remove from local data
             notificationsData = notificationsData.filter(n => n.id !== notificationId);
@@ -3811,7 +3956,7 @@ async function markAllNotificationsAsRead() {
             headers: { 'Content-Type': 'text/plain' }
         });
         const result = await res.json();
-        
+
         if (result.success) {
             notificationsData = [];
             updateNotificationBadge();

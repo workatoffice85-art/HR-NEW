@@ -552,7 +552,6 @@
                         <div class="detail-row">
                             <span class="detail-label">تفاصيل الطلب</span>
                             <span class="detail-value" id="requestDetailsText">زيادة قدرها 150 جنيه حضور اليوم</span>
-                        </div>
                     </div>
 
                     <div class="confirm-btn-container">
@@ -562,6 +561,36 @@
                     </div>
 
                     <p style="color: #64748b; font-size: 13px; margin-top: 20px;">بالضغط على الزر أعلاه، سيتم تعديل حالة الطلب في خوادم الموارد البشرية وتحديث سجلات الحضور وقاعدة بيانات Google Sheets بشكل فوري وآمن.</p>
+                </div>
+
+                <!-- 6. EDIT ALLOWANCES SCREEN -->
+                <div id="editAllowancesScreen" class="hidden">
+                    <div class="icon-badge" style="--action-color: #6366f1; --action-glow: rgba(99, 102, 241, 0.4)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="12" y1="1" x2="12" y2="23"></line>
+                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                        </svg>
+                    </div>
+                    <h1 class="page-title" id="allowanceSiteTitle">تعديل بدلات الانتقال</h1>
+                    <p class="page-subtitle">تعديل فئات بدلات انتقال الموظفين للموقع</p>
+
+                    <div class="details-box" style="text-align: right; max-height: 350px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px;" id="allowanceTiersContainer">
+                        <!-- Dynamic allowance tiers will be rendered here -->
+                    </div>
+
+                    <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                        <button class="premium-btn" id="addTierBtn" style="flex: 1; padding: 12px 20px; font-size: 14px; --action-color: #4f46e5; --action-hover: #4338ca; --action-glow: rgba(79, 70, 229, 0.3)">
+                            <span>➕ إضافة فئة جديدة</span>
+                        </button>
+                    </div>
+
+                    <div class="confirm-btn-container">
+                        <button class="premium-btn" id="saveAllowancesBtn" style="--action-color: #10b981; --action-hover: #059669; --action-glow: rgba(16, 185, 129, 0.4)">
+                            <span id="saveBtnText">حفظ التغييرات للبرنامج والشيت ✔️</span>
+                        </button>
+                    </div>
+
+                    <p style="color: #64748b; font-size: 13px; margin-top: 20px;">بالضغط على حفظ التغييرات، سيتم تحديث بدلات الموظفين المحددين في قاعدة بيانات الموارد البشرية وجوجل شيت لحظياً.</p>
                 </div>
 
                 <!-- 5. SUCCESS SCREEN -->
@@ -612,6 +641,7 @@
         const processedScreen = document.getElementById('processedScreen');
         const pendingScreen = document.getElementById('pendingScreen');
         const successScreen = document.getElementById('successScreen');
+        const editAllowancesScreen = document.getElementById('editAllowancesScreen');
         
         const errorMessage = document.getElementById('errorMessage');
         const confirmActionBtn = document.getElementById('confirmActionBtn');
@@ -627,9 +657,20 @@
 
         // Render helper for screens
         function showScreen(screen) {
-            [loadingScreen, errorScreen, processedScreen, pendingScreen, successScreen].forEach(s => s.classList.add('hidden'));
-            screen.classList.remove('hidden');
+            [loadingScreen, errorScreen, processedScreen, pendingScreen, successScreen, editAllowancesScreen].forEach(s => {
+                if (s) s.classList.add('hidden');
+            });
+            if (screen) screen.classList.remove('hidden');
         }
+
+        // Global variables for edit allowances mode
+        let editAllowancesData = {
+            siteId: null,
+            siteName: '',
+            employees: [],
+            siteAllowances: []
+        };
+        let currentSiteAllowances = []; // representation: [{ tempId, price, employeeIds: [...] }]
 
         // Validate Token & Fetch Request Details
         async function fetchRequestDetails() {
@@ -659,6 +700,12 @@
                     document.documentElement.style.setProperty('--action-color', '#ef4444');
                     document.documentElement.style.setProperty('--action-hover', '#dc2626');
                     document.documentElement.style.setProperty('--action-glow', 'rgba(239, 68, 68, 0.4)');
+                }
+
+                // If this is edit site allowances mode
+                if (result.isEditSiteAllowances) {
+                    loadEditAllowances(details);
+                    return;
                 }
 
                 // If already processed, show processed state
@@ -707,6 +754,206 @@
             }
 
             showScreen(processedScreen);
+        }
+
+        // Initialize Edit Allowances UI
+        function loadEditAllowances(details) {
+            editAllowancesData = details;
+            document.getElementById('allowanceSiteTitle').textContent = `تعديل بدلات موقع ${details.siteName}`;
+            
+            // Map the site allowances into tiers
+            currentSiteAllowances = [];
+            const allowancesMap = {}; // price -> array of employeeIds
+            
+            details.siteAllowances.forEach(a => {
+                const price = parseFloat(a.transportPrice);
+                if (!allowancesMap[price]) {
+                    allowancesMap[price] = [];
+                }
+                allowancesMap[price].push(a.employeeId);
+            });
+            
+            Object.keys(allowancesMap).forEach(price => {
+                currentSiteAllowances.push({
+                    tempId: 'tier_' + Math.random().toString(36).substr(2, 9),
+                    price: parseFloat(price),
+                    employeeIds: allowancesMap[price]
+                });
+            });
+
+            renderSiteAllowancesTiers();
+            
+            // Bind actions
+            document.getElementById('addTierBtn').onclick = () => {
+                currentSiteAllowances.push({
+                    tempId: 'tier_' + Math.random().toString(36).substr(2, 9),
+                    price: 120,
+                    employeeIds: []
+                });
+                renderSiteAllowancesTiers();
+            };
+            
+            document.getElementById('saveAllowancesBtn').onclick = saveAllowances;
+            
+            showScreen(editAllowancesScreen);
+        }
+
+        // Render Tiers and employee badges
+        function renderSiteAllowancesTiers() {
+            const container = document.getElementById('allowanceTiersContainer');
+            if (!container) return;
+            container.innerHTML = '';
+
+            if (currentSiteAllowances.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; color: #64748b; padding: 25px 10px; font-size: 0.9rem;">
+                        لا توجد بدلات مخصصة مضافة لهذا الموقع بعد.<br>اضغط على "إضافة فئة جديدة" لتحديد بدلات مخصصة للموظفين.
+                    </div>
+                `;
+                return;
+            }
+
+            currentSiteAllowances.forEach((tier, index) => {
+                const tierEl = document.createElement('div');
+                tierEl.style.cssText = 'background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); padding: 16px; border-radius: 14px; display: flex; flex-direction: column; gap: 12px;';
+
+                const headerRow = document.createElement('div');
+                headerRow.style.cssText = 'display: flex; justify-content: space-between; align-items: center; gap: 10px;';
+
+                const inputGroup = document.createElement('div');
+                inputGroup.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+                
+                const priceInput = document.createElement('input');
+                priceInput.type = 'number';
+                priceInput.value = tier.price;
+                priceInput.style.cssText = 'width: 90px; padding: 6px 10px; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); color: #fff; border-radius: 8px; text-align: center; font-weight: bold; font-family: sans-serif; font-size: 15px; outline: none; transition: border 0.3s;';
+                priceInput.onfocus = () => priceInput.style.borderColor = 'var(--action-color)';
+                priceInput.onblur = () => priceInput.style.borderColor = 'rgba(255,255,255,0.1)';
+                priceInput.onchange = (e) => {
+                    const val = parseFloat(e.target.value) || 0;
+                    tier.price = val;
+                };
+
+                const priceLabel = document.createElement('span');
+                priceLabel.innerText = 'ج.م بدل انتقال لـ:';
+                priceLabel.style.cssText = 'color: #cbd5e1; font-size: 14px; font-weight: bold;';
+
+                inputGroup.appendChild(priceInput);
+                inputGroup.appendChild(priceLabel);
+
+                const deleteBtn = document.createElement('button');
+                deleteBtn.type = 'button';
+                deleteBtn.innerHTML = `
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                `;
+                deleteBtn.style.cssText = 'background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.15); cursor: pointer; padding: 8px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; transition: all 0.2s;';
+                deleteBtn.onmouseover = () => deleteBtn.style.background = 'rgba(239, 68, 68, 0.15)';
+                deleteBtn.onmouseout = () => deleteBtn.style.background = 'rgba(239, 68, 68, 0.08)';
+                deleteBtn.onclick = () => {
+                    currentSiteAllowances.splice(index, 1);
+                    renderSiteAllowancesTiers();
+                };
+
+                headerRow.appendChild(inputGroup);
+                headerRow.appendChild(deleteBtn);
+
+                const badgesContainer = document.createElement('div');
+                badgesContainer.style.cssText = 'display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; border-top: 1px solid rgba(255,255,255,0.03); padding-top: 10px;';
+
+                const activeEmployees = editAllowancesData.employees.filter(e => e.role !== 'admin');
+                if (activeEmployees.length === 0) {
+                    badgesContainer.innerHTML = '<div style="color: #64748b; font-size: 12px;">لا يوجد موظفون مضافون بالنظام.</div>';
+                }
+
+                activeEmployees.forEach(emp => {
+                    const isSelected = tier.employeeIds.includes(emp.id);
+                    const badge = document.createElement('span');
+                    badge.innerText = emp.name;
+                    
+                    if (isSelected) {
+                        badge.style.cssText = 'background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.35); color: #10b981; cursor: pointer; padding: 6px 12px; border-radius: 20px; font-size: 13px; font-weight: bold; transition: all 0.2s;';
+                    } else {
+                        badge.style.cssText = 'background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); color: #94a3b8; cursor: pointer; padding: 6px 12px; border-radius: 20px; font-size: 13px; transition: all 0.2s;';
+                    }
+
+                    badge.onclick = () => {
+                        if (isSelected) {
+                            tier.employeeIds = tier.employeeIds.filter(id => id !== emp.id);
+                        } else {
+                            currentSiteAllowances.forEach(t => {
+                                t.employeeIds = t.employeeIds.filter(id => id !== emp.id);
+                            });
+                            tier.employeeIds.push(emp.id);
+                        }
+                        renderSiteAllowancesTiers();
+                    };
+
+                    badgesContainer.appendChild(badge);
+                });
+
+                tierEl.appendChild(headerRow);
+                tierEl.appendChild(badgesContainer);
+                container.appendChild(tierEl);
+            });
+        }
+
+        // Save Allowances (POST)
+        async function saveAllowances() {
+            const saveBtn = document.getElementById('saveAllowancesBtn');
+            const saveBtnText = document.getElementById('saveBtnText');
+            saveBtn.disabled = true;
+            saveBtnText.innerHTML = `
+                <div class="pulse-loader" style="margin: 0;">
+                    <div class="pulse-dot" style="background-color: white;"></div>
+                    <div class="pulse-dot" style="background-color: white;"></div>
+                    <div class="pulse-dot" style="background-color: white;"></div>
+                </div>
+                <span>جاري حفظ وتحديث البدلات...</span>
+            `;
+
+            const allowancesToSave = [];
+            currentSiteAllowances.forEach(tier => {
+                tier.employeeIds.forEach(empId => {
+                    allowancesToSave.push({
+                        employeeId: empId,
+                        transportPrice: tier.price
+                    });
+                });
+            });
+
+            try {
+                const response = await fetch(actionUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        action: 'processEmailApproval',
+                        token: token,
+                        siteAllowances: allowancesToSave
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    document.getElementById('successMsg').textContent = result.message || "تم حفظ فئات البدلات ومزامنتها بنجاح.";
+                    showScreen(successScreen);
+                    startCountdown();
+                } else {
+                    showError(result.message || "فشل حفظ البدلات بقاعدة البيانات.");
+                    saveBtn.disabled = false;
+                    saveBtnText.innerHTML = 'حفظ التغييرات للبرنامج والشيت ✔️';
+                }
+            } catch (err) {
+                console.error("Execute Error:", err);
+                showError("حدث خطأ في الشبكة أثناء إرسال وتحديث البدلات.");
+                saveBtn.disabled = false;
+                saveBtnText.innerHTML = 'حفظ التغييرات للبرنامج والشيت ✔️';
+            }
         }
 
         function showPendingState(details, decision) {
@@ -763,6 +1010,7 @@
                 </div>
                 <span>جاري حفظ قرارك وتحديث البيانات...</span>
             `;
+
 
             try {
                 const response = await fetch(actionUrl, {

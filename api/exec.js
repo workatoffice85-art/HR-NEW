@@ -81,12 +81,13 @@ async function fetchGoogleSheetsAttendanceWithCache(employeeId = '', startDate =
  * @param {string} requestType - 'leave' | 'site' | 'allowance' | 'device'
  * @returns {string} - The base64 URL-safe token
  */
-function generateSecureToken(requestId, action, requestType, approverEmail = '') {
+function generateSecureToken(requestId, action, requestType, approverEmail = '', expiryMs = null) {
     if (!SUPABASE_SERVICE_ROLE_KEY) {
         console.error("Missing SUPABASE_SERVICE_ROLE_KEY for token generation");
         return '';
     }
-    const exp = Date.now() + 48 * 60 * 60 * 1000; // Expires in 48 hours
+    const duration = expiryMs || (48 * 60 * 60 * 1000); // Default to 48 hours
+    const exp = Date.now() + duration;
     const payload = JSON.stringify({ requestId, action, requestType, approverEmail, exp });
     const signature = crypto
         .createHmac('sha256', SUPABASE_SERVICE_ROLE_KEY)
@@ -1353,6 +1354,25 @@ export default async function handler(req, res) {
                     details: `الموديل: ${req.new_device_model || 'Unknown'} (${req.new_os_type || 'Unknown'})${req.reason ? ' - السبب: ' + req.reason : ''}`,
                     status: req.status
                 };
+            } else if (requestType === 'editSiteAllowances') {
+                const { data: site } = await supabase.from('sites').select('*').eq('id', requestId).maybeSingle();
+                if (!site) return res.status(200).json({ success: false, message: "لم يتم العثور على موقع العمل" });
+                currentStatus = 'pending';
+                if (req.method === 'GET') {
+                    const { data: employees } = await supabase.from('employees').select('id, name');
+                    const { data: allowances } = await supabase.from('siteAllowances').select('*').eq('siteId', requestId);
+                    return res.status(200).json({
+                        success: true,
+                        isEditSiteAllowances: true,
+                        requestDetails: {
+                            title: `تعديل بدلات موقع ${site.name}`,
+                            siteId: site.id,
+                            siteName: site.name,
+                            employees: employees || [],
+                            siteAllowances: allowances || []
+                        }
+                    });
+                }
             } else {
                 return res.status(200).json({ success: false, message: "نوع الطلب غير معروف" });
             }
@@ -1377,6 +1397,45 @@ export default async function handler(req, res) {
             }
 
             // Execute the corresponding approval/rejection logic!
+            if (requestType === 'editSiteAllowances') {
+                const { data: site } = await supabase.from('sites').select('*').eq('id', requestId).maybeSingle();
+                if (!site) return res.status(200).json({ success: false, message: "لم يتم العثور على موقع العمل" });
+
+                const updatedAllowances = data.siteAllowances || [];
+                const { error: errDel } = await supabase.from('siteAllowances').delete().eq('siteId', requestId);
+                if (errDel) throw errDel;
+
+                if (updatedAllowances.length > 0) {
+                    const allowanceRows = updatedAllowances.map(a => ({
+                        employeeId: a.employeeId,
+                        siteId: String(requestId),
+                        transportPrice: parseFloat(a.transportPrice) || 0
+                    }));
+                    const { error: errIns } = await supabase.from('siteAllowances').insert(allowanceRows);
+                    if (errIns) throw errIns;
+                }
+
+                syncToGoogleSheet({
+                    action: 'updateSite',
+                    id: requestId,
+                    name: site.name,
+                    latitude: site.latitude,
+                    longitude: site.longitude,
+                    radius: site.radius,
+                    transportPrice: site.transportPrice,
+                    mapLink: site.mapLink,
+                    siteAllowances: updatedAllowances
+                });
+
+                invalidateCache('sites');
+                invalidateCache('employees');
+
+                return res.status(200).json({
+                    success: true,
+                    message: "تم تحديث بدلات الموقع بنجاح في قاعدة البيانات وشيت جوجل"
+                });
+            }
+
             if (requestType === 'leave') {
                 if (decision === 'approved') {
                     // Update leave request
@@ -1695,6 +1754,275 @@ export default async function handler(req, res) {
                 leaveRequests: leaveRes.data || [],
                 allowanceRequests: allowRes.data || []
             });
+        }
+
+        if (action === "sendEmailDashboard") {
+            const settings = await getNotificationSettings(supabase);
+            if (!settings.enabled || settings.emails.length === 0) {
+                return res.status(200).json({ success: false, message: "إشعارات البريد الإلكتروني معطلة أو لم يتم إعداد بريد إلكتروني للمستقبلين." });
+            }
+
+            // 1. Fetch data in parallel
+            const [empRes, siteRes, attRes, leaveRes, allowRes, siteReqRes, deviceReqRes, allAllowancesRes] = await Promise.all([
+                supabase.from('employees').select('id, name, role'),
+                supabase.from('sites').select('*').eq('isTemporary', false),
+                supabase.from('attendance').select('*'),
+                supabase.from('leaveRequests').select('*').eq('status', 'pending'),
+                supabase.from('allowanceRequests').select('*').eq('status', 'pending'),
+                supabase.from('siteRequests').select('*').eq('status', 'pending'),
+                supabase.from('device_change_requests').select('*').eq('status', 'pending'),
+                supabase.from('siteAllowances').select('*')
+            ]);
+
+            const today = getCairoDateString(new Date());
+            const todayAtt = (attRes.data || []).filter(r => r.checkIn && r.checkIn.startsWith(today));
+            const presentCount = new Set(todayAtt.map(r => r.employeeId)).size;
+            const checkedOutCount = new Set(todayAtt.filter(r => r.checkOut).map(r => r.employeeId)).size;
+            const totalActiveEmps = (empRes.data || []).filter(e => e.role !== 'admin').length;
+            const absentCount = Math.max(0, totalActiveEmps - presentCount);
+
+            const pendingLeaves = leaveRes.data || [];
+            const pendingAllowances = allowRes.data || [];
+            const pendingSites = siteReqRes.data || [];
+            const pendingDevices = deviceReqRes.data || [];
+
+            const hostHeader = req.headers.host || 'localhost:3000';
+            const protocol = hostHeader.includes('localhost') || hostHeader.includes('127.0.0.1') ? 'http' : 'https';
+            const baseUrl = `${protocol}://${hostHeader}`;
+
+            // 2. Generate secure tokens for actions with 24-hour expiration
+            const expiryMs = 24 * 60 * 60 * 1000; // 24 hours
+
+            // Build Sites section details and edit links
+            let sitesHtml = '';
+            (siteRes.data || []).forEach(site => {
+                const siteAllowances = (allAllowancesRes.data || []).filter(a => String(a.siteId) === String(site.id));
+                const allowancesMap = {};
+                siteAllowances.forEach(a => {
+                    const price = parseFloat(a.transportPrice) || 0;
+                    if (!allowancesMap[price]) allowancesMap[price] = [];
+                    const emp = (empRes.data || []).find(e => String(e.id) === String(a.employeeId));
+                    if (emp) allowancesMap[price].push(emp.name);
+                });
+
+                let allowanceDetails = '';
+                Object.keys(allowancesMap).forEach(price => {
+                    allowanceDetails += `<div style="margin-top: 4px; font-size: 13px; color: #475569;">💰 فئة <strong>${price} ج.م</strong>: ${allowancesMap[price].join(', ')}</div>`;
+                });
+                if (allowanceDetails === '') {
+                    allowanceDetails = `<div style="margin-top: 4px; font-size: 13px; color: #94a3b8; font-style: italic;">لا توجد بدلات مخصصة</div>`;
+                }
+
+                // Generate secure link for editing allowances
+                const editToken = generateSecureToken(site.id, 'edit', 'editSiteAllowances', settings.emails[0], expiryMs);
+                const editLink = `${baseUrl}/confirm-action.html?token=${editToken}`;
+
+                sitesHtml += `
+                    <div style="border: 1px solid #e2e8f0; border-radius: 12px; padding: 15px; margin-bottom: 12px; background: #f8fafc;">
+                        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="direction: rtl;">
+                            <tr>
+                                <td align="right" style="font-weight: bold; font-size: 15px; color: #0f172a;">📍 ${site.name}</td>
+                                <td align="left">
+                                    <a href="${editLink}" target="_blank" style="background: #e2e8f0; color: #0f172a; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: bold; text-decoration: none; display: inline-block; border: 1px solid #cbd5e1;">📝 تعديل البدلات</a>
+                                </td>
+                            </tr>
+                        </table>
+                        <div style="margin-top: 8px; border-top: 1px dashed #e2e8f0; padding-top: 8px;">
+                            ${allowanceDetails}
+                        </div>
+                    </div>
+                `;
+            });
+
+            // Build Pending Requests HTML
+            let requestsHtml = '';
+
+            // 2.1 Leaves
+            pendingLeaves.forEach(req => {
+                const approveToken = generateSecureToken(req.id, 'approved', 'leave', settings.emails[0], expiryMs);
+                const rejectToken = generateSecureToken(req.id, 'rejected', 'leave', settings.emails[0], expiryMs);
+                const approveLink = `${baseUrl}/confirm-action.html?token=${approveToken}`;
+                const rejectLink = `${baseUrl}/confirm-action.html?token=${rejectToken}`;
+                requestsHtml += `
+                    <div style="border-right: 4px solid #f59e0b; background: #fffbeb; padding: 15px; border-radius: 8px; margin-bottom: 12px; border-top: 1px solid #fef3c7; border-left: 1px solid #fef3c7; border-bottom: 1px solid #fef3c7; direction: rtl;">
+                        <div style="font-weight: bold; color: #b45309; font-size: 14px;">🌴 طلب إجازة - الموظف: ${req.employeeName}</div>
+                        <div style="font-size: 13px; color: #451a03; margin-top: 4px;">📅 تاريخ: ${req.leaveDate} - السبب: ${req.reason || 'لا يوجد'}</div>
+                        <div style="margin-top: 10px;">
+                            <a href="${approveLink}" target="_blank" style="background: #10b981; color: white; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: bold; text-decoration: none; display: inline-block; box-shadow: 0 2px 4px rgba(16,185,129,0.2);">🟢 موافقة</a>
+                            <a href="${rejectLink}" target="_blank" style="background: #ef4444; color: white; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: bold; text-decoration: none; display: inline-block; box-shadow: 0 2px 4px rgba(239,68,68,0.2); margin-right: 8px;">🔴 رفض</a>
+                        </div>
+                    </div>
+                `;
+            });
+
+            // 2.2 Allowances
+            pendingAllowances.forEach(req => {
+                const approveToken = generateSecureToken(req.id, 'approved', 'allowance', settings.emails[0], expiryMs);
+                const rejectToken = generateSecureToken(req.id, 'rejected', 'allowance', settings.emails[0], expiryMs);
+                const approveLink = `${baseUrl}/confirm-action.html?token=${approveToken}`;
+                const rejectLink = `${baseUrl}/confirm-action.html?token=${rejectToken}`;
+                requestsHtml += `
+                    <div style="border-right: 4px solid #f59e0b; background: #fffbeb; padding: 15px; border-radius: 8px; margin-bottom: 12px; border-top: 1px solid #fef3c7; border-left: 1px solid #fef3c7; border-bottom: 1px solid #fef3c7; direction: rtl;">
+                        <div style="font-weight: bold; color: #b45309; font-size: 14px;">💰 طلب زيادة بدلات - الموظف: ${req.employeeName}</div>
+                        <div style="font-size: 13px; color: #451a03; margin-top: 4px;">💵 القيمة: ${req.amount} ج.م - السبب: ${req.reason || 'لا يوجد'}</div>
+                        <div style="margin-top: 10px;">
+                            <a href="${approveLink}" target="_blank" style="background: #10b981; color: white; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: bold; text-decoration: none; display: inline-block; box-shadow: 0 2px 4px rgba(16,185,129,0.2);">🟢 موافقة</a>
+                            <a href="${rejectLink}" target="_blank" style="background: #ef4444; color: white; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: bold; text-decoration: none; display: inline-block; box-shadow: 0 2px 4px rgba(239,68,68,0.2); margin-right: 8px;">🔴 رفض</a>
+                        </div>
+                    </div>
+                `;
+            });
+
+            // 2.3 Sites requests
+            pendingSites.forEach(req => {
+                const approveToken = generateSecureToken(req.id, 'approved', 'site', settings.emails[0], expiryMs);
+                const rejectToken = generateSecureToken(req.id, 'rejected', 'site', settings.emails[0], expiryMs);
+                const approveLink = `${baseUrl}/confirm-action.html?token=${approveToken}`;
+                const rejectLink = `${baseUrl}/confirm-action.html?token=${rejectToken}`;
+                requestsHtml += `
+                    <div style="border-right: 4px solid #f59e0b; background: #fffbeb; padding: 15px; border-radius: 8px; margin-bottom: 12px; border-top: 1px solid #fef3c7; border-left: 1px solid #fef3c7; border-bottom: 1px solid #fef3c7; direction: rtl;">
+                        <div style="font-weight: bold; color: #b45309; font-size: 14px;">📍 طلب تسجيل موقع جديد - الموظف: ${req.employeeName}</div>
+                        <div style="font-size: 13px; color: #451a03; margin-top: 4px;">🏢 الاسم المقترح: ${req.suggestedName} - الإحداثيات: (${req.latitude}, ${req.longitude})</div>
+                        <div style="margin-top: 10px;">
+                            <a href="${approveLink}" target="_blank" style="background: #10b981; color: white; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: bold; text-decoration: none; display: inline-block; box-shadow: 0 2px 4px rgba(16,185,129,0.2);">🟢 موافقة</a>
+                            <a href="${rejectLink}" target="_blank" style="background: #ef4444; color: white; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: bold; text-decoration: none; display: inline-block; box-shadow: 0 2px 4px rgba(239,68,68,0.2); margin-right: 8px;">🔴 رفض</a>
+                        </div>
+                    </div>
+                `;
+            });
+
+            // 2.4 Device requests
+            pendingDevices.forEach(req => {
+                const approveToken = generateSecureToken(req.id, 'approved', 'device', settings.emails[0], expiryMs);
+                const rejectToken = generateSecureToken(req.id, 'rejected', 'device', settings.emails[0], expiryMs);
+                const approveLink = `${baseUrl}/confirm-action.html?token=${approveToken}`;
+                const rejectLink = `${baseUrl}/confirm-action.html?token=${rejectToken}`;
+                requestsHtml += `
+                    <div style="border-right: 4px solid #f59e0b; background: #fffbeb; padding: 15px; border-radius: 8px; margin-bottom: 12px; border-top: 1px solid #fef3c7; border-left: 1px solid #fef3c7; border-bottom: 1px solid #fef3c7; direction: rtl;">
+                        <div style="font-weight: bold; color: #b45309; font-size: 14px;">📱 طلب تغيير جهاز - الموظف: ${req.user_name}</div>
+                        <div style="font-size: 13px; color: #451a03; margin-top: 4px;">💻 جهاز جديد: ${req.new_device_model || 'Unknown'} (${req.new_os_type || 'Unknown'})${req.reason ? ' - السبب: ' + req.reason : ''}</div>
+                        <div style="margin-top: 10px;">
+                            <a href="${approveLink}" target="_blank" style="background: #10b981; color: white; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: bold; text-decoration: none; display: inline-block; box-shadow: 0 2px 4px rgba(16,185,129,0.2);">🟢 موافقة</a>
+                            <a href="${rejectLink}" target="_blank" style="background: #ef4444; color: white; padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: bold; text-decoration: none; display: inline-block; box-shadow: 0 2px 4px rgba(239,68,68,0.2); margin-right: 8px;">🔴 رفض</a>
+                        </div>
+                    </div>
+                `;
+            });
+
+            if (requestsHtml === '') {
+                requestsHtml = `
+                    <div style="text-align: center; color: #64748b; padding: 20px; font-size: 14px; border: 1px dashed #e2e8f0; border-radius: 8px; background: #f8fafc;">
+                        ✅ لا توجد طلبات معلقة بانتظار المراجعة حالياً.
+                    </div>
+                `;
+            }
+
+            const totalPendingCount = pendingLeaves.length + pendingAllowances.length + pendingSites.length + pendingDevices.length;
+
+            // 3. Compose Email HTML Template
+            const emailHtml = `
+            <!DOCTYPE html>
+            <html lang="ar">
+            <head>
+                <meta charset="UTF-8">
+                <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+                <title>ملخص نظام الموارد البشرية</title>
+            </head>
+            <body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; direction: rtl;">
+                <div dir="rtl" style="max-width: 600px; margin: 20px auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.05); border: 1px solid #e2e8f0;">
+                    <!-- Premium Header -->
+                    <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 30px 20px; text-align: center;">
+                        <h2 style="margin: 0; color: #a3e635; font-size: 24px; font-weight: bold;">📊 لوحة تحكم البريد الإلكتروني الذكية</h2>
+                        <p style="margin: 5px 0 0 0; color: #94a3b8; font-size: 14px;">نظام الموارد البشرية الموحد | ملخص الحضور والطلبات</p>
+                        <div style="margin-top: 15px; display: inline-block; background: rgba(255,255,255,0.07); padding: 6px 16px; border-radius: 20px; color: #f8fafc; font-size: 13px; font-weight: bold;">
+                            📅 تاريخ التقرير: ${today}
+                        </div>
+                    </div>
+
+                    <!-- Statistics Cards Grid -->
+                    <div style="padding: 20px 20px 10px 20px;">
+                        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="direction: rtl;">
+                            <tr>
+                                <td width="31%" style="padding: 5px;">
+                                    <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 12px; padding: 12px; text-align: center;">
+                                        <div style="font-size: 12px; color: #065f46; font-weight: bold;">🟢 الحاضرون</div>
+                                        <div style="font-size: 22px; color: #10b981; font-weight: 800; margin-top: 4px;">${presentCount}</div>
+                                    </div>
+                                </td>
+                                <td width="31%" style="padding: 5px;">
+                                    <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 12px; padding: 12px; text-align: center;">
+                                        <div style="font-size: 12px; color: #991b1b; font-weight: bold;">🔴 المتغيبون</div>
+                                        <div style="font-size: 22px; color: #ef4444; font-weight: 800; margin-top: 4px;">${absentCount}</div>
+                                    </div>
+                                </td>
+                                <td width="38%" style="padding: 5px;">
+                                    <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.2); border-radius: 12px; padding: 12px; text-align: center;">
+                                        <div style="font-size: 12px; color: #92400e; font-weight: bold;">🟡 طلبات معلقة</div>
+                                        <div style="font-size: 22px; color: #f59e0b; font-weight: 800; margin-top: 4px;">${totalPendingCount}</div>
+                                    </div>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+
+                    <!-- Main Sections Wrapper -->
+                    <div style="padding: 10px 20px 25px 20px;">
+                        
+                        <!-- 1. PENDING REQUESTS -->
+                        <div style="margin-top: 15px;">
+                            <h3 style="border-bottom: 2px solid #f59e0b; padding-bottom: 6px; color: #0f172a; font-size: 16px; font-weight: bold; margin-bottom: 15px;">🟡 الطلبات المعلقة والإجراءات السريعة</h3>
+                            ${requestsHtml}
+                        </div>
+
+                        <!-- 2. SITES ALLOWANCES -->
+                        <div style="margin-top: 30px;">
+                            <h3 style="border-bottom: 2px solid #1e293b; padding-bottom: 6px; color: #0f172a; font-size: 16px; font-weight: bold; margin-bottom: 15px;">📍 إدارة بدلات انتقال مواقع العمل</h3>
+                            ${sitesHtml}
+                        </div>
+
+                        <!-- 3. ACTIONS AND DIRECT LINKS -->
+                        <div style="margin-top: 30px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 15px; text-align: center;">
+                            <h4 style="margin: 0 0 10px 0; color: #0f172a; font-size: 14px; font-weight: bold;">📊 هل تود رؤية لوحة التحكم الكاملة والتقارير الحية؟</h4>
+                            <a href="${baseUrl}/hr/index.html" target="_blank" style="background: #10b981; color: white; padding: 10px 24px; border-radius: 8px; font-size: 14px; font-weight: bold; text-decoration: none; display: inline-block; box-shadow: 0 4px 12px rgba(16,185,129,0.3); border: 1px solid #059669;">📈 الدخول للوحة التحكم الحية</a>
+                            <div style="margin-top: 10px; font-size: 11px; color: #64748b;">
+                                ⚠️ ملاحظة أمنية: تنتهي صلاحية الروابط الفرعية لتعديل البدلات تلقائياً بعد مرور 24 ساعة من تاريخ الإرسال.
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Footer -->
+                    <div style="background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 20px; text-align: center; font-size: 12px; color: #64748b; border-radius: 0 0 16px 16px;">
+                        نظام الموارد البشرية الذكي | تم توليد وإرسال هذا الملخص تلقائياً بناءً على طلبك.<br>
+                        © 2026 جميع الحقوق محفوظة لشركتكم.
+                    </div>
+                </div>
+            </body>
+            </html>
+            `;
+
+            const textBody = `
+لوحة تحكم البريد الإلكتروني الذكية لليوم ${today}
+----------------------------------------
+🟢 عدد الحاضرين اليوم: ${presentCount}
+🔴 عدد المتغيبين: ${absentCount}
+🟡 عدد الطلبات المعلقة: ${totalPendingCount}
+
+يرجى فتح البريد الإلكتروني في محرك يدعم قراءة رسائل HTML لتتمكن من مراجعة الإجراءات السريعة وتعديل بدلات المواقع.
+            `.trim();
+
+            const emailResult = await sendEmailNotification({
+                to: settings.emails,
+                subject: `📊 لوحة تحكم البريد الإلكتروني - ملخص الموارد البشرية ${today}`,
+                html: emailHtml,
+                text: textBody
+            });
+
+            if (emailResult.success) {
+                return res.status(200).json({ success: true, message: "تم إرسال لوحة التحكم المصغرة إلى بريدك الإلكتروني بنجاح" });
+            } else {
+                return res.status(200).json({ success: false, message: "فشل إرسال البريد الإلكتروني: " + emailResult.message });
+            }
         }
 
         // --- EMPLOYEE DASHBOARD INIT ---
@@ -3341,7 +3669,7 @@ export default async function handler(req, res) {
             const notifId = "NOTIF" + Math.floor(10000 + Math.random() * 90000);
             const dateVal = request.createdAt || request.timestamp || request.created_at;
             const formattedDate = new Date(dateVal).toLocaleDateString('ar-EG', { timeZone: 'Africa/Cairo' });
-            
+
             const { error: notifError } = await supabase.from('notifications').insert([{
                 id: notifId,
                 userRole: 'hr',

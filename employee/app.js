@@ -1,3 +1,127 @@
+// Premium Custom Toast Notifications override for window.alert
+(function() {
+    const style = document.createElement('style');
+    style.innerHTML = `
+        #custom-toast-container {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 999999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+            width: 90%;
+            max-width: 400px;
+            font-family: 'Tajawal', sans-serif;
+        }
+        .custom-toast {
+            background: rgba(30, 41, 59, 0.95);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: #f8fafc;
+            padding: 14px 20px;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            pointer-events: auto;
+            direction: rtl;
+            transform: translateY(-20px);
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .custom-toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+        .custom-toast.success {
+            border-color: rgba(94, 173, 50, 0.45);
+            box-shadow: 0 10px 25px -5px rgba(94, 173, 50, 0.2);
+        }
+        .custom-toast.error {
+            border-color: rgba(239, 68, 68, 0.45);
+            box-shadow: 0 10px 25px -5px rgba(239, 68, 68, 0.2);
+        }
+        .custom-toast.info {
+            border-color: rgba(99, 102, 241, 0.45);
+            box-shadow: 0 10px 25px -5px rgba(99, 102, 241, 0.2);
+        }
+        .custom-toast-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            font-size: 0.8rem;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+        .custom-toast-icon.success {
+            background: rgba(94, 173, 50, 0.2);
+            color: #a3e635;
+        }
+        .custom-toast-icon.error {
+            background: rgba(239, 68, 68, 0.2);
+            color: #f87171;
+        }
+        .custom-toast-icon.info {
+            background: rgba(99, 102, 241, 0.2);
+            color: #818cf8;
+        }
+    `;
+    document.head.appendChild(style);
+
+    let container = document.getElementById('custom-toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'custom-toast-container';
+        document.body.appendChild(container);
+    }
+
+    window.alert = function(message) {
+        if (!message) return;
+        const msgStr = String(message).trim();
+        
+        let type = 'info';
+        let icon = 'ℹ️';
+        let cleanMsg = msgStr;
+        
+        if (msgStr.startsWith('✅') || msgStr.includes('نجاح') || msgStr.includes('تم ')) {
+            type = 'success';
+            icon = '✓';
+            cleanMsg = msgStr.replace(/^[✅\s]+/, '');
+        } else if (msgStr.startsWith('❌') || msgStr.includes('خطأ') || msgStr.includes('فشل') || msgStr.includes('عذراً') || msgStr.includes('الرجاء') || msgStr.includes('يرجى')) {
+            type = 'error';
+            icon = '✕';
+            cleanMsg = msgStr.replace(/^[❌\s]+/, '');
+        }
+
+        const toast = document.createElement('div');
+        toast.className = `custom-toast ${type}`;
+        
+        toast.innerHTML = `
+            <span class="custom-toast-icon ${type}">${icon}</span>
+            <span style="flex: 1; line-height: 1.4;">${cleanMsg}</span>
+        `;
+        
+        container.appendChild(toast);
+        
+        setTimeout(() => toast.classList.add('show'), 10);
+        
+        setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => toast.remove(), 400);
+        }, 3500);
+    };
+})();
+
 const API_URL = '/api/exec';
 // const OLD_BACKUP_API = 'https://script.google.com/macros/s/AKfycbwNhaRKDP-7M4dXSQend8RbYPkXRgs5nzN0-BmNzxEO8IkBN9lt6KDtJCdOqpovhJEY1Q/exec';
 
