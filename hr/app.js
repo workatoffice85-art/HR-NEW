@@ -554,12 +554,8 @@ function renderAttendanceTable(data) {
                     <td data-label="وقت الحضور" dir="ltr">-</td>
                     <td data-label="وقت الانصراف" dir="ltr">-</td>
                     <td data-label="بدل الانتقال">-</td>
-                    <td data-label="الحالة">
-                        <div style="display:flex; align-items:center; justify-content:center; gap:8px;">
-                            ${statusHtml}
-                            ${actionHtml}
-                        </div>
-                    </td>
+                    <td data-label="الحالة">${statusHtml}</td>
+                    <td data-label="الإجراءات">${actionHtml}</td>
                 </tr>
             `);
         });
@@ -575,6 +571,7 @@ function renderAttendanceTable(data) {
                     <td data-label="وقت الانصراف" dir="ltr">-</td>
                     <td data-label="بدل الانتقال">-</td>
                     <td data-label="الحالة"><span style="color:#3b82f6">إجازة معتمدة</span></td>
+                    <td data-label="الإجراءات">-</td>
                 </tr>
             `);
         });
@@ -606,6 +603,7 @@ function renderAttendanceTable(data) {
                 <td data-label="وقت الانصراف" dir="ltr">${checkOutTime}</td>
                 <td data-label="بدل الانتقال">${getCurrentTransportPrice(record) || 0} ج.م</td>
                 <td data-label="الحالة"><span style="color:${statusMeta.color}">${statusMeta.text}</span></td>
+                <td data-label="الإجراءات">-</td>
             </tr>
         `);
     });

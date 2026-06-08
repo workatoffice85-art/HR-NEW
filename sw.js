@@ -1,4 +1,4 @@
-const CACHE_NAME = 'hr-attendance-cache-v1';
+const CACHE_NAME = 'hr-attendance-cache-v2';
 
 // Static assets to cache immediately on installation
 const CRITICAL_ASSETS = [
