@@ -10,6 +10,10 @@
       "destination": "/api/sync.js"
     },
     {
+      "source": "/api/send-scheduled-summary",
+      "destination": "/api/exec.js?action=sendScheduledSummary"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/exec.js"
     }
@@ -22,6 +26,10 @@
     {
       "path": "/api/archive",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/send-scheduled-summary",
+      "schedule": "0 * * * *"
     }
   ]
 }
