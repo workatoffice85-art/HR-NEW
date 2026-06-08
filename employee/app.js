@@ -2386,7 +2386,7 @@ function renderMyReports(data, monthStr) {
 
         if (isOvertime) {
             overtimeDates.add(dateKey);
-        } else {
+        } else if (r.status !== 'penalty') {
             presentDates.add(dateKey);
         }
     });
@@ -2399,7 +2399,7 @@ function renderMyReports(data, monthStr) {
     presentRecords.forEach(record => {
         const dateKey = record.checkIn ? record.checkIn.slice(0, 10) : null;
 
-        if (dateKey) {
+        if (dateKey && record.status !== 'penalty') {
             const transportValue = getCurrentTransportPrice(record);
             if (!(dateKey in dailyTransport)) {
                 dailyTransport[dateKey] = transportValue;
@@ -2411,9 +2411,9 @@ function renderMyReports(data, monthStr) {
             date: record.checkIn, // Keep as ISO string
             checkIn: record.checkIn,
             checkOut: record.checkOut,
-            siteName: record.siteName || '-',
-            status: record.status, // 'present' or 'late'
-            transport: getCurrentTransportPrice(record),
+            siteName: record.status === 'penalty' ? '-' : (record.siteName || '-'),
+            status: record.status, // 'present' or 'late' or 'penalty'
+            transport: record.status === 'penalty' ? 0 : getCurrentTransportPrice(record),
             isPaid: record.isPaid || false,
             type: 'entry'
         });
@@ -2437,8 +2437,9 @@ function renderMyReports(data, monthStr) {
 
     let approvedLeavesOnWorkingDaysCount = 0;
     // Add Absent or Leave Days (Only for working days that have no record)
+    const hasRecordDates = new Set(presentRecords.map(r => r.checkIn ? r.checkIn.slice(0, 10) : '').filter(Boolean));
     workingDaysPassed.forEach(dateStr => {
-        if (!presentDates.has(dateStr)) {
+        if (!hasRecordDates.has(dateStr)) {
             if (approvedLeavesByDate[dateStr]) {
                 approvedLeavesOnWorkingDaysCount++;
                 fullReport.push({
@@ -2473,6 +2474,9 @@ function renderMyReports(data, monthStr) {
             } else if (item.status === 'no_checkout') {
                 statusText = 'لم يتم الانصراف';
                 statusColor = '#f59e0b';
+            } else if (item.status === 'penalty') {
+                statusText = 'خصم غياب';
+                statusColor = 'var(--danger)';
             }
 
             let checkOutDisplay = '-';
@@ -2492,11 +2496,11 @@ function renderMyReports(data, monthStr) {
             }
 
             tbody.innerHTML += `
-                <tr style="border-bottom: 1px solid var(--card-border);">
+                <tr style="${item.status === 'penalty' ? 'background: rgba(239, 68, 68, 0.05);' : ''} border-bottom: 1px solid var(--card-border);">
                     <td data-label="التاريخ" style="padding: 8px 5px;">${formatCairoDate(item.checkIn)}</td>
-                    <td data-label="الحضور" style="padding: 8px 5px; font-family: monospace;">${formatCairoTime(item.checkIn)}</td>
-                    <td data-label="الانصراف" style="padding: 8px 5px; font-family: monospace;">${checkOutDisplay}</td>
-                    <td data-label="الموقع" style="padding: 8px 5px; font-size: 0.8rem;">${item.siteName || '-'}</td>
+                    <td data-label="الحضور" style="padding: 8px 5px; font-family: monospace;">${item.status === 'penalty' ? '-' : formatCairoTime(item.checkIn)}</td>
+                    <td data-label="الانصراف" style="padding: 8px 5px; font-family: monospace;">${item.status === 'penalty' ? '-' : checkOutDisplay}</td>
+                    <td data-label="الموقع" style="padding: 8px 5px; font-size: 0.8rem;">${item.status === 'penalty' ? '-' : (item.siteName || '-')}</td>
                     <td data-label="البدل" style="padding: 8px 5px;">${transportDisplay}</td>
                     <td data-label="الحالة" style="padding: 8px 5px;"><span style="color:${statusColor}; font-weight: bold;">${statusText}</span></td>
                 </tr>

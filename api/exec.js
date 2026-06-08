@@ -457,7 +457,8 @@ async function executeSendEmailDashboard(supabase, settings, today, baseUrl) {
     
     // Filter out admin and hr from active employee list
     const activeEmployees = (empRes.data || []).filter(e => e.role !== 'admin' && e.role !== 'hr');
-    const presentIds = new Set(todayAtt.map(r => String(r.employeeId)));
+    // Exclude penalty status records from presentIds calculation
+    const presentIds = new Set(todayAtt.filter(r => r.status !== 'penalty').map(r => String(r.employeeId)));
     const presentCount = presentIds.size;
     
     const todayApprovedLeaves = (leaveRes.data || []).filter(r => r.status === 'approved' && r.leaveDate === today);
@@ -580,9 +581,21 @@ async function executeSendEmailDashboard(supabase, settings, today, baseUrl) {
         
         allAbsentList.forEach(emp => {
             const isOnLeave = leaveEmpIds.has(String(emp.id));
-            const statusText = isOnLeave ? 'إجازة معتمدة' : 'غائب';
-            const statusColor = isOnLeave ? '#3b82f6' : '#ef4444';
-            const statusBg = isOnLeave ? 'rgba(59, 130, 246, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+            const penaltyRecord = todayAtt.find(r => String(r.employeeId) === String(emp.id) && r.status === 'penalty');
+            
+            let statusText = 'غائب';
+            let statusColor = '#ef4444';
+            let statusBg = 'rgba(239, 68, 68, 0.1)';
+            
+            if (isOnLeave) {
+                statusText = 'إجازة معتمدة';
+                statusColor = '#3b82f6';
+                statusBg = 'rgba(59, 130, 246, 0.1)';
+            } else if (penaltyRecord) {
+                statusText = 'خصم غياب';
+                statusColor = '#dc2626';
+                statusBg = 'rgba(220, 38, 38, 0.15)';
+            }
             
             absentHtml += `
                         <tr style="border-bottom: 1px solid #f1f5f9;">
@@ -3788,6 +3801,62 @@ export default async function handler(req, res) {
 
             if (error) throw error;
             return res.status(200).json({ success: true, message: "تم إلغاء تسجيل سداد البدل بنجاح" });
+        }
+
+        if (action === "addAbsentPenalty") {
+            const { employeeId, employeeName, date } = data;
+            if (!employeeId || !date) {
+                return res.status(200).json({ success: false, message: "بيانات الموظف والتاريخ مطلوبة" });
+            }
+
+            // Check if there is already an attendance or penalty record for this day
+            const startOfDay = `${date}T00:00:00`;
+            const endOfDay = `${date}T23:59:59`;
+            
+            const { data: existing } = await supabase.from('attendance')
+                .select('id, status')
+                .eq('employeeId', employeeId)
+                .gte('checkIn', startOfDay)
+                .lte('checkIn', endOfDay)
+                .limit(1);
+
+            if (existing && existing.length > 0) {
+                if (existing[0].status === 'penalty') {
+                    return res.status(200).json({ success: false, message: "تم تسجيل جزاء لهذا الموظف بالفعل في هذا اليوم" });
+                } else {
+                    return res.status(200).json({ success: false, message: "الموظف لديه سجل حضور في هذا اليوم، لا يمكن تسجيل جزاء غياب" });
+                }
+            }
+
+            // Insert penalty record
+            const { error } = await supabase.from('attendance')
+                .insert({
+                    employeeId,
+                    employeeName,
+                    checkIn: `${date}T00:00:00+02:00`,
+                    status: 'penalty',
+                    totalHours: 0,
+                    transportPrice: 0,
+                    isPaid: false
+                });
+
+            if (error) throw error;
+            return res.status(200).json({ success: true, message: "تم تسجيل جزاء الغياب للموظف بنجاح" });
+        }
+
+        if (action === "removeAbsentPenalty") {
+            const { attendanceId } = data;
+            if (!attendanceId) {
+                return res.status(200).json({ success: false, message: "معرف سجل الجزاء مطلوب" });
+            }
+
+            const { error } = await supabase.from('attendance')
+                .delete()
+                .eq('id', attendanceId)
+                .eq('status', 'penalty');
+
+            if (error) throw error;
+            return res.status(200).json({ success: true, message: "تم إلغاء جزاء الغياب بنجاح" });
         }
 
         // --- DATABASE MONITORING ---
