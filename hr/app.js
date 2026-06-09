@@ -506,7 +506,7 @@ function renderAttendanceTable(data) {
 
     const presentEmployeeIds = new Set();
     filtered.forEach(record => {
-        if (record.employeeId && record.status !== 'penalty' && employeeOnlyIds.has(String(record.employeeId))) {
+        if (record.employeeId && employeeOnlyIds.has(String(record.employeeId))) {
             presentEmployeeIds.add(String(record.employeeId));
         }
     });
@@ -530,23 +530,6 @@ function renderAttendanceTable(data) {
     if (attendanceViewMode === 'absent') {
         const html = [];
         employeeOnlyList.filter(emp => absentEmployeeIds.includes(String(emp.id))).forEach(emp => {
-            const filterDateVal = document.getElementById('attendanceDateFilter').value || new Date().toISOString().split('T')[0];
-            const penaltyRecord = filtered.find(record => 
-                String(record.employeeId) === String(emp.id) && 
-                record.status === 'penalty' &&
-                record.checkIn && record.checkIn.startsWith(filterDateVal)
-            );
-
-            let statusHtml = '<span style="color:var(--danger)">غائب</span>';
-            let actionHtml = '';
-            
-            if (penaltyRecord) {
-                statusHtml = '<span style="color:var(--danger); font-weight:bold;">خصم غياب</span>';
-                actionHtml = `<button class="btn-primary" style="padding: 4px 8px; font-size: 0.75rem; width: auto; background-color: var(--secondary); margin-right: 8px;" onclick="removePenalty('${penaltyRecord.id}')">إلغاء الجزاء ↩</button>`;
-            } else {
-                actionHtml = `<button class="btn-primary" style="padding: 4px 8px; font-size: 0.75rem; width: auto; background-color: var(--danger); margin-right: 8px;" onclick="addPenalty('${emp.id}', '${emp.name}')">تسجيل جزاء ⚠️</button>`;
-            }
-
             html.push(`
                 <tr style="background:rgba(239,68,68,0.05);">
                     <td data-label="الموظف">${emp.name}</td>
@@ -554,8 +537,7 @@ function renderAttendanceTable(data) {
                     <td data-label="وقت الحضور" dir="ltr">-</td>
                     <td data-label="وقت الانصراف" dir="ltr">-</td>
                     <td data-label="بدل الانتقال">-</td>
-                    <td data-label="الحالة">${statusHtml}</td>
-                    <td data-label="الإجراءات">${actionHtml}</td>
+                    <td data-label="الحالة"><span style="color:var(--danger)">غائب</span></td>
                 </tr>
             `);
         });
@@ -571,7 +553,6 @@ function renderAttendanceTable(data) {
                     <td data-label="وقت الانصراف" dir="ltr">-</td>
                     <td data-label="بدل الانتقال">-</td>
                     <td data-label="الحالة"><span style="color:#3b82f6">إجازة معتمدة</span></td>
-                    <td data-label="الإجراءات">-</td>
                 </tr>
             `);
         });
@@ -603,7 +584,6 @@ function renderAttendanceTable(data) {
                 <td data-label="وقت الانصراف" dir="ltr">${checkOutTime}</td>
                 <td data-label="بدل الانتقال">${getCurrentTransportPrice(record) || 0} ج.م</td>
                 <td data-label="الحالة"><span style="color:${statusMeta.color}">${statusMeta.text}</span></td>
-                <td data-label="الإجراءات">-</td>
             </tr>
         `);
     });
@@ -748,7 +728,6 @@ function getStatusMeta(status, dateKey) {
         isHolidayOrWeekend = isWeekend || isOfficialHoliday;
     }
 
-    if (status === 'penalty') return { text: 'خصم غياب', color: 'var(--danger)' };
     if (status === 'overtime' || isHolidayOrWeekend) return { text: 'عمل إضافي', color: '#3b82f6' };
     if (status === 'late') return { text: 'متأخر', color: 'var(--danger)' };
     if (status === 'no_checkout') return { text: 'لم يتم الانصراف', color: '#f59e0b' };
@@ -1037,8 +1016,8 @@ async function generateEmployeeDetailedReport() {
             });
             const isOvertimeDay = record.status === 'overtime' || ((isWeekend || isOfficialHoliday) && record.status !== 'late' && record.status !== 'present');
 
-            // Count as present if not overtime and not penalty
-            if (!isOvertimeDay && record.status !== 'penalty') {
+            // Count as present if not overtime
+            if (!isOvertimeDay) {
                 presentDates.add(dateKey);
             }
             if (record.status === 'late') lateDates.add(dateKey);
@@ -1196,25 +1175,20 @@ async function generateEmployeeDetailedReport() {
         const displayDate = formatCairoDate(dateKey);
 
         if (attendanceByDate[dateKey]) {
-            // Show attendance records (present, late, overtime, penalty, etc.)
+            // Show attendance records (present, late, overtime, etc.)
             attendanceByDate[dateKey].forEach(record => {
-                const checkInText = record.status === 'penalty' ? '-' : formatCairoTime(record.checkIn);
-                let checkOutText = '-';
-                if (record.status !== 'penalty') {
-                    checkOutText = 'لم ينصرف بعد';
-                    if (record.status === 'no_checkout') {
-                        checkOutText = 'لم يتم الانصراف';
-                    } else if (record.checkOut) {
-                        checkOutText = formatCairoTime(record.checkOut);
-                    }
+                const checkInText = formatCairoTime(record.checkIn);
+                let checkOutText = 'لم ينصرف بعد';
+                if (record.status === 'no_checkout') {
+                    checkOutText = 'لم يتم الانصراف';
+                } else if (record.checkOut) {
+                    checkOutText = formatCairoTime(record.checkOut);
                 }
                 const statusMeta = getStatusMeta(record.status, dateKey);
-                const currentTransport = record.status === 'penalty' ? 0 : getCurrentTransportPrice(record);
+                const currentTransport = getCurrentTransportPrice(record);
 
                 let paymentStatusHtml = '';
-                if (record.status === 'penalty') {
-                    paymentStatusHtml = `<button class="btn-primary" style="padding: 4px 8px; font-size: 0.8rem; width: auto; background-color: var(--secondary);" onclick="removePenalty('${record.id}')">إلغاء الجزاء ↩</button>`;
-                } else if (record.isPaid) {
+                if (record.isPaid) {
                     paymentStatusHtml = `
                         <div style="display: flex; align-items: center; gap: 6px; justify-content: center;">
                             <span class="badge" style="background-color: var(--secondary); color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 0.8rem;">تم السداد ✓</span>
@@ -1228,9 +1202,9 @@ async function generateEmployeeDetailedReport() {
                 }
 
                 detailedHtml.push(`
-                    <tr style="${record.status === 'penalty' ? 'background:rgba(239,68,68,0.05);' : ''}">
+                    <tr>
                         <td data-label="التاريخ">${displayDate}</td>
-                        <td data-label="الموقع">${record.status === 'penalty' ? '-' : (record.siteName || '-')}</td>
+                        <td data-label="الموقع">${record.siteName || '-'}</td>
                         <td data-label="وقت الحضور" dir="ltr">${checkInText}</td>
                         <td data-label="وقت الانصراف" dir="ltr">${checkOutText}</td>
                         <td data-label="الحالة"><span style="color:${statusMeta.color}">${statusMeta.text}</span></td>
@@ -4001,65 +3975,3 @@ document.addEventListener('click', (e) => {
         dropdown.classList.add('hidden');
     }
 });
-
-async function addPenalty(employeeId, employeeName) {
-    const dateVal = document.getElementById('attendanceDateFilter').value || new Date().toISOString().split('T')[0];
-    if (!confirm(`هل أنت متأكد من تسجيل جزاء غياب للموظف "${employeeName}" في يوم ${dateVal}؟`)) return;
-
-    document.getElementById('loader').classList.remove('hidden');
-    try {
-        const res = await fetch(API_URL, {
-            method: 'POST',
-            body: JSON.stringify({
-                action: 'addAbsentPenalty',
-                employeeId: employeeId,
-                employeeName: employeeName,
-                date: dateVal
-            }),
-            headers: { 'Content-Type': 'text/plain' }
-        });
-        const result = await res.json();
-        if (result.success) {
-            alert('✅ ' + result.message);
-            await refreshData();
-        } else {
-            alert('❌ ' + result.message);
-        }
-    } catch (e) {
-        console.error(e);
-        alert('حدث خطأ أثناء الاتصال بالسيرفر');
-    }
-    document.getElementById('loader').classList.add('hidden');
-}
-
-async function removePenalty(attendanceId) {
-    if (!confirm('هل أنت متأكد من إلغاء جزاء الغياب هذا؟')) return;
-
-    document.getElementById('loader').classList.remove('hidden');
-    try {
-        const res = await fetch(API_URL, {
-            method: 'POST',
-            body: JSON.stringify({
-                action: 'removeAbsentPenalty',
-                attendanceId: attendanceId
-            }),
-            headers: { 'Content-Type': 'text/plain' }
-        });
-        const result = await res.json();
-        if (result.success) {
-            alert('✅ ' + result.message);
-            await refreshData();
-            // Also refresh detailed report if open
-            const employeeSelect = document.getElementById('employeeDetailEmployee');
-            if (employeeSelect && employeeSelect.value) {
-                await generateEmployeeDetailedReport();
-            }
-        } else {
-            alert('❌ ' + result.message);
-        }
-    } catch (e) {
-        console.error(e);
-        alert('حدث خطأ أثناء الاتصال بالسيرفر');
-    }
-    document.getElementById('loader').classList.add('hidden');
-}
