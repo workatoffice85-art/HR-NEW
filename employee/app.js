@@ -2049,6 +2049,8 @@ async function submitAllowanceRequest() {
 }
 
 // ------ LEAVE REQUEST LOGIC ------ //
+let addedPeriods = [];
+
 function openLeaveModal() {
     try {
         const modal = document.getElementById('leaveRequestModal');
@@ -2069,6 +2071,10 @@ function openLeaveModal() {
         // Clear reason
         const reasonInput = document.getElementById('leaveReason');
         if (reasonInput) reasonInput.value = '';
+
+        // Reset added periods
+        addedPeriods = [];
+        renderAddedPeriods();
     } catch (e) {
         console.error("Error opening leave modal", e);
         alert("حدث خطأ أثناء فتح النافذة");
@@ -2083,20 +2089,84 @@ function closeLeaveModal() {
     }
 }
 
-async function submitLeaveRequest() {
+function addPeriodToRequest() {
     const startDate = document.getElementById('leaveStartDate').value;
     const endDate = document.getElementById('leaveEndDate').value || startDate;
+
+    if (!startDate) {
+        alert("الرجاء اختيار تاريخ البدء");
+        return;
+    }
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    if (end < start) {
+        alert("تاريخ الانتهاء يجب أن يكون بعد أو مساوي لتاريخ البدء");
+        return;
+    }
+
+    const exists = addedPeriods.some(p => p.startDate === startDate && p.endDate === endDate);
+    if (exists) {
+        alert("هذه الفترة مضافة بالفعل");
+        return;
+    }
+
+    addedPeriods.push({ startDate, endDate });
+    renderAddedPeriods();
+}
+
+function removePeriodFromRequest(index) {
+    addedPeriods.splice(index, 1);
+    renderAddedPeriods();
+}
+
+function renderAddedPeriods() {
+    const container = document.getElementById('addedPeriodsContainer');
+    const list = document.getElementById('addedPeriodsList');
+    if (!container || !list) return;
+
+    if (addedPeriods.length === 0) {
+        container.classList.add('hidden');
+        list.innerHTML = '';
+        return;
+    }
+
+    container.classList.remove('hidden');
+    list.innerHTML = addedPeriods.map((p, idx) => {
+        const startText = formatCairoDate(p.startDate);
+        const endText = formatCairoDate(p.endDate);
+        const text = p.startDate === p.endDate ? startText : `من ${startText} إلى ${endText}`;
+        return `
+            <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.05); padding:6px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.05); direction:rtl;">
+                <span style="font-size:0.85rem; color:#fff;">📅 ${text}</span>
+                <button type="button" style="background:none; border:none; color:var(--danger); cursor:pointer; font-weight:bold; font-size:1.1rem; padding:0 5px;" onclick="removePeriodFromRequest(${idx})" title="حذف">×</button>
+            </div>
+        `;
+    }).join('');
+}
+
+async function submitLeaveRequest() {
+    let periods = [...addedPeriods];
+    
+    // Fallback: If no periods added to the list, use the currently selected range
+    if (periods.length === 0) {
+        const startDate = document.getElementById('leaveStartDate').value;
+        const endDate = document.getElementById('leaveEndDate').value || startDate;
+        if (startDate) {
+            periods.push({ startDate, endDate });
+        }
+    }
+
     const reason = document.getElementById('leaveReason').value.trim();
 
-    if (!startDate) return showStatusDialog("خطأ التحقق", "يجب اختيار تاريخ البدء", false);
+    if (periods.length === 0) return showStatusDialog("خطأ التحقق", "يجب إضافة فترة إجازة واحدة على الأقل", false);
     if (!reason) return showStatusDialog("خطأ التحقق", "يجب اختيار نوع الإجازة", false);
 
     const payload = {
         action: 'addLeaveRequest',
         employeeId: currentUser.id,
         employeeName: currentUser.name,
-        startDate: startDate,
-        endDate: endDate,
+        periods: periods,
         reason: reason
     };
 

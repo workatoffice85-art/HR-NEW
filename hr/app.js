@@ -685,12 +685,12 @@ function getCurrentTransportPrice(record) {
     const recordPrice = toTransportNumber(record.transportPrice);
 
     // If no site override, keep stored value (already includes any approved increases).
-    if (!allowance) return recordPrice;
+    if (!allowance) return Math.max(recordPrice - toTransportNumber(record.penaltyAmount), 0);
 
     const basePrice = toTransportNumber(allowance.transportPrice);
     const dateKey = record && record.checkIn ? String(record.checkIn).slice(0, 10) : '';
     const extra = isRequestSiteId(record.siteId) ? 0 : getApprovedAllowanceExtra(record.employeeId, record.siteId, dateKey);
-    return basePrice + extra;
+    return Math.max(basePrice + extra - toTransportNumber(record.penaltyAmount), 0);
 }
 
 function calculateUniqueDailyTransport(records) {
@@ -846,6 +846,90 @@ async function rollbackSingleAllowance(attendanceId) {
         console.error(err);
         alert("حدث خطأ أثناء الاتصال بالخادم");
     }
+}
+
+async function adminCheckout(attendanceId, employeeName) {
+    if (!confirm(`هل أنت متأكد من تسجيل انصراف الموظف "${employeeName}" الآن؟`)) return;
+    try {
+        const adminName = hrSession ? hrSession.name : 'HR Admin';
+        const response = await fetch('/api/exec', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'adminCheckoutAttendance',
+                attendanceId,
+                adminName
+            })
+        });
+        const result = await response.json();
+        if (result.success) {
+            alert("تم تسجيل انصراف الموظف بنجاح");
+            await fetchAttendance(true); // force reload
+            await generateEmployeeDetailedReport();
+        } else {
+            alert("فشل تسجيل الانصراف: " + result.message);
+        }
+    } catch (err) {
+        console.error(err);
+        alert("حدث خطأ أثناء الاتصال بالخادم");
+    }
+}
+
+function promptPenalty(attendanceId) {
+    const amount = prompt("أدخل قيمة الخصم / الجزاء بالجنيه المصري لهذا اليوم:");
+    if (amount === null) return; // cancelled
+    const penaltyVal = parseFloat(amount);
+    if (isNaN(penaltyVal) || penaltyVal < 0) {
+        alert("الرجاء إدخال رقم صحيح أكبر من أو يساوي الصفر");
+        return;
+    }
+    applyPenalty(attendanceId, penaltyVal);
+}
+
+async function applyPenalty(attendanceId, penaltyAmount) {
+    const isReset = penaltyAmount === 0;
+    if (!isReset && !confirm(`هل أنت متأكد من تطبيق خصم بقيمة ${penaltyAmount} ج.م على هذا اليوم؟`)) return;
+    if (isReset && !confirm("هل أنت متأكد من إلغاء هذا الجزاء؟")) return;
+    
+    try {
+        const adminName = hrSession ? hrSession.name : 'HR Admin';
+        const response = await fetch('/api/exec', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'applyAttendancePenalty',
+                attendanceId,
+                penaltyAmount,
+                adminName
+            })
+        });
+        const result = await response.json();
+        if (result.success) {
+            alert(isReset ? "تم إلغاء الجزاء بنجاح" : "تم تسجيل الخصم بنجاح");
+            await fetchAttendance(true); // force reload
+            await generateEmployeeDetailedReport();
+        } else {
+            alert("فشل العملية: " + result.message);
+        }
+    } catch (err) {
+        console.error(err);
+        alert("حدث خطأ أثناء الاتصال بالخادم");
+    }
+}
+
+function getCurrentTransportPriceBeforePenalty(record) {
+    const employee = allEmployees.find(e => String(e.id) === String(record.employeeId));
+    const allowance = employee && employee.siteAllowances ?
+        employee.siteAllowances.find(a => String(a.siteId) === String(record.siteId)) : null;
+
+    const recordPrice = toTransportNumber(record.transportPrice);
+
+    if (!allowance) return recordPrice;
+
+    const basePrice = toTransportNumber(allowance.transportPrice);
+    const dateKey = record && record.checkIn ? String(record.checkIn).slice(0, 10) : '';
+    const extra = isRequestSiteId(record.siteId) ? 0 : getApprovedAllowanceExtra(record.employeeId, record.siteId, dateKey);
+    return basePrice + extra;
 }
 
 async function settleEmployeeAllowancesForPeriod() {
@@ -1186,19 +1270,55 @@ async function generateEmployeeDetailedReport() {
                 }
                 const statusMeta = getStatusMeta(record.status, dateKey);
                 const currentTransport = getCurrentTransportPrice(record);
+                const originalTransport = getCurrentTransportPriceBeforePenalty(record);
 
-                let paymentStatusHtml = '';
+                let actionsHtml = `<div style="display: flex; flex-direction: column; gap: 6px; align-items: center; justify-content: center;">`;
+
+                // 1. Payment Action
+                let paymentHtml = '';
                 if (record.isPaid) {
-                    paymentStatusHtml = `
-                        <div style="display: flex; align-items: center; gap: 6px; justify-content: center;">
-                            <span class="badge" style="background-color: var(--secondary); color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 0.8rem;">تم السداد ✓</span>
-                            <button class="btn-primary" style="padding: 4px 8px; font-size: 0.75rem; width: auto; background-color: var(--danger);" onclick="rollbackSingleAllowance('${record.id}')" title="إلغاء السداد">تراجع ↩</button>
+                    paymentHtml = `
+                        <div style="display: flex; align-items: center; gap: 4px;">
+                            <span class="badge" style="background-color: var(--secondary); color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 0.75rem;">تم السداد ✓</span>
+                            <button class="btn-primary" style="padding: 4px 6px; font-size: 0.7rem; width: auto; background-color: var(--danger);" onclick="rollbackSingleAllowance('${record.id}')" title="إلغاء السداد">تراجع ↩</button>
                         </div>
                     `;
-                } else if (currentTransport > 0) {
-                    paymentStatusHtml = `<button class="btn-primary" style="padding: 4px 8px; font-size: 0.8rem; width: auto; background-color: var(--secondary);" onclick="settleSingleAllowance('${record.id}', ${currentTransport})">سداد 💸</button>`;
+                } else if (currentTransport > 0 || (originalTransport > 0 && record.penaltyAmount > 0)) {
+                    paymentHtml = `<button class="btn-primary" style="padding: 4px 8px; font-size: 0.75rem; width: auto; background-color: var(--secondary);" onclick="settleSingleAllowance('${record.id}', ${currentTransport})">سداد 💸</button>`;
                 } else {
-                    paymentStatusHtml = `<span style="color: var(--text-muted); font-size: 0.8rem;">-</span>`;
+                    paymentHtml = `<span style="color: var(--text-muted); font-size: 0.75rem;">-</span>`;
+                }
+                actionsHtml += `<div style="margin-bottom: 2px;">${paymentHtml}</div>`;
+
+                // 2. Extra actions row (Checkout / Penalty)
+                let extraActions = [];
+                
+                // Checkout button (only if not checked out)
+                if (!record.checkOut || record.status === 'no_checkout') {
+                    extraActions.push(`<button class="btn-primary" style="padding: 4px 8px; font-size: 0.75rem; width: auto; background-color: #8b5cf6;" onclick="adminCheckout('${record.id}', '${record.employeeName}')" title="تسجيل انصراف للموظف">انصراف ⏱️</button>`);
+                }
+
+                // Penalty button / status
+                if (record.penaltyAmount > 0) {
+                    extraActions.push(`
+                        <div style="display: flex; align-items: center; gap: 4px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); padding: 2px 6px; border-radius: 4px;">
+                            <span style="color: var(--danger); font-size: 0.75rem; font-weight: bold;">خصم: ${record.penaltyAmount} ج.م</span>
+                            <button style="background: none; border: none; color: var(--danger); cursor: pointer; font-size: 0.8rem; padding: 0 2px;" onclick="applyPenalty('${record.id}', 0)" title="إلغاء الخصم">❌</button>
+                        </div>
+                    `);
+                } else {
+                    extraActions.push(`<button class="btn-primary" style="padding: 4px 8px; font-size: 0.75rem; width: auto; background-color: var(--danger);" onclick="promptPenalty('${record.id}')" title="تسجيل جزاء مالي">جزاء ⚠️</button>`);
+                }
+
+                if (extraActions.length > 0) {
+                    actionsHtml += `<div style="display: flex; gap: 6px; align-items: center; justify-content: center; flex-wrap: wrap;">${extraActions.join('')}</div>`;
+                }
+
+                actionsHtml += `</div>`;
+
+                let transportDisplay = `${currentTransport.toFixed(2)} ج.م`;
+                if (record.penaltyAmount > 0) {
+                    transportDisplay = `<span style="text-decoration: line-through; color: var(--text-muted); font-size: 0.8rem;">${originalTransport.toFixed(2)}</span> <span style="color: var(--danger); font-weight: bold;">${currentTransport.toFixed(2)} ج.م</span>`;
                 }
 
                 detailedHtml.push(`
@@ -1208,8 +1328,8 @@ async function generateEmployeeDetailedReport() {
                         <td data-label="وقت الحضور" dir="ltr">${checkInText}</td>
                         <td data-label="وقت الانصراف" dir="ltr">${checkOutText}</td>
                         <td data-label="الحالة"><span style="color:${statusMeta.color}">${statusMeta.text}</span></td>
-                        <td data-label="البدل">${currentTransport.toFixed(2)} ج.م</td>
-                        <td data-label="حالة السداد">${paymentStatusHtml}</td>
+                        <td data-label="البدل">${transportDisplay}</td>
+                        <td data-label="حالة السداد">${actionsHtml}</td>
                     </tr>
                 `);
             });

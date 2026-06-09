@@ -2605,6 +2605,97 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, message: "تم تسجيل الانصراف بنجاح" });
         }
 
+        if (action === "adminCheckoutAttendance") {
+            const { attendanceId, checkOutTime, adminName } = data;
+            if (!attendanceId) return res.status(200).json({ success: false, message: "معرف السجل مطلوب" });
+
+            const { data: existing, error: errExist } = await supabase.from('attendance')
+                .select('*')
+                .eq('id', attendanceId)
+                .maybeSingle();
+
+            if (errExist || !existing) return res.status(200).json({ success: false, message: "السجل غير موجود" });
+
+            const checkIn = new Date(existing.checkIn);
+            const finalCheckoutTime = checkOutTime || getCairoISOString(new Date());
+            const checkOut = new Date(finalCheckoutTime);
+
+            let totalHours = 0;
+            if (!isNaN(checkIn) && !isNaN(checkOut)) {
+                totalHours = parseFloat(((checkOut - checkIn) / 36e5).toFixed(2));
+            }
+
+            let finalStatus = existing.status;
+            if (finalStatus === 'no_checkout' || !finalStatus) {
+                const { data: setRows } = await supabase.from('settings').select('*').in('key', ['workStartTime', 'weekendDays']);
+                let workStart = "09:00";
+                let weekendDays = [5, 6];
+
+                if (setRows && setRows.length > 0) {
+                    const workStartRow = setRows.find(r => r.key === 'workStartTime');
+                    if (workStartRow) workStart = workStartRow.value;
+
+                    const weekendRow = setRows.find(r => r.key === 'weekendDays');
+                    if (weekendRow && weekendRow.value) {
+                        weekendDays = weekendRow.value.split(',').map(d => parseInt(d.trim())).filter(d => !isNaN(d));
+                    }
+                }
+                
+                const checkInDateObj = new Date(existing.checkIn);
+                const dayOfWeek = checkInDateObj.getDay();
+                const checkInTimeStr = existing.checkIn.substring(11, 16);
+                
+                const checkInDateStr = existing.checkIn.substring(0, 10);
+                const { data: holidayData } = await supabase.from('official_holidays').select('*').eq('holidayDate', checkInDateStr).maybeSingle();
+                const isOfficialHoliday = holidayData !== null;
+
+                if (isOfficialHoliday || weekendDays.includes(dayOfWeek)) {
+                    finalStatus = "overtime";
+                } else if (checkInTimeStr > workStart) {
+                    finalStatus = "late";
+                } else {
+                    finalStatus = "present";
+                }
+            }
+
+            const { error } = await supabase.from('attendance')
+                .update({
+                    checkOut: finalCheckoutTime,
+                    totalHours: totalHours,
+                    status: finalStatus
+                })
+                .eq('id', attendanceId);
+
+            if (error) throw error;
+
+            syncToGoogleSheet({
+                action: 'checkoutAttendance',
+                attendanceId: attendanceId,
+                employeeId: existing.employeeId,
+                checkOut: finalCheckoutTime,
+                totalHours: totalHours
+            });
+
+            return res.status(200).json({ success: true, message: "تم تسجيل انصراف الموظف بنجاح" });
+        }
+
+        if (action === "applyAttendancePenalty") {
+            const { attendanceId, penaltyAmount, adminName } = data;
+            if (!attendanceId) return res.status(200).json({ success: false, message: "معرف السجل مطلوب" });
+            if (penaltyAmount === undefined || isNaN(parseFloat(penaltyAmount))) {
+                return res.status(200).json({ success: false, message: "قيمة الجزاء غير صالحة" });
+            }
+
+            const { error } = await supabase.from('attendance')
+                .update({
+                    penaltyAmount: parseFloat(penaltyAmount)
+                })
+                .eq('id', attendanceId);
+
+            if (error) throw error;
+            return res.status(200).json({ success: true, message: "تم تسجيل الجزاء بنجاح" });
+        }
+
         // --- EMPLOYEE MGMT ---
         if (action === "getEmployees") {
             const cacheKey = 'employees';
@@ -3144,37 +3235,52 @@ export default async function handler(req, res) {
 
         // --- LEAVE REQUESTS ---
         if (action === "addLeaveRequest") {
-            const { employeeId, employeeName, leaveDate, reason } = data;
-            const startDate = data.startDate || leaveDate;
-            const endDate = data.endDate || leaveDate;
-
-            if (!startDate || !endDate) return res.status(200).json({ success: false, message: "تاريخ البدء والانتهاء مطلوبان" });
+            const { employeeId, employeeName, reason } = data;
             if (!reason) return res.status(200).json({ success: false, message: "سبب الإجازة مطلوب" });
 
-            const start = new Date(startDate);
-            const end = new Date(endDate);
-
-            if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-                return res.status(200).json({ success: false, message: "صيغة التاريخ غير صالحة" });
+            let periods = data.periods;
+            if (!periods || !Array.isArray(periods)) {
+                const singleStart = data.startDate || data.leaveDate;
+                const singleEnd = data.endDate || data.leaveDate;
+                if (!singleStart) return res.status(200).json({ success: false, message: "تاريخ البدء مطلوب" });
+                periods = [{ startDate: singleStart, endDate: singleEnd }];
             }
 
-            if (end < start) {
-                return res.status(200).json({ success: false, message: "تاريخ البدء يجب أن يكون قبل أو يساوي تاريخ الانتهاء" });
-            }
-
-            // Calculate days diff (inclusive)
-            const diffTime = Math.abs(end - start);
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-            if (diffDays > 30) {
-                return res.status(200).json({ success: false, message: "لا يمكن تقديم طلب إجازة لأكثر من 30 يوماً دفعة واحدة" });
-            }
-
-            // Generate list of ISO date strings for the range
             const dates = [];
-            let current = new Date(startDate);
-            while (current <= end) {
-                dates.push(current.toISOString().split('T')[0]);
-                current.setDate(current.getDate() + 1);
+            let totalDaysRange = 0;
+            let displayDateText = "";
+
+            for (const period of periods) {
+                const { startDate, endDate } = period;
+                const start = new Date(startDate);
+                const end = new Date(endDate || startDate);
+
+                if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+                    return res.status(200).json({ success: false, message: "صيغة التاريخ غير صالحة" });
+                }
+
+                if (end < start) {
+                    return res.status(200).json({ success: false, message: "تاريخ البدء يجب أن يكون قبل أو يساوي تاريخ الانتهاء" });
+                }
+
+                const diffTime = Math.abs(end - start);
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                if (diffDays > 30) {
+                    return res.status(200).json({ success: false, message: "لا يمكن تقديم طلب إجازة لأكثر من 30 يوماً في الفترة الواحدة" });
+                }
+
+                totalDaysRange += diffDays;
+
+                let current = new Date(startDate);
+                while (current <= end) {
+                    dates.push(current.toISOString().split('T')[0]);
+                    current.setDate(current.getDate() + 1);
+                }
+            }
+
+            const uniqueDates = [...new Set(dates)];
+            if (uniqueDates.length === 0) {
+                return res.status(200).json({ success: false, message: "لم يتم تحديد أي فترات صالحة" });
             }
 
             // Fetch existing pending/approved requests for this employee in this range
@@ -3182,7 +3288,7 @@ export default async function handler(req, res) {
                 .from('leaveRequests')
                 .select('leaveDate')
                 .eq('employeeId', employeeId)
-                .in('leaveDate', dates)
+                .in('leaveDate', uniqueDates)
                 .in('status', ['pending', 'approved']);
 
             if (checkErr) throw checkErr;
@@ -3190,7 +3296,7 @@ export default async function handler(req, res) {
             const existingDates = new Set(existingRequests.map(r => r.leaveDate.split('T')[0]));
 
             // Filter dates to insert (only those that do not already have a pending/approved request)
-            const datesToInsert = dates.filter(d => !existingDates.has(d));
+            const datesToInsert = uniqueDates.filter(d => !existingDates.has(d));
 
             if (datesToInsert.length === 0) {
                 return res.status(200).json({ success: false, message: "لديك طلبات إجازة موجودة بالفعل لجميع التواريخ المحددة" });
@@ -3209,10 +3315,16 @@ export default async function handler(req, res) {
             const { error } = await supabase.from('leaveRequests').insert(payloads);
             if (error) throw error;
 
-            // Create a single combined notification/email for the HR to avoid spamming
-            const displayDateText = diffDays === 1
-                ? `بتاريخ ${startDate}`
-                : `من تاريخ ${startDate} إلى ${endDate} (${payloads.length} يوم عمل فعلي)`;
+            // Display text for notification/email
+            if (periods.length === 1) {
+                const startDate = periods[0].startDate;
+                const endDate = periods[0].endDate || startDate;
+                const diffTime = Math.abs(new Date(endDate) - new Date(startDate));
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                displayDateText = diffDays === 1 ? `بتاريخ ${startDate}` : `من تاريخ ${startDate} إلى ${endDate} (${payloads.length} يوم عمل فعلي)`;
+            } else {
+                displayDateText = `لفترات متفرقة تشمل ${payloads.length} يوم عمل فعلي (التواريخ: ${datesToInsert.join(', ')})`;
+            }
 
             const mainRequestId = payloads[0].id;
 
@@ -3231,7 +3343,7 @@ export default async function handler(req, res) {
             await sendRequestNotificationEmail(supabase, {
                 type: 'leave',
                 employeeName,
-                details: `فترة الإجازة: ${displayDateText} - نوع الإجازة: ${reason}`,
+                details: `فترات الإجازة: ${displayDateText} - نوع الإجازة: ${reason}`,
                 requestId: mainRequestId
             }, req.headers.host);
 
@@ -3246,7 +3358,7 @@ export default async function handler(req, res) {
                 });
             }
 
-            const resultMsg = diffDays === 1
+            const resultMsg = payloads.length === 1
                 ? "تم تقديم طلب الإجازة بنجاح"
                 : `تم تقديم طلب الإجازة لعدد ${payloads.length} أيام بنجاح. (تم تجاهل الأيام المسجلة مسبقاً إن وجدت)`;
 

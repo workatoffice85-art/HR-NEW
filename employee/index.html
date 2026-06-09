@@ -851,6 +851,13 @@
                         <input type="date" id="leaveEndDate">
                     </div>
                 </div>
+                <div style="display:flex; justify-content:center; width:100%;">
+                    <button type="button" class="btn-primary" style="margin-top:2px; margin-bottom:12px; background:linear-gradient(135deg, #10b981, #059669) !important; font-size:0.85rem !important; height:36px !important; box-shadow:none !important; width:100%;" onclick="addPeriodToRequest()">➕ إضافة هذه الفترة للطلب</button>
+                </div>
+                <div id="addedPeriodsContainer" class="hidden" style="margin-bottom:15px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:10px; width: 100%; box-sizing: border-box;">
+                    <label style="display:block; margin-bottom:5px; font-weight:bold; color:var(--secondary); font-size: 0.85rem;">الفترات المضافة للطلب:</label>
+                    <div id="addedPeriodsList" style="display:flex; flex-direction:column; gap:6px; max-height:100px; overflow-y:auto;"></div>
+                </div>
                 <div class="input-group">
                     <label>نوع الإجازة</label>
                     <select id="leaveReason">
