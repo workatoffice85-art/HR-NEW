@@ -848,9 +848,53 @@ async function rollbackSingleAllowance(attendanceId) {
     }
 }
 
-async function adminCheckout(attendanceId, employeeName) {
-    if (!confirm(`هل أنت متأكد من تسجيل انصراف الموظف "${employeeName}" الآن؟`)) return;
+async function adminCheckout(attendanceId, employeeName, checkInISO) {
+    let defaultStr = '';
+    if (checkInISO) {
+        const checkInDate = new Date(checkInISO);
+        // Default to check-in time + 8 hours
+        const defaultCheckout = new Date(checkInDate.getTime() + 8 * 60 * 60 * 1000);
+        
+        const y = defaultCheckout.getFullYear();
+        const m = String(defaultCheckout.getMonth() + 1).padStart(2, '0');
+        const d = String(defaultCheckout.getDate()).padStart(2, '0');
+        const hr = String(defaultCheckout.getHours()).padStart(2, '0');
+        const min = String(defaultCheckout.getMinutes()).padStart(2, '0');
+        defaultStr = `${y}-${m}-${d} ${hr}:${min}`;
+    } else {
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = String(now.getMonth() + 1).padStart(2, '0');
+        const d = String(now.getDate()).padStart(2, '0');
+        const hr = String(now.getHours()).padStart(2, '0');
+        const min = String(now.getMinutes()).padStart(2, '0');
+        defaultStr = `${y}-${m}-${d} ${hr}:${min}`;
+    }
+
+    const userInput = prompt(`تسجيل انصراف للموظف: ${employeeName}\nالرجاء تحديد تاريخ ووقت الانصراف (السنة-الشهر-اليوم ساعة:دقيقة):`, defaultStr);
+    if (userInput === null) return; // Cancelled
+    
     try {
+        const cleanedInput = userInput.trim();
+        const parts = cleanedInput.split(/[\sT]+/);
+        if (parts.length < 2) throw new Error("تنسيق غير صحيح");
+        
+        const dateParts = parts[0].split('-');
+        const timeParts = parts[1].split(':');
+        
+        if (dateParts.length < 3 || timeParts.length < 2) throw new Error("تنسيق غير صحيح");
+        
+        const year = parseInt(dateParts[0], 10);
+        const month = parseInt(dateParts[1], 10) - 1;
+        const day = parseInt(dateParts[2], 10);
+        const hours = parseInt(timeParts[0], 10);
+        const minutes = parseInt(timeParts[1], 10);
+        
+        const customDate = new Date(year, month, day, hours, minutes);
+        if (isNaN(customDate.getTime())) throw new Error("التاريخ غير صالح");
+        
+        const checkOutTimeISO = customDate.toISOString();
+        
         const adminName = hrSession ? hrSession.name : 'HR Admin';
         const response = await fetch('/api/exec', {
             method: 'POST',
@@ -858,6 +902,7 @@ async function adminCheckout(attendanceId, employeeName) {
             body: JSON.stringify({
                 action: 'adminCheckoutAttendance',
                 attendanceId,
+                checkOutTime: checkOutTimeISO,
                 adminName
             })
         });
@@ -870,8 +915,7 @@ async function adminCheckout(attendanceId, employeeName) {
             alert("فشل تسجيل الانصراف: " + result.message);
         }
     } catch (err) {
-        console.error(err);
-        alert("حدث خطأ أثناء الاتصال بالخادم");
+        alert("الرجاء إدخال التاريخ والوقت بشكل صحيح. مثال: 2026-06-09 17:30");
     }
 }
 
@@ -1295,7 +1339,7 @@ async function generateEmployeeDetailedReport() {
                 
                 // Checkout button (only if not checked out)
                 if (!record.checkOut || record.status === 'no_checkout') {
-                    extraActions.push(`<button class="btn-primary" style="padding: 4px 8px; font-size: 0.75rem; width: auto; background-color: #8b5cf6;" onclick="adminCheckout('${record.id}', '${record.employeeName}')" title="تسجيل انصراف للموظف">انصراف ⏱️</button>`);
+                    extraActions.push(`<button class="btn-primary" style="padding: 4px 8px; font-size: 0.75rem; width: auto; background-color: #8b5cf6;" onclick="adminCheckout('${record.id}', '${record.employeeName}', '${record.checkIn}')" title="تسجيل انصراف للموظف">انصراف ⏱️</button>`);
                 }
 
                 // Penalty button / status

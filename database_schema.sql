@@ -153,3 +153,9 @@ INSERT INTO notifications (id, userId, userRole, title, message, type, relatedId
 -- For Supabase (PostgreSQL):
 -- - This schema should work as-is
 -- - Supabase automatically creates primary keys with UUID if preferred
+
+-- =============================================
+-- 8. Attendance Table Schema Updates
+-- =============================================
+-- Run this query to update your attendance table:
+-- ALTER TABLE attendance ADD COLUMN IF NOT EXISTS "penaltyAmount" NUMERIC DEFAULT 0;
