@@ -846,6 +846,13 @@ async function verifyBiometric() {
 
 // Device Fingerprint - unique identifier for hardware biometric binding
 function getDeviceFingerprint() {
+    // 1. Check if stable device ID is already stored in localStorage
+    let stableId = localStorage.getItem('stable_device_id');
+    if (stableId) {
+        return stableId;
+    }
+
+    // 2. If not stored, calculate the legacy device fingerprint
     const nav = navigator;
     const screen = window.screen;
     const components = [
@@ -865,7 +872,16 @@ function getDeviceFingerprint() {
         hash = ((hash << 5) - hash) + char;
         hash = hash & hash;
     }
-    return Math.abs(hash).toString(16) + '-' + components[0].slice(0, 20);
+    stableId = Math.abs(hash).toString(16) + '-' + components[0].slice(0, 20);
+
+    // 3. Save it to localStorage to lock it permanently for this device
+    try {
+        localStorage.setItem('stable_device_id', stableId);
+    } catch (e) {
+        console.error('Failed to cache device fingerprint in localStorage:', e);
+    }
+
+    return stableId;
 }
 
 // Submit device change request to admin
