@@ -2458,6 +2458,7 @@ function renderMyReports(data, monthStr) {
     const presentDates = new Set();
     const lateDates = new Set();
     const overtimeDates = new Set();
+    const noCheckoutDates = new Set();
 
     presentRecords.forEach(r => {
         const dateKey = r.checkIn ? r.checkIn.slice(0, 10) : '';
@@ -2468,6 +2469,10 @@ function renderMyReports(data, monthStr) {
 
         if (r.status === 'late') {
             lateDates.add(dateKey);
+        }
+
+        if (r.status === 'no_checkout') {
+            noCheckoutDates.add(dateKey);
         }
 
         if (isOvertime) {
@@ -2583,7 +2588,6 @@ function renderMyReports(data, monthStr) {
                     <td data-label="الحضور" style="padding: 8px 5px; font-family: monospace;">${formatCairoTime(item.checkIn)}</td>
                     <td data-label="الانصراف" style="padding: 8px 5px; font-family: monospace;">${checkOutDisplay}</td>
                     <td data-label="الموقع" style="padding: 8px 5px; font-size: 0.8rem;">${item.siteName || '-'}</td>
-                    <td data-label="البدل" style="padding: 8px 5px;">${transportDisplay}</td>
                     <td data-label="الحالة" style="padding: 8px 5px;"><span style="color:${statusColor}; font-weight: bold;">${statusText}</span></td>
                 </tr>
             `;
@@ -2592,7 +2596,7 @@ function renderMyReports(data, monthStr) {
             tbody.innerHTML += `
                 <tr style="background: rgba(16, 185, 129, 0.05); border-bottom: 1px solid var(--card-border);">
                     <td data-label="التاريخ" style="padding: 8px 5px;">${formatCairoDate(item.date)}</td>
-                    <td data-label="التفاصيل" colspan="4" style="text-align:center !important; color:var(--secondary); font-size:0.8rem; padding: 8px 5px;">إجازة معتمدة: ${item.reason}</td>
+                    <td data-label="التفاصيل" colspan="3" style="text-align:center !important; color:var(--secondary); font-size:0.8rem; padding: 8px 5px;">إجازة معتمدة: ${item.reason}</td>
                     <td data-label="الحالة" style="padding: 8px 5px;"><span style="color:var(--secondary); font-weight: bold;">إجازة</span></td>
                 </tr>
             `;
@@ -2601,7 +2605,7 @@ function renderMyReports(data, monthStr) {
             tbody.innerHTML += `
                 <tr style="background: rgba(239, 68, 68, 0.05); border-bottom: 1px solid var(--card-border);">
                     <td data-label="التاريخ" style="padding: 8px 5px;">${formatCairoDate(item.date)}</td>
-                    <td data-label="التفاصيل" colspan="4" style="text-align:center !important; color:var(--danger); font-size:0.8rem; padding: 8px 5px;">غائب (لم يتم تسجيل حضور)</td>
+                    <td data-label="التفاصيل" colspan="3" style="text-align:center !important; color:var(--danger); font-size:0.8rem; padding: 8px 5px;">غائب (لم يتم تسجيل حضور)</td>
                     <td data-label="الحالة" style="padding: 8px 5px;"><span style="color:var(--danger); font-weight: bold;">غائب</span></td>
                 </tr>
             `;
@@ -2614,15 +2618,34 @@ function renderMyReports(data, monthStr) {
     const salary = currentUser.salary ? parseFloat(currentUser.salary) : 0;
     const dailyRate = salary / 30;
     const overtimePay = dailyRate * totalOvertime;
+    const totalNoCheckout = noCheckoutDates.size;
 
-    document.getElementById('empTotalPresent').innerText = presentDates.size; // Use size of unique dates set
-    document.getElementById('empTotalAbsent').innerText = totalAbsent > 0 ? totalAbsent : 0;
-    document.getElementById('empTotalLates').innerText = totalLates;
-    document.getElementById('empTotalOvertime').innerText = totalOvertime;
-    document.getElementById('empTotalOvertimePay').innerText = overtimePay.toFixed(2) + " ج.م";
-    document.getElementById('empTotalTransport').innerText = totalTransport.toFixed(2) + " ج.م";
-    document.getElementById('empTotalPaidTransport').innerText = totalPaidTransport.toFixed(2) + " ج.م";
-    document.getElementById('empTotalRemainingTransport').innerText = totalRemainingTransport.toFixed(2) + " ج.م";
+    const elTotalPresent = document.getElementById('empTotalPresent');
+    if (elTotalPresent) elTotalPresent.innerText = presentDates.size;
+
+    const elTotalAbsent = document.getElementById('empTotalAbsent');
+    if (elTotalAbsent) elTotalAbsent.innerText = totalAbsent > 0 ? totalAbsent : 0;
+
+    const elTotalLates = document.getElementById('empTotalLates');
+    if (elTotalLates) elTotalLates.innerText = totalLates;
+
+    const elTotalOvertime = document.getElementById('empTotalOvertime');
+    if (elTotalOvertime) elTotalOvertime.innerText = totalOvertime;
+
+    const elTotalNoCheckout = document.getElementById('empTotalNoCheckout');
+    if (elTotalNoCheckout) elTotalNoCheckout.innerText = totalNoCheckout;
+
+    const elTotalOvertimePay = document.getElementById('empTotalOvertimePay');
+    if (elTotalOvertimePay) elTotalOvertimePay.innerText = overtimePay.toFixed(2) + " ج.م";
+
+    const elTotalTransport = document.getElementById('empTotalTransport');
+    if (elTotalTransport) elTotalTransport.innerText = totalTransport.toFixed(2) + " ج.م";
+
+    const elTotalPaidTransport = document.getElementById('empTotalPaidTransport');
+    if (elTotalPaidTransport) elTotalPaidTransport.innerText = totalPaidTransport.toFixed(2) + " ج.م";
+
+    const elTotalRemainingTransport = document.getElementById('empTotalRemainingTransport');
+    if (elTotalRemainingTransport) elTotalRemainingTransport.innerText = totalRemainingTransport.toFixed(2) + " ج.م";
 }
 
 // ============================================================

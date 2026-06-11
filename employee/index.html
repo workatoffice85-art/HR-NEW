@@ -1008,21 +1008,21 @@
                     <h4 style="margin:0; color:#3b82f6">أيام العمل الإضافي</h4>
                     <h2 style="margin:5px 0; color:#fff" id="empTotalOvertime">0</h2>
                 </div>
-                <div style="background: rgba(79, 70, 229, 0.2); padding: 15px; border-radius: 8px; text-align: center; border:1px solid var(--primary); grid-column: span 1;">
-                    <h4 style="margin:0; color:var(--primary)">إجمالي بدلات الانتقال</h4>
-                    <h2 style="margin:5px 0; color:#fff" id="empTotalTransport">0 ج.م</h2>
+                <div style="background: rgba(245, 158, 11, 0.2); padding: 15px; border-radius: 8px; text-align: center; border:1px solid #f59e0b; grid-column: span 2;">
+                    <h4 style="margin:0; color:#f59e0b">لم يتم الانصراف</h4>
+                    <h2 style="margin:5px 0; color:#fff" id="empTotalNoCheckout">0</h2>
                 </div>
-                <div style="background: rgba(59, 130, 246, 0.2); padding: 15px; border-radius: 8px; text-align: center; border:1px solid #3b82f6; grid-column: span 1;">
-                    <h4 style="margin:0; color:#3b82f6">مبلغ العمل الإضافي</h4>
-                    <h2 style="margin:5px 0; color:#fff" id="empTotalOvertimePay">0 ج.م</h2>
+                <div style="display: none !important;">
+                    <h2 id="empTotalTransport">0 ج.م</h2>
                 </div>
-                <div style="background: rgba(16, 185, 129, 0.2); padding: 15px; border-radius: 8px; text-align: center; border:1px solid var(--secondary); grid-column: span 1;">
-                    <h4 style="margin:0; color:var(--secondary)">البدلات المسددة</h4>
-                    <h2 style="margin:5px 0; color:#fff" id="empTotalPaidTransport">0 ج.م</h2>
+                <div style="display: none !important;">
+                    <h2 id="empTotalOvertimePay">0 ج.م</h2>
                 </div>
-                <div style="background: rgba(239, 68, 68, 0.2); padding: 15px; border-radius: 8px; text-align: center; border:1px solid var(--danger); grid-column: span 1;">
-                    <h4 style="margin:0; color:var(--danger)">البدلات المتبقية</h4>
-                    <h2 style="margin:5px 0; color:#fff" id="empTotalRemainingTransport">0 ج.م</h2>
+                <div style="display: none !important;">
+                    <h2 id="empTotalPaidTransport">0 ج.م</h2>
+                </div>
+                <div style="display: none !important;">
+                    <h2 id="empTotalRemainingTransport">0 ج.م</h2>
                 </div>
             </div>
 
@@ -1030,12 +1030,11 @@
                 <table style="width: 100%; border-collapse: collapse; text-align: center; font-size: 0.85rem; direction: rtl;">
                     <thead>
                         <tr style="border-bottom: 2px solid var(--card-border); background: rgba(0,0,0,0.3);">
-                            <th style="padding: 12px 5px; width: 18%;">التاريخ</th>
+                            <th style="padding: 12px 5px; width: 20%;">التاريخ</th>
                             <th style="padding: 12px 5px; width: 15%;">حضور</th>
                             <th style="padding: 12px 5px; width: 15%;">انصراف</th>
-                            <th style="padding: 12px 5px; width: 22%;">الموقع</th>
-                            <th style="padding: 12px 5px; width: 12%;">البدل</th>
-                            <th style="padding: 12px 5px; width: 18%;">الحالة</th>
+                            <th style="padding: 12px 5px; width: 30%;">الموقع</th>
+                            <th style="padding: 12px 5px; width: 20%;">الحالة</th>
                         </tr>
                     </thead>
                     <tbody id="myReportsTableBody"></tbody>
