@@ -1502,7 +1502,7 @@ export default async function handler(req, res) {
                         latitude: reqData.latitude,
                         longitude: reqData.longitude,
                         radius: reqData.tempRadius || 100,
-                        transportPrice: reqData.transportPrice || 120,
+                        transportPrice: (reqData.transportPrice !== undefined && reqData.transportPrice !== null) ? reqData.transportPrice : 0,
                         mapLink: reqData.mapLink,
                         isTemporary: false
                     };
@@ -2940,7 +2940,7 @@ export default async function handler(req, res) {
                 mapLink: mapLink,
                 mapLatitude: mapLatitude,
                 mapLongitude: mapLongitude,
-                transportPrice: data.transportPrice || 120,
+                transportPrice: (data.transportPrice !== undefined && data.transportPrice !== null) ? data.transportPrice : 0,
                 tempRadius: data.radius || 100,
                 note: data.note,
                 receiptUrl: data.receiptUrl,
@@ -3004,7 +3004,7 @@ export default async function handler(req, res) {
                 latitude: reqData.latitude,
                 longitude: reqData.longitude,
                 radius: radius || 100,
-                transportPrice: transportPrice || 120,
+                transportPrice: (transportPrice !== undefined && transportPrice !== null && transportPrice !== '') ? parseFloat(transportPrice) : 0,
                 mapLink: mapLink || reqData.mapLink,
                 isTemporary: isTemp
             };

@@ -2618,7 +2618,7 @@ function addSiteOpenModal() {
 function addSiteAllowanceTier() {
     currentSiteAllowances.push({
         tempId: 'tier_' + Math.random().toString(36).substr(2, 9),
-        price: 120,
+        price: 0,
         employeeIds: []
     });
     renderSiteAllowancesTiers();
@@ -3265,7 +3265,7 @@ async function approveRequest(id, suggestedName) {
 
     document.getElementById('approveReqId').value = id;
     document.getElementById('approveSiteName').value = suggestedName;
-    document.getElementById('approveTransportPrice').value = Number.isFinite(currentTransportPrice) ? currentTransportPrice : 120;
+    document.getElementById('approveTransportPrice').value = Number.isFinite(currentTransportPrice) ? currentTransportPrice : 0;
     document.getElementById('approveRadius').value = Number.isFinite(currentRadius) ? currentRadius : 100;
     document.getElementById('approveRequestModal').classList.remove('hidden');
 }
