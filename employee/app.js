@@ -293,6 +293,15 @@ function playErrorSound() {
 
 document.addEventListener('DOMContentLoaded', () => {
     checkSession();
+
+    // Request scheduling of reminders in the service worker
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready.then(registration => {
+            if (registration.active) {
+                registration.active.postMessage({ action: 'schedule_reminders' });
+            }
+        });
+    }
 });
 
 function showSection(id) {
