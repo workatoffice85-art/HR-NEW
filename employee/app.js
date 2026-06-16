@@ -2941,12 +2941,43 @@ function checkBrowserNotificationCapabilities() {
     
     container.innerHTML = '';
     
+    // Check if the site is running in a secure context (HTTPS or localhost)
+    if (!window.isSecureContext) {
+        console.warn('[Notifications] App is not running in a secure context (HTTPS/localhost). Notification API is disabled by browser.');
+        container.innerHTML = `
+            <div id="notifSecureContextBanner" style="margin-bottom: 20px; padding: 16px; border-radius: 20px; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2); text-align: right; display: flex; gap: 12px; align-items: flex-start; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);">
+                <span style="font-size: 1.6rem; margin-top: 2px;">⚠️</span>
+                <div style="flex: 1;">
+                    <strong style="color: #f87171; display: block; font-size: 0.95rem; margin-bottom: 6px; font-weight: 800;">رابط الموقع غير آمن (HTTP)</strong>
+                    <span style="color: var(--text-muted); font-size: 0.8rem; line-height: 1.5; display: block;">المتصفحات تمنع تشغيل الإشعارات تماماً على الروابط غير المشفرة (HTTP). يرجى فتح الموقع باستخدام رابط آمن يبدأ بـ <b>https://</b> أو فتحه من <b>localhost</b> لتفعيل التنبيهات.</span>
+                </div>
+            </div>
+        `;
+        return;
+    }
+    
     if (!('Notification' in window)) {
         console.log('[Notifications] Browser does not support desktop notifications.');
         return;
     }
     
-    // Case 1: Permission not yet granted
+    // Case 1: Permission is denied (blocked by user previously)
+    if (Notification.permission === 'denied') {
+        container.innerHTML = `
+            <div id="notifPermissionBanner" style="margin-bottom: 20px; padding: 16px; border-radius: 20px; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); text-align: right; display: flex; flex-direction: column; gap: 12px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);">
+                <div style="display: flex; gap: 12px; align-items: flex-start;">
+                    <span style="font-size: 1.6rem; margin-top: 2px;">❌</span>
+                    <div style="flex: 1;">
+                        <strong style="color: #f87171; display: block; font-size: 0.95rem; margin-bottom: 6px; font-weight: 800;">الإشعارات محظورة في متصفحك</strong>
+                        <span style="color: var(--text-muted); font-size: 0.8rem; line-height: 1.5; display: block;">لقد قمت بحظر الإشعارات مسبقاً لهذا الموقع. لتلقي تنبيهات البصمة، يرجى تفعيلها يدوياً بالضغط على <b>أيقونة القفل 🔒</b> أو <b>إعدادات الموقع ⚙️</b> بجانب شريط العنوان في الأعلى ثم تغيير خيار الإشعارات إلى "سماح (Allow)".</span>
+                    </div>
+                </div>
+            </div>
+        `;
+        return;
+    }
+    
+    // Case 2: Permission not yet requested / default state
     if (Notification.permission !== 'granted') {
         container.innerHTML = `
             <div id="notifPermissionBanner" style="margin-bottom: 20px; padding: 16px; border-radius: 20px; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2); text-align: right; display: flex; flex-direction: column; gap: 12px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);">
@@ -2963,7 +2994,7 @@ function checkBrowserNotificationCapabilities() {
         return;
     }
     
-    // Case 2: Permission is granted, check if experimental Notification Triggers are supported
+    // Case 3: Permission is granted, check if experimental Notification Triggers are supported
     const isNotificationTriggersSupported = ('showTrigger' in Notification.prototype);
     
     if (!isNotificationTriggersSupported) {
@@ -2993,7 +3024,18 @@ function checkBrowserNotificationCapabilities() {
 // Request permission from user click (compliant with modern security policies including iOS Safari)
 async function requestNotificationPermission() {
     try {
-        const permission = await Notification.requestPermission();
+        let permission;
+        const permissionPromise = Notification.requestPermission();
+        
+        // Support both Promise-based and Callback-based Notification.requestPermission
+        if (permissionPromise && permissionPromise.then) {
+            permission = await permissionPromise;
+        } else {
+            permission = await new Promise((resolve) => {
+                Notification.requestPermission(resolve);
+            });
+        }
+        
         console.log('[Notifications] Permission requested, status:', permission);
         
         // Refresh banners
