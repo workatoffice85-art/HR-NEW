@@ -4276,19 +4276,20 @@ export default async function handler(req, res) {
 
         // --- UPDATE NOTIFICATION PREFERENCE ---
         if (action === "updateNotificationPreference") {
-            const { employeeId, preference } = data;
-            if (!employeeId || !preference) {
+            const { employeeId, preference, preferredChannel } = data;
+            const finalPreference = preference || preferredChannel;
+            if (!employeeId || !finalPreference) {
                 return res.status(200).json({ success: false, message: "بيانات غير مكتملة" });
             }
 
             const allowedPreferences = ['push', 'telegram', 'both', 'email'];
-            if (!allowedPreferences.includes(preference)) {
+            if (!allowedPreferences.includes(finalPreference)) {
                 return res.status(200).json({ success: false, message: "خيار تفضيل غير صالح" });
             }
 
             const { error: updateError } = await supabase
                 .from('employees')
-                .update({ preferred_notification_channel: preference })
+                .update({ preferred_notification_channel: finalPreference })
                 .eq('id', employeeId);
 
             if (updateError) {
