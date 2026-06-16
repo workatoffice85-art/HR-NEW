@@ -10,10 +10,6 @@
       "destination": "/api/sync.js"
     },
     {
-      "source": "/api/cron-reminders",
-      "destination": "/api/cron-reminders.js"
-    },
-    {
       "source": "/api/(.*)",
       "destination": "/api/exec.js"
     }
@@ -26,10 +22,6 @@
     {
       "path": "/api/archive",
       "schedule": "0 3 * * *"
-    },
-    {
-      "path": "/api/cron-reminders",
-      "schedule": "*/15 * * * *"
     }
   ]
 }

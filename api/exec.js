@@ -3493,63 +3493,6 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, message: `تم تحديث ${updated?.length || 0} إشعار` });
         }
 
-        // --- PUSH NOTIFICATIONS ---
-        if (action === "subscribePush") {
-            const { employeeId, subscription } = data;
-
-            if (!employeeId || !subscription || !subscription.endpoint) {
-                return res.status(200).json({ success: false, message: "بيانات غير مكتملة" });
-            }
-
-            const p256dh = subscription.keys?.p256dh;
-            const auth = subscription.keys?.auth;
-
-            if (!p256dh || !auth) {
-                return res.status(200).json({ success: false, message: "مفاتيح التشفير غير صالحة" });
-            }
-
-            const { error } = await supabase
-                .from('push_subscriptions')
-                .upsert({
-                    employee_id: employeeId,
-                    endpoint: subscription.endpoint,
-                    expiration_time: subscription.expirationTime ? String(subscription.expirationTime) : null,
-                    p256dh: p256dh,
-                    auth: auth,
-                    updated_at: new Date().toISOString()
-                }, {
-                    onConflict: 'endpoint'
-                });
-
-            if (error) {
-                console.error("subscribePush error:", error);
-                throw error;
-            }
-
-            return res.status(200).json({ success: true, message: "تم تفعيل التنبيهات بنجاح" });
-        }
-
-        if (action === "unsubscribePush") {
-            const { employeeId, endpoint } = data;
-
-            if (!endpoint) {
-                return res.status(200).json({ success: false, message: "الرابط الخاص بالاشتراك مطلوب" });
-            }
-
-            let query = supabase.from('push_subscriptions').delete().eq('endpoint', endpoint);
-            if (employeeId) {
-                query = query.eq('employee_id', employeeId);
-            }
-
-            const { error } = await query;
-            if (error) {
-                console.error("unsubscribePush error:", error);
-                throw error;
-            }
-
-            return res.status(200).json({ success: true, message: "تم إلغاء التنبيهات بنجاح" });
-        }
-
         // --- OFFICIAL HOLIDAYS ---
         if (action === "getOfficialHolidays") {
             const cacheKey = 'holidays';
