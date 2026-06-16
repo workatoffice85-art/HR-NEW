@@ -3652,11 +3652,13 @@ async function initNotificationPreferences() {
                     telegramStatusText.textContent = 'مربوط بنجاح ✅';
                     telegramStatusText.style.color = '#10b981';
                     btnToggleTelegram.textContent = 'إلغاء الربط ❌';
+                    btnToggleTelegram.setAttribute('data-linked', 'true');
                     btnToggleTelegram.style.setProperty('background', 'linear-gradient(135deg, #ef4444, #dc2626)', 'important');
                 } else {
                     telegramStatusText.textContent = 'غير مربوط';
                     telegramStatusText.style.color = 'var(--text-muted)';
                     btnToggleTelegram.textContent = 'ربط الحساب ✈️';
+                    btnToggleTelegram.setAttribute('data-linked', 'false');
                     btnToggleTelegram.style.setProperty('background', 'linear-gradient(135deg, #3b82f6, #1d4ed8)', 'important');
                 }
             }
@@ -3761,8 +3763,8 @@ async function togglePushNotifications() {
 }
 
 async function toggleTelegramConnection() {
-    const telegramStatusText = document.getElementById('telegramStatusText');
-    const isLinked = telegramStatusText && telegramStatusText.textContent.includes('مربوط');
+    const btnToggleTelegram = document.getElementById('btnToggleTelegram');
+    const isLinked = btnToggleTelegram && btnToggleTelegram.getAttribute('data-linked') === 'true';
 
     if (isLinked) {
         if (!confirm('هل أنت متأكد من إلغاء ربط حساب تيليجرام؟ لن تصلك التنبيهات عليه بعد الآن.')) {
@@ -3803,6 +3805,9 @@ async function toggleTelegramConnection() {
             });
             const result = await res.json();
             if (result.success && result.link) {
+                // Open Telegram link directly in a new tab (may be blocked by browser popup blockers)
+                window.open(result.link, '_blank');
+
                 const linkElement = document.getElementById('telegramBotDeepLink');
                 if (linkElement) {
                     linkElement.href = result.link;
