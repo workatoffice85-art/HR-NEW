@@ -2934,7 +2934,61 @@ function initNotifications() {
     notificationsInterval = setInterval(fetchNotifications, 2 * 60 * 1000);
 }
 
-// Check local device notification permission and experimental triggers support
+// Helper: Convert VAPID key to Uint8Array
+function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding)
+        .replace(/\-/g, '+')
+        .replace(/_/g, '/');
+
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+
+    for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+}
+
+// Send Push subscription to server
+const VAPID_PUBLIC_KEY = 'BCzvmqK559MDuC8Re6QvQTQ_xiwtd-F52ae7crKawuKIxyWkiwDcrbjgKcSDEy7cE22yoYCcVIpeOJjv-u_ETFs';
+
+async function subscribeUserToPush(registration) {
+    try {
+        const subscribeOptions = {
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+        };
+
+        const subscription = await registration.pushManager.subscribe(subscribeOptions);
+        console.log('[Push] User subscribed successfully:', subscription);
+
+        // Send subscription to backend
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({
+                action: 'subscribePush',
+                employeeId: currentUser.id,
+                subscription: subscription
+            }),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            console.log('[Push] Subscription saved in backend successfully.');
+            // Hide the container since subscription is active
+            const container = document.getElementById('notificationAlertsContainer');
+            if (container) container.innerHTML = '';
+        } else {
+            console.error('[Push] Failed to save subscription in backend:', result.message);
+        }
+    } catch (error) {
+        console.error('[Push] Error subscribing user to push:', error);
+    }
+}
+
+// Check local device notification permission and push subscription status
 function checkBrowserNotificationCapabilities() {
     const container = document.getElementById('notificationAlertsContainer');
     if (!container) return;
@@ -2985,7 +3039,7 @@ function checkBrowserNotificationCapabilities() {
                     <span style="font-size: 1.6rem; margin-top: 2px;">⚠️</span>
                     <div style="flex: 1;">
                         <strong style="color: #f87171; display: block; font-size: 0.95rem; margin-bottom: 6px; font-weight: 800;">تفعيل التنبيهات هام جداً</strong>
-                        <span style="color: var(--text-muted); font-size: 0.8rem; line-height: 1.5; display: block;">يرجى تفعيل صلاحية الإشعارات بالضغط أدناه لتصلك تنبيهات تسجيل الحضور والانصراف اليومية ولا تنسى البصمة.</span>
+                        <span style="color: var(--text-muted); font-size: 0.8rem; line-height: 1.5; display: block;">يرجى تفعيل صلاحية الإشعارات بالضغط أدناه لتصلك تنبيهات تسجيل الحضور والانصراف اليومية وتجنب النسيان.</span>
                     </div>
                 </div>
                 <button class="btn-primary" style="height: 38px !important; font-size: 0.85rem !important; background: linear-gradient(135deg, #ef4444, #dc2626) !important; width: auto !important; margin: 0 0 0 auto; padding: 0 20px; box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3) !important; border-radius: 12px; border: none; font-weight: bold; cursor: pointer;" onclick="requestNotificationPermission()">تفعيل الإشعارات الآن 🔔</button>
@@ -2994,30 +3048,15 @@ function checkBrowserNotificationCapabilities() {
         return;
     }
     
-    // Case 3: Permission is granted, check if experimental Notification Triggers are supported
-    const isNotificationTriggersSupported = ('showTrigger' in Notification.prototype);
-    
-    if (!isNotificationTriggersSupported) {
-        // Detect if it is Chrome/Android/Windows to guide them to chrome://flags
-        const userAgent = navigator.userAgent.toLowerCase();
-        const isChrome = userAgent.includes('chrome') || userAgent.includes('crios');
-        const isAndroid = userAgent.includes('android');
-        const isWindows = userAgent.includes('windows');
-        
-        if (isAndroid || isChrome || isWindows) {
-            container.innerHTML = `
-                <div id="notifTriggerBanner" style="margin-bottom: 20px; padding: 16px; border-radius: 20px; background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.2); text-align: right; display: flex; flex-direction: column; gap: 12px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);">
-                    <div style="display: flex; gap: 12px; align-items: flex-start;">
-                       <span style="font-size: 1.6rem; margin-top: 2px;">💡</span>
-                       <div style="flex: 1;">
-                           <strong style="color: #fbbf24; display: block; font-size: 0.95rem; margin-bottom: 6px; font-weight: 800;">تشغيل التنبيهات بدون إنترنت والتطبيق مغلق</strong>
-                           <span style="color: var(--text-muted); font-size: 0.8rem; line-height: 1.5; display: block;">الآن ستصلك التنبيهات فقط والإنترنت متاح. لتلقي تنبيهات البصمة بدون إنترنت والتطبيق مقفول، يرجى تفعيل ميزة التنبيهات الذكية بالمتصفح.</span>
-                       </div>
-                    </div>
-                    <button class="btn-primary" style="height: 38px !important; font-size: 0.85rem !important; background: linear-gradient(135deg, #f59e0b, #d97706) !important; width: auto !important; margin: 0 0 0 auto; padding: 0 20px; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3) !important; border-radius: 12px; border: none; font-weight: bold; cursor: pointer;" onclick="openNotificationGuideModal()">تشغيل التنبيهات بدون إنترنت ⏰</button>
-                </div>
-            `;
-        }
+    // Case 3: Permission is granted, make sure user is subscribed
+    if (Notification.permission === 'granted' && 'serviceWorker' in navigator) {
+        navigator.serviceWorker.ready.then(async (registration) => {
+            const subscription = await registration.pushManager.getSubscription();
+            if (!subscription) {
+                console.log('[Push] Permission is granted but no push subscription found. Subscribing user...');
+                await subscribeUserToPush(registration);
+            }
+        });
     }
 }
 
@@ -3038,38 +3077,24 @@ async function requestNotificationPermission() {
         
         console.log('[Notifications] Permission requested, status:', permission);
         
+        if (permission === 'granted') {
+            if ('serviceWorker' in navigator) {
+                const registration = await navigator.serviceWorker.ready;
+                await subscribeUserToPush(registration);
+            }
+            alert('✅ تم تفعيل إشعارات الحضور والانصراف بنجاح!');
+        }
+        
         // Refresh banners
         checkBrowserNotificationCapabilities();
-        
-        // If granted, inform service worker to schedule triggers immediately
-        if (permission === 'granted' && 'serviceWorker' in navigator) {
-            navigator.serviceWorker.ready.then(registration => {
-                if (registration.active) {
-                    registration.active.postMessage({ action: 'schedule_reminders' });
-                }
-            });
-        }
     } catch (e) {
         console.error('[Notifications] Error requesting notification permission:', e);
     }
 }
 
 // Modal control functions
-function openNotificationGuideModal() {
-    const modal = document.getElementById('notificationGuideModal');
-    if (modal) {
-        modal.classList.remove('hidden');
-        modal.style.display = 'flex';
-    }
-}
-
-function closeNotificationGuideModal() {
-    const modal = document.getElementById('notificationGuideModal');
-    if (modal) {
-        modal.classList.add('hidden');
-        modal.style.display = 'none';
-    }
-}
+function openNotificationGuideModal() {}
+function closeNotificationGuideModal() {}
 
 async function fetchNotifications() {
     if (!currentUser || !currentUser.id) return;
