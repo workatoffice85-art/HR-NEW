@@ -624,6 +624,7 @@ async function initSystem() {
 
         processAttendanceStatus(allAttendanceData);
         initNotifications();
+        initNotificationPreferences();
         setStatus(`📡 تم تحميل ${sitesData.length} موقع. النظام جاهز...`, 'text-muted');
         
         // Setup biometric system using cached data
@@ -702,6 +703,7 @@ async function initSystem() {
                 
                 if (!hasCache) {
                     initNotifications();
+                    initNotificationPreferences();
                     setStatus(`📡 تم تحميل ${sitesData.length} موقع. النظام جاهز...`, 'text-muted');
                     
                     await initBiometricSystem();
@@ -3601,5 +3603,287 @@ async function sendReminder(requestId, requestType, button) {
         button.disabled = false;
         button.innerHTML = originalText;
         button.style.opacity = '1';
+    }
+}
+
+// ------ WEB PUSH & TELEGRAM NOTIFICATION PREFERENCES ------ //
+async function getPushSubscription() {
+    if ('serviceWorker' in navigator) {
+        const registration = await navigator.serviceWorker.ready;
+        return await registration.pushManager.getSubscription();
+    }
+    return null;
+}
+
+function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding)
+        .replace(/\-/g, '+')
+        .replace(/_/g, '/');
+
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+
+    for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+}
+
+async function initNotificationPreferences() {
+    if (!currentUser || !currentUser.id) return;
+
+    try {
+        const res = await fetch(`${API_URL}?action=getEmployeeNotificationState&employeeId=${encodeURIComponent(currentUser.id)}`);
+        const result = await res.json();
+
+        if (result.success) {
+            // Update preferred channel dropdown
+            const channelSelect = document.getElementById('selectNotificationChannel');
+            if (channelSelect) {
+                channelSelect.value = result.preferredChannel || 'both';
+            }
+
+            // Update Telegram status UI
+            const telegramStatusText = document.getElementById('telegramStatusText');
+            const btnToggleTelegram = document.getElementById('btnToggleTelegram');
+            if (telegramStatusText && btnToggleTelegram) {
+                if (result.isTelegramLinked) {
+                    telegramStatusText.textContent = 'مربوط بنجاح ✅';
+                    telegramStatusText.style.color = '#10b981';
+                    btnToggleTelegram.textContent = 'إلغاء الربط ❌';
+                    btnToggleTelegram.style.setProperty('background', 'linear-gradient(135deg, #ef4444, #dc2626)', 'important');
+                } else {
+                    telegramStatusText.textContent = 'غير مربوط';
+                    telegramStatusText.style.color = 'var(--text-muted)';
+                    btnToggleTelegram.textContent = 'ربط الحساب ✈️';
+                    btnToggleTelegram.style.setProperty('background', 'linear-gradient(135deg, #3b82f6, #1d4ed8)', 'important');
+                }
+            }
+
+            // Update Web Push status UI
+            const pushSubscription = await getPushSubscription();
+            const pushStatusText = document.getElementById('pushStatusText');
+            const btnTogglePush = document.getElementById('btnTogglePush');
+            if (pushStatusText && btnTogglePush) {
+                if (pushSubscription) {
+                    pushStatusText.textContent = 'مفعّلة ✅';
+                    pushStatusText.style.color = '#10b981';
+                    btnTogglePush.textContent = 'إلغاء التفعيل 🔕';
+                    btnTogglePush.style.setProperty('background', 'linear-gradient(135deg, #ef4444, #dc2626)', 'important');
+                } else {
+                    pushStatusText.textContent = 'غير مفعّلة';
+                    pushStatusText.style.color = 'var(--text-muted)';
+                    btnTogglePush.textContent = 'تفعيل 🔔';
+                    btnTogglePush.style.setProperty('background', 'linear-gradient(135deg, #10b981, #059669)', 'important');
+                }
+            }
+        }
+    } catch (err) {
+        console.error('Error initializing notification preferences:', err);
+    }
+}
+
+async function togglePushNotifications() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        alert('❌ إشعارات المتصفح غير مدعومة على هذا الجهاز أو المتصفح.');
+        return;
+    }
+
+    const btnTogglePush = document.getElementById('btnTogglePush');
+    if (btnTogglePush) btnTogglePush.disabled = true;
+
+    try {
+        const registration = await navigator.serviceWorker.ready;
+        const existingSubscription = await registration.pushManager.getSubscription();
+
+        if (existingSubscription) {
+            // Unsubscribe
+            await existingSubscription.unsubscribe();
+            // Delete from server
+            const res = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'savePushSubscription',
+                    employeeId: currentUser.id,
+                    subscription: null
+                })
+            });
+            const result = await res.json();
+            if (result.success) {
+                alert('✅ تم إلغاء تفعيل إشعارات المتصفح بنجاح.');
+            } else {
+                alert('⚠️ تم إلغاء التفعيل محلياً ولكن فشل التحديث على السيرفر.');
+            }
+        } else {
+            // Subscribe
+            const permission = await Notification.requestPermission();
+            if (permission !== 'granted') {
+                alert('❌ يجب السماح بصلاحية الإشعارات لتفعيل هذه الميزة.');
+                if (btnTogglePush) btnTogglePush.disabled = false;
+                return;
+            }
+
+            const VAPID_PUBLIC_KEY = 'BCzvmqK559MDuC8Re6QvQTQ_xiwtd-F52ae7crKawuKIxyWkiwDcrbjgKcSDEy7cE22yoYCcVIpeOJjv-u_ETFs';
+            const applicationServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+
+            const subscription = await registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: applicationServerKey
+            });
+
+            // Save to server
+            const res = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'savePushSubscription',
+                    employeeId: currentUser.id,
+                    subscription: subscription
+                })
+            });
+            const result = await res.json();
+            if (result.success) {
+                alert('✅ تم تفعيل إشعارات المتصفح بنجاح!');
+            } else {
+                alert('❌ فشل حفظ الاشتراك على السيرفر.');
+                await subscription.unsubscribe();
+            }
+        }
+    } catch (err) {
+        console.error('Error toggling push notifications:', err);
+        alert('❌ حدث خطأ أثناء إعداد الإشعارات: ' + err.message);
+    } finally {
+        if (btnTogglePush) btnTogglePush.disabled = false;
+        await initNotificationPreferences();
+    }
+}
+
+async function toggleTelegramConnection() {
+    const telegramStatusText = document.getElementById('telegramStatusText');
+    const isLinked = telegramStatusText && telegramStatusText.textContent.includes('مربوط');
+
+    if (isLinked) {
+        if (!confirm('هل أنت متأكد من إلغاء ربط حساب تيليجرام؟ لن تصلك التنبيهات عليه بعد الآن.')) {
+            return;
+        }
+
+        try {
+            const res = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'unlinkTelegram',
+                    employeeId: currentUser.id
+                })
+            });
+            const result = await res.json();
+            if (result.success) {
+                alert('✅ تم إلغاء ربط حساب تيليجرام بنجاح.');
+            } else {
+                alert('❌ فشل إلغاء ربط الحساب: ' + result.message);
+            }
+        } catch (err) {
+            console.error('Error unlinking Telegram:', err);
+            alert('❌ حدث خطأ أثناء الاتصال بالخادم.');
+        } finally {
+            await initNotificationPreferences();
+        }
+    } else {
+        // Fetch Bot link
+        try {
+            const res = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'getTelegramBotLink',
+                    employeeId: currentUser.id
+                })
+            });
+            const result = await res.json();
+            if (result.success && result.link) {
+                const linkElement = document.getElementById('telegramBotDeepLink');
+                if (linkElement) {
+                    linkElement.href = result.link;
+                }
+                const modal = document.getElementById('telegramLinkModal');
+                if (modal) {
+                    modal.classList.remove('hidden');
+                    modal.style.display = 'flex';
+                }
+            } else {
+                alert('❌ فشل إنشاء رابط الربط: ' + result.message);
+            }
+        } catch (err) {
+            console.error('Error getting Telegram link:', err);
+            alert('❌ حدث خطأ أثناء الحصول على رابط الربط.');
+        }
+    }
+}
+
+function closeTelegramLinkModal() {
+    const modal = document.getElementById('telegramLinkModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.style.display = 'none';
+    }
+    // Re-check preferences status
+    initNotificationPreferences();
+}
+
+async function changePreferredChannel(channel) {
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'updateNotificationPreference',
+                employeeId: currentUser.id,
+                preferredChannel: channel
+            })
+        });
+        const result = await res.json();
+        if (result.success) {
+            alert('✅ تم حفظ تفضيلات قناة الإشعارات بنجاح.');
+        } else {
+            alert('❌ فشل حفظ التفضيلات: ' + result.message);
+        }
+    } catch (err) {
+        console.error('Error updating preferred channel:', err);
+        alert('❌ حدث خطأ أثناء حفظ تفضيلاتك.');
+    } finally {
+        await initNotificationPreferences();
+    }
+}
+
+async function testNotifications() {
+    const btnTest = document.getElementById('btnTestNotifications');
+    if (btnTest) btnTest.disabled = true;
+
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'testEmployeeNotifications',
+                employeeId: currentUser.id
+            })
+        });
+        const result = await res.json();
+        if (result.success) {
+            let detailsMsg = '';
+            if (result.results) {
+                detailsMsg = `\n(النتائج - المتصفح: ${result.results.push === 'success' ? 'نجح ✅' : result.results.push === 'skipped' ? 'تم تخطيه' : 'فشل ❌'} | تيليجرام: ${result.results.telegram === 'success' ? 'نجح ✅' : result.results.telegram === 'skipped' ? 'تم تخطيه' : 'فشل ❌'} | البريد: ${result.results.email === 'success' ? 'نجح ✅' : result.results.email === 'skipped' ? 'تم تخطيه' : 'فشل ❌'})`;
+            }
+            alert('✅ تم إرسال الإشعار التجريبي بنجاح!' + detailsMsg);
+        } else {
+            alert('❌ فشل إرسال الإشعار التجريبي: ' + result.message);
+        }
+    } catch (err) {
+        console.error('Error testing notifications:', err);
+        alert('❌ حدث خطأ أثناء إرسال الإشعار التجريبي.');
+    } finally {
+        if (btnTest) btnTest.disabled = false;
     }
 }

@@ -210,25 +210,64 @@ function startReminderTimer() {
 // Start timer when service worker starts
 startReminderTimer();
 
+// Handle Push Event from server
+self.addEventListener('push', (event) => {
+  if (!event.data) {
+    console.log('[Service Worker] Push event received but no data payload.');
+    return;
+  }
+
+  try {
+    const payload = event.data.json();
+    console.log('[Service Worker] Push payload received:', payload);
+
+    const title = payload.title || 'تذكير من نظام الموارد البشرية ⏰';
+    const options = {
+      body: payload.body || '',
+      icon: payload.icon || '/assets/app_icon.png',
+      badge: payload.badge || '/assets/app_icon.png',
+      vibrate: payload.vibrate || [200, 100, 200],
+      data: payload.data || { url: '/employee/index.html' }
+    };
+
+    event.waitUntil(
+      self.registration.showNotification(title, options)
+    );
+  } catch (err) {
+    console.error('[Service Worker] Error parsing push data, showing fallback notification:', err);
+    
+    // Fallback if data is not JSON
+    const text = event.data.text();
+    event.waitUntil(
+      self.registration.showNotification('تذكير ⏰', {
+        body: text || 'يرجى مراجعة بوابة الموظف.',
+        icon: '/assets/app_icon.png',
+        badge: '/assets/app_icon.png',
+        data: { url: '/employee/index.html' }
+      })
+    );
+  }
+});
+
 // Handle clicking on the notification
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
+  const clickTarget = (event.notification.data && event.notification.data.url) || '/employee/index.html';
+
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      const targetUrl = '/employee/index.html';
-
       // Check if there is already a window open with this URL and focus it
       for (const client of clientList) {
         const url = new URL(client.url);
-        if (url.pathname.includes(targetUrl) && 'focus' in client) {
+        if (url.pathname.includes(clickTarget) && 'focus' in client) {
           return client.focus();
         }
       }
 
       // Otherwise, open a new window
       if (clients.openWindow) {
-        return clients.openWindow(targetUrl);
+        return clients.openWindow(clickTarget);
       }
     })
   );

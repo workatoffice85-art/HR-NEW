@@ -24,9 +24,10 @@ export default async function handler(req, res) {
     const isCron = req.headers['x-vercel-cron'] === '1' || 
                    req.headers['user-agent']?.includes('vercel-cron');
     const hasSecret = req.query.secret === ARCHIVE_CRON_SECRET;
+    const hasCronSecret = req.headers.authorization === `Bearer ${process.env.CRON_SECRET}`;
     
-    // Allow tests in development or with query params
-    if (!isCron && !hasSecret && process.env.NODE_ENV !== 'development' && req.query.test !== 'checkin' && req.query.test !== 'checkout') {
+    // Allow tests in development or with query params or with proper Bearer header
+    if (!isCron && !hasSecret && !hasCronSecret && process.env.NODE_ENV !== 'development' && req.query.test !== 'checkin' && req.query.test !== 'checkout') {
         return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 
@@ -77,6 +78,20 @@ export default async function handler(req, res) {
                 cairoTime: cairoTimeString,
                 details: { hours, minutes, dayOfWeek }
             });
+        }
+
+        // Determine time slot for deduplication
+        let slot = 'test';
+        if (testMode) {
+            slot = 'test';
+        } else if (action === 'checkin') {
+            slot = '08:45';
+        } else if (action === 'checkout') {
+            if (hours === 15 && minutes >= 0 && minutes < 5) slot = '15:00';
+            else if (hours === 15 && minutes >= 30 && minutes < 35) slot = '15:30';
+            else if (hours === 16 && minutes >= 0 && minutes < 5) slot = '16:00';
+            else if (hours === 17 && minutes >= 0 && minutes < 5) slot = '17:00';
+            else slot = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
         }
 
         // 2. Fetch system settings to check weekend days
@@ -138,7 +153,7 @@ export default async function handler(req, res) {
         });
 
         // 5. Query all active employees
-        let empQuery = supabase.from('employees').select('id, name').eq('role', 'employee');
+        let empQuery = supabase.from('employees').select('id, name, email, preferred_notification_channel').eq('role', 'employee');
         if (targetEmployeeId) {
             empQuery = empQuery.eq('id', targetEmployeeId);
         }
@@ -172,18 +187,50 @@ export default async function handler(req, res) {
             });
         }
 
+        // Deduplicate targeting based on notification_logs
+        let filteredTargetEmployeeIds = [];
+        if (!testMode) {
+            const { data: sentLogs, error: logErr } = await supabase
+                .from('notification_logs')
+                .select('employee_id')
+                .eq('notification_type', `${action}_reminder`)
+                .eq('notification_date', dateStr)
+                .eq('slot', slot)
+                .eq('status', 'success');
+
+            if (logErr) {
+                console.error('[Cron Reminders] Error checking sent logs:', logErr.message);
+            }
+
+            const sentEmpIds = new Set(sentLogs ? sentLogs.map(l => l.employee_id) : []);
+            filteredTargetEmployeeIds = targetEmployeeIds.filter(id => !sentEmpIds.has(id));
+        } else {
+            filteredTargetEmployeeIds = targetEmployeeIds;
+        }
+
+        if (filteredTargetEmployeeIds.length === 0) {
+            return res.status(200).json({ 
+                success: true, 
+                message: `Reminders already sent for this slot (${slot}) to all targeted employees.`,
+                cairoTime: cairoTimeString
+            });
+        }
+
+        const targetEmployees = employees.filter(emp => filteredTargetEmployeeIds.includes(emp.id));
+
         // 7. Get subscriptions for target employees
-        let subQuery = supabase.from('push_subscriptions').select('*').in('employee_id', targetEmployeeIds);
+        let subQuery = supabase.from('push_subscriptions').select('*').in('employee_id', filteredTargetEmployeeIds);
         const { data: subscriptions, error: subError } = await subQuery;
         if (subError) throw subError;
 
-        if (!subscriptions || subscriptions.length === 0) {
-            return res.status(200).json({ 
-                success: true, 
-                message: `No active push subscriptions found for targeted employees. Targeted count: ${targetEmployeeIds.length}`,
-                targetedEmployees: targetEmployeeIds
-            });
-        }
+        // 7b. Get Telegram connection mappings
+        const { data: tgConnections, error: tgError } = await supabase
+            .from('employee_telegram')
+            .select('*')
+            .in('employee_id', filteredTargetEmployeeIds);
+
+        const tgMap = new Map(tgConnections ? tgConnections.map(c => [c.employee_id, c.telegram_chat_id]) : []);
+        const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
         // 8. Prepare notification payload
         const payload = {
@@ -199,44 +246,214 @@ export default async function handler(req, res) {
             }
         };
 
-        // 9. Send push notifications
-        const notificationPromises = subscriptions.map(async (sub) => {
-            const pushSubscription = {
-                endpoint: sub.endpoint,
-                keys: {
-                    p256dh: sub.p256dh,
-                    auth: sub.auth
+        // Helper: Send Web Push
+        async function sendPushToEmployee(empId) {
+            const empSubs = subscriptions.filter(sub => sub.employee_id === empId);
+            if (empSubs.length === 0) return false;
+
+            let success = false;
+            for (const sub of empSubs) {
+                const pushSubscription = {
+                    endpoint: sub.endpoint,
+                    keys: { p256dh: sub.p256dh, auth: sub.auth }
+                };
+                try {
+                    await webpush.sendNotification(pushSubscription, JSON.stringify(payload));
+                    success = true;
+                } catch (err) {
+                    console.error(`[Cron] Push error for sub ${sub.id}:`, err.message);
+                    if (err.statusCode === 410 || err.statusCode === 404) {
+                        console.log(`[Cron] Subscription ${sub.id} is invalid/gone. Deleting.`);
+                        await supabase.from('push_subscriptions').delete().eq('id', sub.id);
+                    }
                 }
-            };
+            }
+            return success;
+        }
+
+        // Helper: Send Telegram Message
+        async function sendTelegramToEmployee(empId) {
+            const chatId = tgMap.get(empId);
+            if (!chatId || !TELEGRAM_BOT_TOKEN) return false;
+
+            const text = action === 'checkin' 
+                ? '⏰ تذكير تسجيل الحضور: صباح الخير! يرجى تسجيل حضورك اليوم في موقع العمل.' 
+                : '⏰ تذكير تسجيل الانصراف: مرحباً! يرجى التأكد من تسجيل انصرافك في حال انتهاء وقت العمل.';
+            try {
+                const tgRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chat_id: chatId,
+                        text: text
+                    })
+                });
+                const tgJson = await tgRes.json();
+                if (tgJson.ok) {
+                    await supabase
+                        .from('employee_telegram')
+                        .update({ last_verified_at: new Date().toISOString() })
+                        .eq('employee_id', empId);
+                    return true;
+                }
+                return false;
+            } catch (err) {
+                console.error(`[Cron] Telegram error for employee ${empId}:`, err.message);
+                return false;
+            }
+        }
+
+        // Helper: Send Email Notification
+        async function sendEmailToEmployee(email, empName) {
+            const GOOGLE_SCRIPT_URL = process.env.GOOGLE_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwNhaRKDP-7M4dXSQend8RbYPkXRgs5nzN0-BmNzxEO8IkBN9lt6KDtJCdOqpovhJEY1Q/exec';
+            if (!email) return false;
+
+            const text = action === 'checkin'
+                ? `مرحباً ${empName}،\n\nصباح الخير! يرجى تسجيل حضورك اليوم في موقع العمل.`
+                : `مرحباً ${empName}،\n\nيرجى التأكد من تسجيل انصرافك في حال انتهاء وقت العمل.`;
+
+            const html = `
+                <div style="direction: rtl; text-align: right; font-family: sans-serif; padding: 20px; border: 1px solid #eef2f6; border-radius: 12px; max-width: 600px; margin: 0 auto;">
+                    <h3 style="color: #6366f1;">⏰ تذكير تسجيل الحضور والانصراف</h3>
+                    <p>مرحباً ${empName}،</p>
+                    <p>${action === 'checkin' ? 'صباح الخير! يرجى تسجيل حضورك اليوم في موقع العمل.' : 'يرجى التأكد من تسجيل انصرافك في حال انتهاء وقت العمل.'}</p>
+                    <hr style="border: 0; border-top: 1px solid #f1f5f9; margin: 20px 0;">
+                    <p style="font-size: 0.8rem; color: #94a3b8;">&copy; 2026 جميع الحقوق محفوظة لـ Demo Company</p>
+                </div>
+            `;
 
             try {
-                await webpush.sendNotification(pushSubscription, JSON.stringify(payload));
-                return { subscriptionId: sub.id, employeeId: sub.employee_id, success: true };
+                const response = await fetch(GOOGLE_SCRIPT_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        action: 'sendNotificationEmail',
+                        to: [email],
+                        subject: action === 'checkin' ? 'تذكير تسجيل الحضور ⏰' : 'تذكير تسجيل الانصراف ⏰',
+                        body: text,
+                        htmlBody: html
+                    }),
+                    headers: { 'Content-Type': 'text/plain' }
+                });
+                const result = await response.json();
+                return result.success;
             } catch (err) {
-                console.error(`Error sending push notification to subscription ${sub.id}:`, err.message);
-                
-                // If subscription is expired/unsubscribed (410 Gone / 404 Not Found), delete it from DB
-                if (err.statusCode === 410 || err.statusCode === 404) {
-                    console.log(`[Push] Subscription ${sub.id} is invalid/gone. Deleting from DB.`);
-                    await supabase.from('push_subscriptions').delete().eq('id', sub.id);
-                    return { subscriptionId: sub.id, employeeId: sub.employee_id, success: false, reason: 'deleted' };
-                }
-                
-                return { subscriptionId: sub.id, employeeId: sub.employee_id, success: false, reason: err.message };
+                console.error(`[Cron] Email error for employee ${email}:`, err.message);
+                return false;
             }
-        });
+        }
 
-        const sendResults = await Promise.all(notificationPromises);
-        const successCount = sendResults.filter(r => r.success).length;
+        // 9. Dispatch reminders sequentially based on preferred channel
+        const dispatchResults = [];
+
+        for (const emp of targetEmployees) {
+            const pref = emp.preferred_notification_channel || 'both';
+            let sentSuccess = false;
+            let channelUsed = '';
+
+            if (pref === 'both') {
+                // Try push
+                const pushSuccess = await sendPushToEmployee(emp.id);
+                if (pushSuccess) {
+                    sentSuccess = true;
+                    channelUsed = 'push';
+                }
+                // Try Telegram
+                const tgSuccess = await sendTelegramToEmployee(emp.id);
+                if (tgSuccess) {
+                    sentSuccess = true;
+                    channelUsed = channelUsed ? 'both' : 'telegram';
+                }
+
+                // If both failed, fallback to email
+                if (!sentSuccess) {
+                    const emailSuccess = await sendEmailToEmployee(emp.email, emp.name);
+                    if (emailSuccess) {
+                        sentSuccess = true;
+                        channelUsed = 'email';
+                    }
+                }
+            } else if (pref === 'push') {
+                const pushSuccess = await sendPushToEmployee(emp.id);
+                if (pushSuccess) {
+                    sentSuccess = true;
+                    channelUsed = 'push';
+                } else {
+                    const tgSuccess = await sendTelegramToEmployee(emp.id);
+                    if (tgSuccess) {
+                        sentSuccess = true;
+                        channelUsed = 'telegram';
+                    } else {
+                        const emailSuccess = await sendEmailToEmployee(emp.email, emp.name);
+                        if (emailSuccess) {
+                            sentSuccess = true;
+                            channelUsed = 'email';
+                        }
+                    }
+                }
+            } else if (pref === 'telegram') {
+                const tgSuccess = await sendTelegramToEmployee(emp.id);
+                if (tgSuccess) {
+                    sentSuccess = true;
+                    channelUsed = 'telegram';
+                } else {
+                    const emailSuccess = await sendEmailToEmployee(emp.email, emp.name);
+                    if (emailSuccess) {
+                        sentSuccess = true;
+                        channelUsed = 'email';
+                    }
+                }
+            } else if (pref === 'email') {
+                const emailSuccess = await sendEmailToEmployee(emp.email, emp.name);
+                if (emailSuccess) {
+                    sentSuccess = true;
+                    channelUsed = 'email';
+                }
+            }
+
+            if (sentSuccess) {
+                // Write log to DB (uses DB UNIQUE index for conflict resolution)
+                try {
+                    await supabase
+                        .from('notification_logs')
+                        .insert([{
+                            employee_id: emp.id,
+                            channel: channelUsed,
+                            notification_type: `${action}_reminder`,
+                            slot: slot,
+                            status: 'success',
+                            notification_date: dateStr,
+                            sent_at: new Date().toISOString()
+                        }]);
+                } catch (dbErr) {
+                    console.log(`[Cron] Log duplicate skipped for employee ${emp.id} due to unique constraint:`, dbErr.message);
+                }
+                dispatchResults.push({ employeeId: emp.id, success: true, channel: channelUsed });
+            } else {
+                // Log failed attempt
+                try {
+                    await supabase
+                        .from('notification_logs')
+                        .insert([{
+                            employee_id: emp.id,
+                            channel: pref,
+                            notification_type: `${action}_reminder`,
+                            slot: slot,
+                            status: 'failed',
+                            notification_date: dateStr,
+                            sent_at: new Date().toISOString()
+                        }]);
+                } catch (e) {}
+                dispatchResults.push({ employeeId: emp.id, success: false });
+            }
+        }
 
         return res.status(200).json({
             success: true,
             action,
             cairoTime: cairoTimeString,
             targetedCount: targetEmployeeIds.length,
-            attemptedSends: subscriptions.length,
-            successfulSends: successCount,
-            results: sendResults
+            filteredCount: filteredTargetEmployeeIds.length,
+            results: dispatchResults
         });
 
     } catch (e) {
