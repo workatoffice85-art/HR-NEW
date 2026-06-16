@@ -741,6 +741,9 @@
 
             <div id="loader" class="loader hidden"></div>
 
+            <!-- Notification Alerts Container (For permissions & experimental triggers guides) -->
+            <div id="notificationAlertsContainer" style="margin-top: 15px;"></div>
+
             <div class="camera-container">
                 <video id="videoElement" autoplay muted playsinline></video>
                 <canvas id="overlay"></canvas>
@@ -975,6 +978,42 @@
                 </div>
                 
                 <button class="btn-primary" style="background: var(--secondary) !important; box-shadow: none !important; margin: 0 auto; width: 60% !important; height: 42px !important; font-size: 0.95rem !important;" onclick="closePwaManualInstallModal()">فهمت</button>
+            </div>
+        </div>
+
+        <!-- Notification Guide Modal -->
+        <div id="notificationGuideModal" class="modal hidden"
+            style="position:fixed; top:0; left:0; width:100%; height:100%; display:none; align-items:center; justify-content:center; z-index:10000; direction: rtl;">
+            <div class="glass-card" style="max-width: 400px; width: 90%; text-align: center; padding: 30px 24px;">
+                <h3 style="margin-bottom: 15px; font-weight: 800; color: #fff;">تفعيل التنبيهات بدون إنترنت ⏰</h3>
+                <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px; line-height: 1.6;">
+                    لتلقي تنبيهات البصمة اليومية عندما يكون الإنترنت مغلقاً والتطبيق مغلقاً، يرجى تفعيل الميزة التجريبية في متصفح Chrome بالخطوات التالية:
+                </p>
+                
+                <div style="text-align: right; margin-bottom: 24px; font-size: 0.9rem; line-height: 1.6;">
+                    <div style="margin-bottom: 15px; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);">
+                        <strong style="color: var(--primary); display: block; margin-bottom: 6px;">1. افتح الإعدادات المخفية:</strong>
+                        انسخ الرابط التالي ثم الصقه في شريط العنوان بمتصفح Chrome واضغط الذهاب:
+                        <div style="background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 8px; margin-top: 6px; font-family: monospace; font-size: 0.85rem; text-align: center; color: #818cf8; border: 1px solid rgba(255,255,255,0.08); user-select: all; cursor: pointer;" onclick="navigator.clipboard.writeText('chrome://flags').then(() => alert('تم نسخ الرابط! قم بلصقه في شريط العنوان بمتصفح كروم'))">
+                            chrome://flags
+                        </div>
+                    </div>
+                    
+                    <div style="margin-bottom: 15px; background: rgba(255,255,255,0.03); padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);">
+                        <strong style="color: #818cf8; display: block; margin-bottom: 6px;">2. ابحث عن الميزة:</strong>
+                        في خانة البحث (Search flags) في الأعلى، ابحث عن الجملة التالية:
+                        <div style="background: rgba(0,0,0,0.3); padding: 8px 12px; border-radius: 8px; margin-top: 6px; font-family: monospace; font-size: 0.85rem; text-align: center; color: #818cf8; border: 1px solid rgba(255,255,255,0.08); user-select: all; cursor: pointer;" onclick="navigator.clipboard.writeText('Experimental Web Platform features').then(() => alert('تم نسخ الكلمة للبحث!'))">
+                            Experimental Web Platform features
+                        </div>
+                    </div>
+
+                    <div style="background: rgba(255,255,255,0.03); padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);">
+                        <strong style="color: #f59e0b; display: block; margin-bottom: 6px;">3. تفعيل وإعادة تشغيل المتصفح:</strong>
+                        غير الحالة أمام الميزة من Default إلى <b>Enabled</b>، ثم اضغط على زر <b>Relaunch</b> الذي سيظهر بالأسفل.
+                    </div>
+                </div>
+                
+                <button class="btn-primary" style="background: var(--secondary) !important; box-shadow: none !important; margin: 0 auto; width: 60% !important; height: 42px !important; font-size: 0.95rem !important;" onclick="closeNotificationGuideModal()">مفهوم، سأفعلها الآن</button>
             </div>
         </div>
 

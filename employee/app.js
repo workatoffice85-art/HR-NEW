@@ -2926,9 +2926,107 @@ function initNotifications() {
     // Fetch notifications immediately
     fetchNotifications();
     
+    // Check browser notification permissions and experimental trigger features
+    checkBrowserNotificationCapabilities();
+    
     // Set up periodic fetching every 2 minutes
     if (notificationsInterval) clearInterval(notificationsInterval);
     notificationsInterval = setInterval(fetchNotifications, 2 * 60 * 1000);
+}
+
+// Check local device notification permission and experimental triggers support
+function checkBrowserNotificationCapabilities() {
+    const container = document.getElementById('notificationAlertsContainer');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    if (!('Notification' in window)) {
+        console.log('[Notifications] Browser does not support desktop notifications.');
+        return;
+    }
+    
+    // Case 1: Permission not yet granted
+    if (Notification.permission !== 'granted') {
+        container.innerHTML = `
+            <div id="notifPermissionBanner" style="margin-bottom: 20px; padding: 16px; border-radius: 20px; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.2); text-align: right; display: flex; flex-direction: column; gap: 12px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);">
+                <div style="display: flex; gap: 12px; align-items: flex-start;">
+                    <span style="font-size: 1.6rem; margin-top: 2px;">⚠️</span>
+                    <div style="flex: 1;">
+                        <strong style="color: #f87171; display: block; font-size: 0.95rem; margin-bottom: 6px; font-weight: 800;">تفعيل التنبيهات هام جداً</strong>
+                        <span style="color: var(--text-muted); font-size: 0.8rem; line-height: 1.5; display: block;">يرجى تفعيل صلاحية الإشعارات بالضغط أدناه لتصلك تنبيهات تسجيل الحضور والانصراف اليومية ولا تنسى البصمة.</span>
+                    </div>
+                </div>
+                <button class="btn-primary" style="height: 38px !important; font-size: 0.85rem !important; background: linear-gradient(135deg, #ef4444, #dc2626) !important; width: auto !important; margin: 0 0 0 auto; padding: 0 20px; box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3) !important; border-radius: 12px; border: none; font-weight: bold; cursor: pointer;" onclick="requestNotificationPermission()">تفعيل الإشعارات الآن 🔔</button>
+            </div>
+        `;
+        return;
+    }
+    
+    // Case 2: Permission is granted, check if experimental Notification Triggers are supported
+    const isNotificationTriggersSupported = ('showTrigger' in Notification.prototype);
+    
+    if (!isNotificationTriggersSupported) {
+        // Detect if it is Chrome/Android/Windows to guide them to chrome://flags
+        const userAgent = navigator.userAgent.toLowerCase();
+        const isChrome = userAgent.includes('chrome') || userAgent.includes('crios');
+        const isAndroid = userAgent.includes('android');
+        const isWindows = userAgent.includes('windows');
+        
+        if (isAndroid || isChrome || isWindows) {
+            container.innerHTML = `
+                <div id="notifTriggerBanner" style="margin-bottom: 20px; padding: 16px; border-radius: 20px; background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.2); text-align: right; display: flex; flex-direction: column; gap: 12px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);">
+                    <div style="display: flex; gap: 12px; align-items: flex-start;">
+                       <span style="font-size: 1.6rem; margin-top: 2px;">💡</span>
+                       <div style="flex: 1;">
+                           <strong style="color: #fbbf24; display: block; font-size: 0.95rem; margin-bottom: 6px; font-weight: 800;">تشغيل التنبيهات بدون إنترنت والتطبيق مغلق</strong>
+                           <span style="color: var(--text-muted); font-size: 0.8rem; line-height: 1.5; display: block;">الآن ستصلك التنبيهات فقط والإنترنت متاح. لتلقي تنبيهات البصمة بدون إنترنت والتطبيق مقفول، يرجى تفعيل ميزة التنبيهات الذكية بالمتصفح.</span>
+                       </div>
+                    </div>
+                    <button class="btn-primary" style="height: 38px !important; font-size: 0.85rem !important; background: linear-gradient(135deg, #f59e0b, #d97706) !important; width: auto !important; margin: 0 0 0 auto; padding: 0 20px; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3) !important; border-radius: 12px; border: none; font-weight: bold; cursor: pointer;" onclick="openNotificationGuideModal()">تشغيل التنبيهات بدون إنترنت ⏰</button>
+                </div>
+            `;
+        }
+    }
+}
+
+// Request permission from user click (compliant with modern security policies including iOS Safari)
+async function requestNotificationPermission() {
+    try {
+        const permission = await Notification.requestPermission();
+        console.log('[Notifications] Permission requested, status:', permission);
+        
+        // Refresh banners
+        checkBrowserNotificationCapabilities();
+        
+        // If granted, inform service worker to schedule triggers immediately
+        if (permission === 'granted' && 'serviceWorker' in navigator) {
+            navigator.serviceWorker.ready.then(registration => {
+                if (registration.active) {
+                    registration.active.postMessage({ action: 'schedule_reminders' });
+                }
+            });
+        }
+    } catch (e) {
+        console.error('[Notifications] Error requesting notification permission:', e);
+    }
+}
+
+// Modal control functions
+function openNotificationGuideModal() {
+    const modal = document.getElementById('notificationGuideModal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.style.display = 'flex';
+    }
+}
+
+function closeNotificationGuideModal() {
+    const modal = document.getElementById('notificationGuideModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.style.display = 'none';
+    }
 }
 
 async function fetchNotifications() {
