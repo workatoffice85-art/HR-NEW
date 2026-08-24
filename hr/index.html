@@ -436,6 +436,8 @@
                             onclick="sendEmailDashboard()">📧 ملخص البريد</button>
                         <button class="btn-primary" style="width:auto; padding:8px 15px; background:#217346;"
                             onclick="exportAttendanceToExcel()">📥 Excel</button>
+                        <button class="btn-primary" style="width:auto; background:#10b981;"
+                            onclick="openManualAttendanceModal()">➕ تسجيل حضور يدوي</button>
                     </div>
                 </div>
                 <div class="table-container">
@@ -1115,6 +1117,44 @@
                 <button class="btn-primary" onclick="saveSite()">حفظ الموقع</button>
                 <button class="btn-danger" style="background:transparent; border:1px solid var(--danger);"
                     onclick="closeSiteModal()">إلغاء</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Manual Attendance Modal -->
+    <div id="manualAttendanceModal" class="modal hidden">
+        <div class="modal-content" style="max-width:500px;">
+            <h3 style="margin-bottom:15px; color:var(--text-main);">➕ تسجيل حضور يدوي</h3>
+            <div class="input-group">
+                <label>اختيار الموظف *</label>
+                <select id="manualEmpId" required>
+                    <option value="">-- اختر الموظف --</option>
+                </select>
+            </div>
+            <div class="input-group">
+                <label>اختيار الموقع *</label>
+                <select id="manualSiteId">
+                    <option value="">-- اختر الموقع --</option>
+                </select>
+            </div>
+            <div class="input-group">
+                <label>التاريخ *</label>
+                <input type="date" id="manualDate" required>
+            </div>
+            <div style="display:flex; gap:10px;">
+                <div class="input-group" style="flex:1;">
+                    <label>وقت الحضور *</label>
+                    <input type="time" id="manualCheckIn" required>
+                </div>
+                <div class="input-group" style="flex:1;">
+                    <label>وقت الانصراف (اختياري)</label>
+                    <input type="time" id="manualCheckOut">
+                </div>
+            </div>
+            <div style="display:flex; gap:10px; margin-top:20px;">
+                <button class="btn-primary" onclick="submitManualAttendance()">حفظ السجل</button>
+                <button class="btn-danger" style="background:transparent; border:1px solid var(--danger);"
+                    onclick="closeManualAttendanceModal()">إلغاء</button>
             </div>
         </div>
     </div>

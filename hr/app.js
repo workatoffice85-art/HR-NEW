@@ -2604,6 +2604,104 @@ function closeSiteModal() {
     currentSiteAllowances = [];
 }
 
+async function openManualAttendanceModal() {
+    if (!allEmployees.length) {
+        showLoader();
+        await fetchEmployees();
+        hideLoader();
+    }
+    if (!allSites.length) {
+        showLoader();
+        await fetchSites();
+        hideLoader();
+    }
+
+    const empSelect = document.getElementById('manualEmpId');
+    if (empSelect) {
+        empSelect.innerHTML = '<option value="">-- اختر الموظف --</option>';
+        allEmployees.forEach(emp => {
+            const opt = document.createElement('option');
+            opt.value = emp.id;
+            opt.textContent = `${emp.name} (${emp.id})`;
+            empSelect.appendChild(opt);
+        });
+    }
+
+    const siteSelect = document.getElementById('manualSiteId');
+    if (siteSelect) {
+        siteSelect.innerHTML = '<option value="">-- اختر الموقع --</option>';
+        allSites.forEach(site => {
+            const opt = document.createElement('option');
+            opt.value = site.id;
+            opt.textContent = site.name;
+            siteSelect.appendChild(opt);
+        });
+    }
+
+    const filterDate = document.getElementById('attendanceDateFilter')?.value;
+    const todayStr = new Date().toISOString().split('T')[0];
+    const dateInput = document.getElementById('manualDate');
+    if (dateInput) dateInput.value = filterDate || todayStr;
+
+    const checkInInput = document.getElementById('manualCheckIn');
+    if (checkInInput) checkInInput.value = '09:00';
+
+    const checkOutInput = document.getElementById('manualCheckOut');
+    if (checkOutInput) checkOutInput.value = '';
+
+    const modal = document.getElementById('manualAttendanceModal');
+    if (modal) modal.classList.remove('hidden');
+}
+
+function closeManualAttendanceModal() {
+    const modal = document.getElementById('manualAttendanceModal');
+    if (modal) modal.classList.add('hidden');
+}
+
+async function submitManualAttendance() {
+    const employeeId = document.getElementById('manualEmpId')?.value;
+    const siteId = document.getElementById('manualSiteId')?.value;
+    const date = document.getElementById('manualDate')?.value;
+    const checkInTime = document.getElementById('manualCheckIn')?.value;
+    const checkOutTime = document.getElementById('manualCheckOut')?.value;
+
+    if (!employeeId || !date || !checkInTime) {
+        alert('يرجى ملء كافة الحقول المطلوبة: الموظف والتاريخ ووقت الحضور');
+        return;
+    }
+
+    showLoader();
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'adminAddAttendance',
+                employeeId,
+                siteId,
+                date,
+                checkInTime,
+                checkOutTime
+            })
+        });
+
+        const result = await res.json();
+        hideLoader();
+
+        if (result.success) {
+            alert(result.message || 'تم تسجيل الحضور اليدوي بنجاح');
+            closeManualAttendanceModal();
+            refreshData(true);
+        } else {
+            alert(result.message || 'فشل تسجيل الحضور اليدوي');
+        }
+    } catch (err) {
+        hideLoader();
+        console.error("submitManualAttendance error:", err);
+        alert('حدث خطأ في الاتصال بالخادم');
+    }
+}
+
 function addSiteOpenModal() {
     document.getElementById('editSiteId').value = '';
     document.getElementById('siteModalTitle').innerText = 'إضافة موقع عمل جديد';
