@@ -2641,6 +2641,12 @@ async function openManualAttendanceModal() {
         hideLoader();
     }
 
+    const attIdInput = document.getElementById('manualAttendanceId');
+    if (attIdInput) attIdInput.value = '';
+
+    const titleEl = document.getElementById('manualAttendanceModalTitle');
+    if (titleEl) titleEl.innerText = '➕ تسجيل حضور يدوي';
+
     const empSelect = document.getElementById('manualEmpId');
     if (empSelect) {
         empSelect.innerHTML = '<option value="">-- اختر الموظف --</option>';
@@ -2678,12 +2684,86 @@ async function openManualAttendanceModal() {
     if (modal) modal.classList.remove('hidden');
 }
 
+async function editAttendanceRecord(attendanceId) {
+    let record = allAttendanceData.find(r => String(r.id) === String(attendanceId));
+    if (!record) {
+        showLoader();
+        await fetchAttendance(true);
+        hideLoader();
+        record = allAttendanceData.find(r => String(r.id) === String(attendanceId));
+    }
+    if (!record) {
+        alert("لم يتم العثور على سجل الحضور");
+        return;
+    }
+
+    if (!allEmployees.length) {
+        showLoader();
+        await fetchEmployees();
+        hideLoader();
+    }
+    if (!allSites.length) {
+        showLoader();
+        await fetchSites();
+        hideLoader();
+    }
+
+    const attIdInput = document.getElementById('manualAttendanceId');
+    if (attIdInput) attIdInput.value = record.id;
+
+    const titleEl = document.getElementById('manualAttendanceModalTitle');
+    if (titleEl) titleEl.innerText = '✏️ تعديل سجل الحضور والانصراف والموقع';
+
+    const empSelect = document.getElementById('manualEmpId');
+    if (empSelect) {
+        empSelect.innerHTML = '<option value="">-- اختر الموظف --</option>';
+        allEmployees.forEach(emp => {
+            const opt = document.createElement('option');
+            opt.value = emp.id;
+            opt.textContent = `${emp.name} (${emp.id})`;
+            if (String(emp.id) === String(record.employeeId)) opt.selected = true;
+            empSelect.appendChild(opt);
+        });
+    }
+
+    const siteSelect = document.getElementById('manualSiteId');
+    if (siteSelect) {
+        siteSelect.innerHTML = '<option value="">-- اختر الموقع --</option>';
+        allSites.forEach(site => {
+            const opt = document.createElement('option');
+            opt.value = site.id;
+            opt.textContent = site.name;
+            if (String(site.id) === String(record.siteId)) opt.selected = true;
+            siteSelect.appendChild(opt);
+        });
+    }
+
+    const dateInput = document.getElementById('manualDate');
+    if (dateInput && record.checkIn) {
+        dateInput.value = record.checkIn.substring(0, 10);
+    }
+
+    const checkInInput = document.getElementById('manualCheckIn');
+    if (checkInInput && record.checkIn) {
+        checkInInput.value = record.checkIn.length >= 16 ? record.checkIn.substring(11, 16) : '09:00';
+    }
+
+    const checkOutInput = document.getElementById('manualCheckOut');
+    if (checkOutInput) {
+        checkOutInput.value = (record.checkOut && record.checkOut.length >= 16) ? record.checkOut.substring(11, 16) : '';
+    }
+
+    const modal = document.getElementById('manualAttendanceModal');
+    if (modal) modal.classList.remove('hidden');
+}
+
 function closeManualAttendanceModal() {
     const modal = document.getElementById('manualAttendanceModal');
     if (modal) modal.classList.add('hidden');
 }
 
 async function submitManualAttendance() {
+    const attendanceId = document.getElementById('manualAttendanceId')?.value;
     const employeeId = document.getElementById('manualEmpId')?.value;
     const siteId = document.getElementById('manualSiteId')?.value;
     const date = document.getElementById('manualDate')?.value;
@@ -2695,13 +2775,16 @@ async function submitManualAttendance() {
         return;
     }
 
+    const action = attendanceId ? 'adminUpdateAttendance' : 'adminAddAttendance';
+
     showLoader();
     try {
         const res = await fetch(API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                action: 'adminAddAttendance',
+                action,
+                attendanceId,
                 employeeId,
                 siteId,
                 date,
@@ -2714,11 +2797,11 @@ async function submitManualAttendance() {
         hideLoader();
 
         if (result.success) {
-            alert(result.message || 'تم تسجيل الحضور اليدوي بنجاح');
+            alert(result.message || 'تم حفظ سجل الحضور بنجاح');
             closeManualAttendanceModal();
             refreshData(true);
         } else {
-            alert(result.message || 'فشل تسجيل الحضور اليدوي');
+            alert(result.message || 'فشل حفظ سجل الحضور');
         }
     } catch (err) {
         hideLoader();

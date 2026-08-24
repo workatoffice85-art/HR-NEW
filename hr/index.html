@@ -1125,7 +1125,8 @@
     <!-- Manual Attendance Modal -->
     <div id="manualAttendanceModal" class="modal hidden">
         <div class="modal-content" style="max-width:500px;">
-            <h3 style="margin-bottom:15px; color:var(--text-main);">➕ تسجيل حضور يدوي</h3>
+            <input type="hidden" id="manualAttendanceId" value="">
+            <h3 id="manualAttendanceModalTitle" style="margin-bottom:15px; color:var(--text-main);">➕ تسجيل حضور يدوي</h3>
             <div class="input-group">
                 <label>اختيار الموظف *</label>
                 <select id="manualEmpId" required>
@@ -1169,7 +1170,7 @@
             });
         }
     </script>
-    <script src="app.js?v=1.7"></script>
+    <script src="app.js?v=1.8"></script>
 </body>
 
 </html>

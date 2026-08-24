@@ -2821,6 +2821,114 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, message: "تم تسجيل الحضور اليدوي بنجاح" });
         }
 
+        if (action === "adminUpdateAttendance") {
+            const { attendanceId, employeeId, siteId, date, checkInTime, checkOutTime } = data;
+            if (!attendanceId || !date || !checkInTime) {
+                return res.status(200).json({ success: false, message: "معرف السجل والتاريخ ووقت الحضور مطلوبة" });
+            }
+
+            // 1. Fetch existing attendance record
+            const { data: existingAtt, error: existErr } = await supabase.from('attendance')
+                .select('*')
+                .eq('id', attendanceId)
+                .maybeSingle();
+
+            if (existErr || !existingAtt) {
+                return res.status(200).json({ success: false, message: "سجل الحضور غير موجود" });
+            }
+
+            const targetEmployeeId = employeeId || existingAtt.employeeId;
+
+            // 2. Fetch Employee details if changed
+            let employeeName = existingAtt.employeeName;
+            if (targetEmployeeId !== existingAtt.employeeId) {
+                const { data: emp } = await supabase.from('employees').select('*').eq('id', targetEmployeeId).maybeSingle();
+                if (emp) employeeName = emp.name;
+            }
+
+            // 3. Fetch Site details
+            let siteName = existingAtt.siteName;
+            let transportPrice = existingAtt.transportPrice;
+            if (siteId && siteId !== existingAtt.siteId) {
+                const { data: site } = await supabase.from('sites').select('*').eq('id', siteId).maybeSingle();
+                if (site) {
+                    siteName = site.name;
+                    try {
+                        transportPrice = await fetchResolvedTransportPrice(targetEmployeeId, site.id, site.transportPrice, false);
+                    } catch (e) {
+                        transportPrice = parseFloat(site.transportPrice) || 0;
+                    }
+                }
+            } else if (!siteId) {
+                siteName = "موقع غير محدد";
+                transportPrice = 0;
+            }
+
+            // 4. Format ISO timestamps
+            const checkInISO = new Date(`${date}T${checkInTime}:00`).toISOString();
+            let checkOutISO = null;
+            let totalHours = 0;
+
+            if (checkOutTime) {
+                checkOutISO = new Date(`${date}T${checkOutTime}:00`).toISOString();
+                const diffMs = new Date(checkOutISO) - new Date(checkInISO);
+                if (diffMs > 0) {
+                    totalHours = parseFloat((diffMs / 36e5).toFixed(2));
+                }
+            }
+
+            // 5. Calculate status
+            const { data: setRows } = await supabase.from('settings').select('*').in('key', ['workStartTime', 'weekendDays']);
+            let workStart = "09:00";
+            let weekendDays = [5, 6];
+            if (setRows && setRows.length > 0) {
+                const workStartRow = setRows.find(r => r.key === 'workStartTime');
+                if (workStartRow) workStart = workStartRow.value;
+                const weekendRow = setRows.find(r => r.key === 'weekendDays');
+                if (weekendRow && weekendRow.value) {
+                    weekendDays = weekendRow.value.split(',').map(d => parseInt(d.trim())).filter(d => !isNaN(d));
+                }
+            }
+
+            const checkInDateObj = new Date(checkInISO);
+            const dayOfWeek = checkInDateObj.getDay();
+            const { data: holidayData } = await supabase.from('official_holidays').select('*').eq('holidayDate', date).maybeSingle();
+            const isOfficialHoliday = holidayData !== null;
+
+            let status = "present";
+            if (isOfficialHoliday || weekendDays.includes(dayOfWeek)) {
+                status = "overtime";
+            } else if (checkInTime > workStart) {
+                status = "late";
+            }
+
+            const updatePayload = {
+                employeeId: targetEmployeeId,
+                employeeName: employeeName,
+                siteId: siteId || null,
+                siteName: siteName,
+                checkIn: checkInISO,
+                checkOut: checkOutISO,
+                status: status,
+                totalHours: totalHours,
+                transportPrice: transportPrice
+            };
+
+            const { error: updErr } = await supabase.from('attendance')
+                .update(updatePayload)
+                .eq('id', attendanceId);
+
+            if (updErr) throw updErr;
+
+            try {
+                syncToGoogleSheet({ action: 'updateAttendance', attendanceId, ...updatePayload });
+            } catch (e) {
+                console.error("Sheet sync error:", e);
+            }
+
+            return res.status(200).json({ success: true, message: "تم تعديل سجل الحضور بنجاح" });
+        }
+
         // --- EMPLOYEE MGMT ---
         if (action === "getEmployees") {
             const cacheKey = 'employees';
