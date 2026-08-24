@@ -481,7 +481,7 @@ function getLocalDateKey(date) {
     return `${year}-${month}-${day}`;
 }
 
-function canUserEdit() {
+function canEditAttendance() {
     if (!hrSession) return true;
     const role = String(hrSession.role || '').toLowerCase();
     if (role === 'hr_viewer' || role === 'viewer' || role === 'readonly') {
@@ -490,8 +490,22 @@ function canUserEdit() {
     return true;
 }
 
+function canManageEmployees() {
+    if (!hrSession) return true;
+    const role = String(hrSession.role || '').toLowerCase();
+    if (role === 'hr_viewer' || role === 'viewer' || role === 'readonly') {
+        return false;
+    }
+    return true;
+}
+
+function canManageSitesAndRequests() {
+    // Both full HR admins and hr_viewer can manage sites and approve/reject all requests
+    return true;
+}
+
 function renderAttendanceTable(data) {
-    const canEdit = canUserEdit();
+    const canEdit = canEditAttendance();
     const btnAddManual = document.getElementById('btnAddManualAttendance');
     if (btnAddManual) btnAddManual.style.display = canEdit ? 'inline-block' : 'none';
 
@@ -788,9 +802,9 @@ function populateEmployeeDetailEmployees() {
     const select = document.getElementById('employeeDetailEmployee');
     if (!select) return;
 
-    const canEdit = canUserEdit();
+    const canManageEmp = canManageEmployees();
     const currentValue = select.value;
-    const baseList = canEdit ? allEmployees : allEmployees.filter(e => e.role !== 'hr');
+    const baseList = canManageEmp ? allEmployees : allEmployees.filter(e => e.role !== 'hr');
     const sortedEmployees = [...baseList].sort((a, b) =>
         String(a.name || '').localeCompare(String(b.name || ''), 'ar')
     );
@@ -2340,18 +2354,18 @@ async function fetchEmployees(force = false) {
 }
 
 function renderEmployeesTable(data) {
-    const canEdit = canUserEdit();
+    const canManageEmp = canManageEmployees();
     const btnAddEmp = document.getElementById('btnAddEmployee');
-    if (btnAddEmp) btnAddEmp.style.display = canEdit ? 'inline-block' : 'none';
+    if (btnAddEmp) btnAddEmp.style.display = canManageEmp ? 'inline-block' : 'none';
 
     const thEmpActions = document.getElementById('thEmployeeActions');
-    if (thEmpActions) thEmpActions.style.display = canEdit ? 'table-cell' : 'none';
+    if (thEmpActions) thEmpActions.style.display = canManageEmp ? 'table-cell' : 'none';
 
     const tbody = document.getElementById('employeesTableBody');
     tbody.innerHTML = '';
 
-    // Hide full HR admins (role === 'hr') from hr_viewer (Read-only accounts)
-    const filteredData = canEdit ? data : data.filter(record => record.role !== 'hr');
+    // Hide full HR admins (role === 'hr') from hr_viewer accounts
+    const filteredData = canManageEmp ? data : data.filter(record => record.role !== 'hr');
 
     filteredData.forEach(record => {
         let roleText = 'موظف (Employee)';
@@ -2366,7 +2380,7 @@ function renderEmployeesTable(data) {
             <td data-label="المرتب">${record.salary ? parseFloat(record.salary).toFixed(0) + ' ج.م' : '-'}</td>
             <td data-label="الصلاحية">${roleText}</td>
             <td data-label="البصمة">${record.faceDescriptor ? '✅ مسجل' : '❌ لا يوجد'}</td>
-            ${canEdit ? `
+            ${canManageEmp ? `
             <td data-label="الإجراءات" style="display:flex; gap:8px; justify-content:center; padding:10px;">
                 <button class="btn-primary" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="editEmployee('${record.id}')">تعديل ✏️</button>
                 <button class="btn-danger" style="padding:5px 12px; font-size:0.85rem; width:auto; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" onclick="deleteEntity('deleteEmployee', '${record.id}', '${record.name}')">حذف 🗑️</button>
@@ -2394,12 +2408,12 @@ async function fetchSites(force = false) {
 }
 
 function renderSitesTable(data) {
-    const canEdit = canUserEdit();
+    const canManageSites = canManageSitesAndRequests();
     const btnAddSite = document.getElementById('btnAddSite');
-    if (btnAddSite) btnAddSite.style.display = canEdit ? 'inline-block' : 'none';
+    if (btnAddSite) btnAddSite.style.display = canManageSites ? 'inline-block' : 'none';
 
     const thSiteActions = document.getElementById('thSiteActions');
-    if (thSiteActions) thSiteActions.style.display = canEdit ? 'table-cell' : 'none';
+    if (thSiteActions) thSiteActions.style.display = canManageSites ? 'table-cell' : 'none';
 
     const tbody = document.getElementById('sitesTableBody');
     tbody.innerHTML = '';
@@ -2421,7 +2435,7 @@ function renderSitesTable(data) {
             <td data-label="خط الطول">${record.longitude}</td>
             <td data-label="النطاق">${record.radius} متر</td>
             <td data-label="رابط الموقع">${record.mapLink ? `<a href="${record.mapLink}" target="_blank" style="color:var(--primary); text-decoration:underline;">فتح الرابط 📍</a>` : '-'}</td>
-            ${canEdit ? `
+            ${canManageSites ? `
             <td data-label="الإجراءات" style="display:flex; gap:8px; justify-content:center; padding:10px;">
                 ${actions}
             </td>` : ''}
@@ -2532,11 +2546,11 @@ async function openEmployeeModal(mode = 'add', emp = null) {
         document.getElementById('advancedEmpOptions').classList.add('hidden');
     }
 
-    const canEdit = canUserEdit();
+    const canManageEmp = canManageEmployees();
     const optHr = document.querySelector('#empRole option[value="hr"]');
     if (optHr) {
-        optHr.style.display = canEdit ? 'block' : 'none';
-        optHr.disabled = !canEdit;
+        optHr.style.display = canManageEmp ? 'block' : 'none';
+        optHr.disabled = !canManageEmp;
     }
 
     // Render Sites List
