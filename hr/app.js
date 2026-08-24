@@ -889,6 +889,10 @@ async function rollbackSingleAllowance(attendanceId) {
 }
 
 async function adminCheckout(attendanceId, employeeName, checkInISO) {
+    if (!canEditAttendance()) {
+        alert("عذراً، حسابك لا يملك صلاحية إدخال أو تعديل انصراف الموظف");
+        return;
+    }
     let defaultStr = '';
     if (checkInISO) {
         const checkInDate = new Date(checkInISO);
@@ -1382,8 +1386,8 @@ async function generateEmployeeDetailedReport() {
                 // 2. Extra actions row (Checkout / Penalty)
                 let extraActions = [];
                 
-                // Checkout button (only if not checked out)
-                if (!record.checkOut || record.status === 'no_checkout') {
+                // Checkout button (only if not checked out and user can edit attendance)
+                if ((!record.checkOut || record.status === 'no_checkout') && canEditAttendance()) {
                     extraActions.push(`<button class="btn-primary" style="padding: 4px 8px; font-size: 0.75rem; width: auto; background-color: #8b5cf6;" onclick="adminCheckout('${record.id}', '${record.employeeName}', '${record.checkIn}')" title="تسجيل انصراف للموظف">انصراف ⏱️</button>`);
                 }
 
