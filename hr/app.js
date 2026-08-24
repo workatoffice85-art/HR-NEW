@@ -579,11 +579,9 @@ function renderAttendanceTable(data) {
 
         const statusMeta = getStatusMeta(record.status, record.checkIn ? record.checkIn.slice(0, 10) : null);
 
-        let actionBtn = '';
+        let actionBtn = `<button class="btn-primary" style="padding: 4px 10px; font-size: 0.75rem; width: auto; background-color: #3b82f6; border-radius: 6px;" onclick="editAttendanceRecord('${record.id}')" title="تعديل تفاصيل السجل والموقع والوقت">تعديل ✏️</button>`;
         if (!record.checkOut || record.status === 'no_checkout') {
-            actionBtn = `<button class="btn-primary" style="padding: 4px 10px; font-size: 0.75rem; width: auto; background-color: #8b5cf6; border-radius: 6px;" onclick="adminCheckout('${record.id}', '${record.employeeName}', '${record.checkIn}')" title="تسجيل انصراف للموظف">انصراف ⏱️</button>`;
-        } else {
-            actionBtn = `<button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; width: auto; background-color: transparent; border: 1px solid var(--card-border); color: var(--text-muted);" onclick="adminCheckout('${record.id}', '${record.employeeName}', '${record.checkIn}')" title="تعديل وقت الانصراف">تعديل ✏️</button>`;
+            actionBtn = `<button class="btn-primary" style="padding: 4px 10px; font-size: 0.75rem; width: auto; background-color: #8b5cf6; border-radius: 6px; margin-left: 5px;" onclick="adminCheckout('${record.id}', '${record.employeeName}', '${record.checkIn}')" title="تسجيل انصراف عاجل للموظف">انصراف ⏱️</button>` + actionBtn;
         }
 
         html.push(`
@@ -2738,19 +2736,31 @@ async function editAttendanceRecord(attendanceId) {
         });
     }
 
+    const parseTimeFromISO = (isoStr) => {
+        if (!isoStr) return '';
+        const match = String(isoStr).match(/T(\d{2}:\d{2})/);
+        if (match) return match[1];
+        try {
+            const d = new Date(isoStr);
+            const hr = String(d.getHours()).padStart(2, '0');
+            const min = String(d.getMinutes()).padStart(2, '0');
+            return `${hr}:${min}`;
+        } catch (e) { return ''; }
+    };
+
     const dateInput = document.getElementById('manualDate');
     if (dateInput && record.checkIn) {
-        dateInput.value = record.checkIn.substring(0, 10);
+        dateInput.value = String(record.checkIn).slice(0, 10);
     }
 
     const checkInInput = document.getElementById('manualCheckIn');
     if (checkInInput && record.checkIn) {
-        checkInInput.value = record.checkIn.length >= 16 ? record.checkIn.substring(11, 16) : '09:00';
+        checkInInput.value = parseTimeFromISO(record.checkIn) || '09:00';
     }
 
     const checkOutInput = document.getElementById('manualCheckOut');
     if (checkOutInput) {
-        checkOutInput.value = (record.checkOut && record.checkOut.length >= 16) ? record.checkOut.substring(11, 16) : '';
+        checkOutInput.value = parseTimeFromISO(record.checkOut);
     }
 
     const modal = document.getElementById('manualAttendanceModal');
