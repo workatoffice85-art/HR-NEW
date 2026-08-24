@@ -788,8 +788,10 @@ function populateEmployeeDetailEmployees() {
     const select = document.getElementById('employeeDetailEmployee');
     if (!select) return;
 
+    const canEdit = canUserEdit();
     const currentValue = select.value;
-    const sortedEmployees = [...allEmployees].sort((a, b) =>
+    const baseList = canEdit ? allEmployees : allEmployees.filter(e => e.role !== 'hr');
+    const sortedEmployees = [...baseList].sort((a, b) =>
         String(a.name || '').localeCompare(String(b.name || ''), 'ar')
     );
 
@@ -2347,7 +2349,11 @@ function renderEmployeesTable(data) {
 
     const tbody = document.getElementById('employeesTableBody');
     tbody.innerHTML = '';
-    data.forEach(record => {
+
+    // Hide full HR admins (role === 'hr') from hr_viewer (Read-only accounts)
+    const filteredData = canEdit ? data : data.filter(record => record.role !== 'hr');
+
+    filteredData.forEach(record => {
         let roleText = 'موظف (Employee)';
         if (record.role === 'hr') roleText = 'إدارة HR (كاملة)';
         else if (record.role === 'hr_viewer') roleText = 'مسؤول HR (عرض واطلاع)';
