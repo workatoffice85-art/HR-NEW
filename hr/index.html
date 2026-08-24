@@ -638,7 +638,7 @@
                     <div style="display:flex; gap:10px;">
                         <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="refreshData()">تحديث
                             مجمع 🔄</button>
-                        <button class="btn-primary" style="width:auto; background:var(--secondary);"
+                        <button id="btnAddEmployee" class="btn-primary" style="width:auto; background:var(--secondary);"
                             onclick="openEmployeeModal()">+ إضافة موظف</button>
                     </div>
                 </div>
@@ -652,7 +652,7 @@
                                 <th style="padding: 15px;">المرتب</th>
                                 <th style="padding: 15px;">الصلاحية</th>
                                 <th style="padding: 15px;">البصمة</th>
-                                <th style="padding: 15px;">الإجراءات</th>
+                                <th id="thEmployeeActions" style="padding: 15px;">الإجراءات</th>
                             </tr>
                         </thead>
                         <tbody id="employeesTableBody"></tbody>
@@ -667,7 +667,7 @@
                     <div style="display:flex; gap:10px;">
                         <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="refreshData()">تحديث
                             مجمع 🔄</button>
-                        <button class="btn-primary" style="width:auto; background:var(--secondary);"
+                        <button id="btnAddSite" class="btn-primary" style="width:auto; background:var(--secondary);"
                             onclick="addSiteOpenModal()">+ إضافة موقع (سجل بشيت جوجل)</button>
                     </div>
                 </div>
@@ -680,7 +680,7 @@
                                 <th style="padding: 15px;">خط الطول (Lng)</th>
                                 <th style="padding: 15px;">النطاق (متر)</th>
                                 <th style="padding: 15px;">رابط الموقع</th>
-                                <th style="padding: 15px;">الإجراءات</th>
+                                <th id="thSiteActions" style="padding: 15px;">الإجراءات</th>
                             </tr>
                         </thead>
                         <tbody id="sitesTableBody"></tbody>
@@ -1171,7 +1171,7 @@
             });
         }
     </script>
-    <script src="app.js?v=2.0"></script>
+    <script src="app.js?v=2.1"></script>
 </body>
 
 </html>

@@ -2338,21 +2338,33 @@ async function fetchEmployees(force = false) {
 }
 
 function renderEmployeesTable(data) {
+    const canEdit = canUserEdit();
+    const btnAddEmp = document.getElementById('btnAddEmployee');
+    if (btnAddEmp) btnAddEmp.style.display = canEdit ? 'inline-block' : 'none';
+
+    const thEmpActions = document.getElementById('thEmployeeActions');
+    if (thEmpActions) thEmpActions.style.display = canEdit ? 'table-cell' : 'none';
+
     const tbody = document.getElementById('employeesTableBody');
     tbody.innerHTML = '';
     data.forEach(record => {
+        let roleText = 'موظف (Employee)';
+        if (record.role === 'hr') roleText = 'إدارة HR (كاملة)';
+        else if (record.role === 'hr_viewer') roleText = 'مسؤول HR (عرض واطلاع)';
+
         const row = document.createElement('tr');
         row.innerHTML = `
             <td data-label="الاسم">${record.name}</td>
             <td data-label="البريد">${record.email}</td>
             <td data-label="الهاتف">${record.phone || '-'}</td>
             <td data-label="المرتب">${record.salary ? parseFloat(record.salary).toFixed(0) + ' ج.م' : '-'}</td>
-            <td data-label="الصلاحية">${record.role}</td>
+            <td data-label="الصلاحية">${roleText}</td>
             <td data-label="البصمة">${record.faceDescriptor ? '✅ مسجل' : '❌ لا يوجد'}</td>
+            ${canEdit ? `
             <td data-label="الإجراءات" style="display:flex; gap:8px; justify-content:center; padding:10px;">
                 <button class="btn-primary" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="editEmployee('${record.id}')">تعديل ✏️</button>
                 <button class="btn-danger" style="padding:5px 12px; font-size:0.85rem; width:auto; background:rgba(239,68,68,0.1); border:1px solid var(--danger); color:var(--danger);" onclick="deleteEntity('deleteEmployee', '${record.id}', '${record.name}')">حذف 🗑️</button>
-            </td>
+            </td>` : ''}
         `;
         tbody.appendChild(row);
     });
@@ -2376,6 +2388,13 @@ async function fetchSites(force = false) {
 }
 
 function renderSitesTable(data) {
+    const canEdit = canUserEdit();
+    const btnAddSite = document.getElementById('btnAddSite');
+    if (btnAddSite) btnAddSite.style.display = canEdit ? 'inline-block' : 'none';
+
+    const thSiteActions = document.getElementById('thSiteActions');
+    if (thSiteActions) thSiteActions.style.display = canEdit ? 'table-cell' : 'none';
+
     const tbody = document.getElementById('sitesTableBody');
     tbody.innerHTML = '';
     data.forEach(record => {
@@ -2396,9 +2415,10 @@ function renderSitesTable(data) {
             <td data-label="خط الطول">${record.longitude}</td>
             <td data-label="النطاق">${record.radius} متر</td>
             <td data-label="رابط الموقع">${record.mapLink ? `<a href="${record.mapLink}" target="_blank" style="color:var(--primary); text-decoration:underline;">فتح الرابط 📍</a>` : '-'}</td>
+            ${canEdit ? `
             <td data-label="الإجراءات" style="display:flex; gap:8px; justify-content:center; padding:10px;">
                 ${actions}
-            </td>
+            </td>` : ''}
         `;
         tbody.appendChild(row);
     });
@@ -2504,6 +2524,13 @@ async function openEmployeeModal(mode = 'add', emp = null) {
         document.getElementById('empTransportPrice').value = 0;
         document.getElementById('empSites').value = '';
         document.getElementById('advancedEmpOptions').classList.add('hidden');
+    }
+
+    const canEdit = canUserEdit();
+    const optHr = document.querySelector('#empRole option[value="hr"]');
+    if (optHr) {
+        optHr.style.display = canEdit ? 'block' : 'none';
+        optHr.disabled = !canEdit;
     }
 
     // Render Sites List
