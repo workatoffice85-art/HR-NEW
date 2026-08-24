@@ -539,6 +539,7 @@ function renderAttendanceTable(data) {
                     <td data-label="وقت الانصراف" dir="ltr">-</td>
                     <td data-label="بدل الانتقال">-</td>
                     <td data-label="الحالة"><span style="color:var(--danger)">غائب</span></td>
+                    <td data-label="الإجراءات">-</td>
                 </tr>
             `);
         });
@@ -554,6 +555,7 @@ function renderAttendanceTable(data) {
                     <td data-label="وقت الانصراف" dir="ltr">-</td>
                     <td data-label="بدل الانتقال">-</td>
                     <td data-label="الحالة"><span style="color:#3b82f6">إجازة معتمدة</span></td>
+                    <td data-label="الإجراءات">-</td>
                 </tr>
             `);
         });
@@ -577,6 +579,13 @@ function renderAttendanceTable(data) {
 
         const statusMeta = getStatusMeta(record.status, record.checkIn ? record.checkIn.slice(0, 10) : null);
 
+        let actionBtn = '';
+        if (!record.checkOut || record.status === 'no_checkout') {
+            actionBtn = `<button class="btn-primary" style="padding: 4px 10px; font-size: 0.75rem; width: auto; background-color: #8b5cf6; border-radius: 6px;" onclick="adminCheckout('${record.id}', '${record.employeeName}', '${record.checkIn}')" title="تسجيل انصراف للموظف">انصراف ⏱️</button>`;
+        } else {
+            actionBtn = `<button class="btn-primary" style="padding: 3px 8px; font-size: 0.75rem; width: auto; background-color: transparent; border: 1px solid var(--card-border); color: var(--text-muted);" onclick="adminCheckout('${record.id}', '${record.employeeName}', '${record.checkIn}')" title="تعديل وقت الانصراف">تعديل ✏️</button>`;
+        }
+
         html.push(`
             <tr>
                 <td data-label="الموظف">${record.employeeName}</td>
@@ -585,6 +594,7 @@ function renderAttendanceTable(data) {
                 <td data-label="وقت الانصراف" dir="ltr">${checkOutTime}</td>
                 <td data-label="بدل الانتقال">${getCurrentTransportPrice(record) || 0} ج.م</td>
                 <td data-label="الحالة"><span style="color:${statusMeta.color}">${statusMeta.text}</span></td>
+                <td data-label="الإجراءات">${actionBtn}</td>
             </tr>
         `);
     });
@@ -911,7 +921,12 @@ async function adminCheckout(attendanceId, employeeName, checkInISO) {
         if (result.success) {
             alert("تم تسجيل انصراف الموظف بنجاح");
             await fetchAttendance(true); // force reload
-            await generateEmployeeDetailedReport();
+            const empSel = document.getElementById('employeeDetailEmployee');
+            if (empSel && empSel.value) {
+                try {
+                    await generateEmployeeDetailedReport();
+                } catch (e) { console.error(e); }
+            }
         } else {
             alert("فشل تسجيل الانصراف: " + result.message);
         }
