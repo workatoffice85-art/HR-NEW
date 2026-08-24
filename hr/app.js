@@ -2604,6 +2604,16 @@ function closeSiteModal() {
     currentSiteAllowances = [];
 }
 
+function showLoader() {
+    const l = document.getElementById('loader');
+    if (l) l.classList.remove('hidden');
+}
+
+function hideLoader() {
+    const l = document.getElementById('loader');
+    if (l) l.classList.add('hidden');
+}
+
 async function openManualAttendanceModal() {
     if (!allEmployees.length) {
         showLoader();
