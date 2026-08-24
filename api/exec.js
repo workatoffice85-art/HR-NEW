@@ -1264,6 +1264,9 @@ export default async function handler(req, res) {
                 }
             }
 
+            const user = validUser;
+            if (!user) throw new Error("كلمة المرور غير صحيحة");
+
             if (role) {
                 const userRole = normalizeString(user.role).toLowerCase();
                 const reqRole = role.toLowerCase();
