@@ -481,7 +481,23 @@ function getLocalDateKey(date) {
     return `${year}-${month}-${day}`;
 }
 
+function canUserEdit() {
+    if (!hrSession) return true;
+    const role = String(hrSession.role || '').toLowerCase();
+    if (role === 'hr_viewer' || role === 'viewer' || role === 'readonly') {
+        return false;
+    }
+    return true;
+}
+
 function renderAttendanceTable(data) {
+    const canEdit = canUserEdit();
+    const btnAddManual = document.getElementById('btnAddManualAttendance');
+    if (btnAddManual) btnAddManual.style.display = canEdit ? 'inline-block' : 'none';
+
+    const thActions = document.getElementById('thAttendanceActions');
+    if (thActions) thActions.style.display = canEdit ? 'table-cell' : 'none';
+
     const filterDate = document.getElementById('attendanceDateFilter').value;
     const tbody = document.getElementById('attendanceTableBody');
     tbody.innerHTML = '';
@@ -496,7 +512,7 @@ function renderAttendanceTable(data) {
     }
 
     // Calculate attendance stats (excluding HR employees)
-    const employeeOnlyList = allEmployees.filter(e => e.role !== 'hr');
+    const employeeOnlyList = allEmployees.filter(e => !String(e.role).startsWith('hr'));
     const employeeOnlyIds = new Set(employeeOnlyList.map(e => String(e.id)));
 
     const filterDateStr = filterDate || new Date().toISOString().split('T')[0];
@@ -539,13 +555,12 @@ function renderAttendanceTable(data) {
                     <td data-label="وقت الانصراف" dir="ltr">-</td>
                     <td data-label="بدل الانتقال">-</td>
                     <td data-label="الحالة"><span style="color:var(--danger)">غائب</span></td>
-                    <td data-label="الإجراءات">-</td>
+                    ${canEdit ? '<td data-label="الإجراءات">-</td>' : ''}
                 </tr>
             `);
         });
 
         // Also show employees on approved leave as a separate group or just informational?
-        // Let's add them with a different style to be clear
         employeeOnlyList.filter(emp => approvedLeaveEmployeeIds.has(String(emp.id)) && !presentEmployeeIds.has(String(emp.id))).forEach(emp => {
             html.push(`
                 <tr style="background:rgba(59,130,246,0.05);">
@@ -555,7 +570,7 @@ function renderAttendanceTable(data) {
                     <td data-label="وقت الانصراف" dir="ltr">-</td>
                     <td data-label="بدل الانتقال">-</td>
                     <td data-label="الحالة"><span style="color:#3b82f6">إجازة معتمدة</span></td>
-                    <td data-label="الإجراءات">-</td>
+                    ${canEdit ? '<td data-label="الإجراءات">-</td>' : ''}
                 </tr>
             `);
         });
@@ -592,7 +607,7 @@ function renderAttendanceTable(data) {
                 <td data-label="وقت الانصراف" dir="ltr">${checkOutTime}</td>
                 <td data-label="بدل الانتقال">${getCurrentTransportPrice(record) || 0} ج.م</td>
                 <td data-label="الحالة"><span style="color:${statusMeta.color}">${statusMeta.text}</span></td>
-                <td data-label="الإجراءات">${actionBtn}</td>
+                ${canEdit ? `<td data-label="الإجراءات">${actionBtn}</td>` : ''}
             </tr>
         `);
     });

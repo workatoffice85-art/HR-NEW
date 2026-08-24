@@ -436,7 +436,7 @@
                             onclick="sendEmailDashboard()">📧 ملخص البريد</button>
                         <button class="btn-primary" style="width:auto; padding:8px 15px; background:#217346;"
                             onclick="exportAttendanceToExcel()">📥 Excel</button>
-                        <button class="btn-primary" style="width:auto; background:#10b981;"
+                        <button id="btnAddManualAttendance" class="btn-primary" style="width:auto; background:#10b981;"
                             onclick="openManualAttendanceModal()">➕ تسجيل حضور يدوي</button>
                     </div>
                 </div>
@@ -450,7 +450,7 @@
                                 <th>وقت الانصراف</th>
                                 <th>بدل الانتقال</th>
                                 <th>الحالة</th>
-                                <th>الإجراءات</th>
+                                <th id="thAttendanceActions">الإجراءات</th>
                             </tr>
                         </thead>
                         <tbody id="attendanceTableBody"></tbody>
@@ -1020,6 +1020,7 @@
                     <select id="empRole">
                         <option value="employee">موظف (Employee)</option>
                         <option value="hr">إدارة (HR)</option>
+                        <option value="hr_viewer">مسؤول HR (عرض واطلاع فقط)</option>
                     </select>
                 </div>
                 <div class="input-group">
@@ -1170,7 +1171,7 @@
             });
         }
     </script>
-    <script src="app.js?v=1.9"></script>
+    <script src="app.js?v=2.0"></script>
 </body>
 
 </html>

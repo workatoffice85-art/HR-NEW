@@ -1264,10 +1264,13 @@ export default async function handler(req, res) {
                 }
             }
 
-            const user = validUser;
-            if (!user) throw new Error("كلمة المرور غير صحيحة");
-            if (role && normalizeString(user.role).toLowerCase() !== role) {
-                throw new Error("لا تملك صلاحية الدخول");
+            if (role) {
+                const userRole = normalizeString(user.role).toLowerCase();
+                const reqRole = role.toLowerCase();
+                const isHrRole = reqRole === 'hr' && userRole.startsWith('hr');
+                if (userRole !== reqRole && !isHrRole) {
+                    throw new Error("لا تملك صلاحية الدخول");
+                }
             }
             return res.status(200).json({
                 success: true,
