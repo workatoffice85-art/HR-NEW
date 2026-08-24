@@ -25,6 +25,34 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false }
 });
 
+/**
+ * Helper: Fetch all rows from a Supabase table using pagination (bypassing PostgREST 1,000 row default limit)
+ */
+async function fetchAllRows(table, select = '*', orderColumn = null, ascending = true) {
+    const READ_PAGE_SIZE = 1000;
+    const rows = [];
+    let from = 0;
+
+    while (true) {
+        const to = from + READ_PAGE_SIZE - 1;
+        let query = supabase.from(table).select(select).range(from, to);
+        if (orderColumn) {
+            query = query.order(orderColumn, { ascending });
+        }
+        const { data, error } = await query;
+        if (error) {
+            console.error(`Error in fetchAllRows for ${table}:`, error);
+            throw error;
+        }
+        if (!data || data.length === 0) break;
+        rows.push(...data);
+        if (data.length < READ_PAGE_SIZE) break;
+        from += READ_PAGE_SIZE;
+    }
+    return rows;
+}
+
+
 // --- Google Sheets Archive Caching Layer ---
 const googleSheetsCacheStore = new Map();
 const GOOGLE_SHEETS_CACHE_TTL = 5 * 60 * 1000; // 5 minutes cache
@@ -1702,29 +1730,30 @@ export default async function handler(req, res) {
 
         // --- DASHBOARD DATA (GET) ---
         if (action === "getDashboardData") {
-            const [empRes, siteRes, attRes, reqRes, setRes, allRes, leaveRes, allowRes] = await Promise.all([
-                supabase.from('employees').select('*'),
-                supabase.from('sites').select('*'),
-                supabase.from('attendance').select('*'),
-                supabase.from('siteRequests').select('*'),
-                supabase.from('settings').select('*'),
-                supabase.from('siteAllowances').select('*'),
-                supabase.from('leaveRequests').select('*'),
-                supabase.from('allowanceRequests').select('*')
+            const [employees, sites, attendance, siteRequests, settingsRows, siteAllowances, leaveRequests, allowanceRequests] = await Promise.all([
+                fetchAllRows('employees'),
+                fetchAllRows('sites'),
+                fetchAllRows('attendance'),
+                fetchAllRows('siteRequests'),
+                fetchAllRows('settings'),
+                fetchAllRows('siteAllowances'),
+                fetchAllRows('leaveRequests'),
+                fetchAllRows('allowanceRequests')
             ]);
             let settings = {};
-            if (setRes.data) {
-                setRes.data.forEach(s => settings[s.key] = s.value);
+            if (settingsRows) {
+                settingsRows.forEach(s => settings[s.key] = s.value);
             }
 
             // Map allowances to employees
-            const employees = (empRes.data || []).map(emp => ({
+            const mappedEmployees = (employees || []).map(emp => ({
                 ...emp,
                 assignedSites: emp.assignedSites ? String(emp.assignedSites).split(',').map(s => s.trim()).filter(Boolean) : [],
-                siteAllowances: (allRes.data || []).filter(a => String(a.employeeId) === String(emp.id))
+                siteAllowances: (siteAllowances || []).filter(a => String(a.employeeId) === String(emp.id))
             }));
 
             // --- HOTFIX: Correct today's attendance status if it's a holiday ---
+            let finalAttendance = attendance || [];
             try {
                 const todayStr = getCairoDateString(new Date());
                 const { data: holidayToday } = await supabase.from('official_holidays').select('*').eq('holidayDate', todayStr).maybeSingle();
@@ -1735,9 +1764,8 @@ export default async function handler(req, res) {
                         .in('status', ['present', 'late'])
                         .filter('checkIn', 'gte', todayStr + 'T00:00:00');
 
-                    // Refresh attendance data for the response if needed (optional since frontend will reload)
-                    const { data: refreshedAtt } = await supabase.from('attendance').select('*');
-                    if (refreshedAtt) attRes.data = refreshedAtt;
+                    // Refresh attendance data for the response
+                    finalAttendance = await fetchAllRows('attendance');
                 }
             } catch (hotfixErr) {
                 console.error("Hotfix failed:", hotfixErr);
@@ -1745,14 +1773,14 @@ export default async function handler(req, res) {
 
             return res.status(200).json({
                 success: true,
-                employees: employees,
-                sites: siteRes.data || [],
-                attendance: attRes.data || [],
-                siteRequests: reqRes.data || [],
+                employees: mappedEmployees,
+                sites: sites || [],
+                attendance: finalAttendance,
+                siteRequests: siteRequests || [],
                 settings: settings,
-                siteAllowances: allRes.data || [],
-                leaveRequests: leaveRes.data || [],
-                allowanceRequests: allowRes.data || []
+                siteAllowances: siteAllowances || [],
+                leaveRequests: leaveRequests || [],
+                allowanceRequests: allowanceRequests || []
             });
         }
 
@@ -1762,32 +1790,32 @@ export default async function handler(req, res) {
                 return res.status(200).json({ success: false, message: "إشعارات البريد الإلكتروني معطلة أو لم يتم إعداد بريد إلكتروني للمستقبلين." });
             }
 
-            // 1. Fetch data in parallel
-            // 1. Fetch data in parallel
-            const [empRes, siteRes, attRes, leaveRes, allowRes, siteReqRes, deviceReqRes, allAllowancesRes] = await Promise.all([
-                supabase.from('employees').select('id, name, role'),
-                supabase.from('sites').select('*').eq('isTemporary', false),
-                supabase.from('attendance').select('*'),
-                supabase.from('leaveRequests').select('*'), // Fetch all leave requests to filter today's approved vs pending in memory
-                supabase.from('allowanceRequests').select('*').eq('status', 'pending'),
-                supabase.from('siteRequests').select('*').eq('status', 'pending'),
-                supabase.from('device_change_requests').select('*').eq('status', 'pending'),
-                supabase.from('siteAllowances').select('*')
+            // 1. Fetch data in parallel with pagination
+            const [empRes, sites, attendance, leaveRequests, allowanceRequests, siteRequests, deviceReqRes, allAllowances] = await Promise.all([
+                fetchAllRows('employees', 'id, name, role'),
+                fetchAllRows('sites'),
+                fetchAllRows('attendance'),
+                fetchAllRows('leaveRequests'),
+                fetchAllRows('allowanceRequests'),
+                fetchAllRows('siteRequests'),
+                fetchAllRows('device_change_requests'),
+                fetchAllRows('siteAllowances')
             ]);
 
             const today = getCairoDateString(new Date());
-            const todayAtt = (attRes.data || []).filter(r => r.checkIn && r.checkIn.startsWith(today));
+            const todayAtt = (attendance || []).filter(r => r.checkIn && r.checkIn.startsWith(today));
             
             // Filter out admin and hr from active employee list
-            const activeEmployees = (empRes.data || []).filter(e => e.role !== 'admin' && e.role !== 'hr');
+            const activeEmployees = (empRes || []).filter(e => e.role !== 'admin' && e.role !== 'hr');
             const presentIds = new Set(todayAtt.map(r => String(r.employeeId)));
             const presentCount = presentIds.size;
             
-            const todayApprovedLeaves = (leaveRes.data || []).filter(r => r.status === 'approved' && r.leaveDate === today);
+            const todayApprovedLeaves = (leaveRequests || []).filter(r => r.status === 'approved' && r.leaveDate === today);
             const leaveEmpIds = new Set(todayApprovedLeaves.map(l => String(l.employeeId)));
             
             // Absent means: not present AND not on approved leave today
             const absentEmployeesList = activeEmployees.filter(e => !presentIds.has(String(e.id)) && !leaveEmpIds.has(String(e.id)));
+
             const absentCount = absentEmployeesList.length;
 
             const pendingLeaves = (leaveRes.data || []).filter(r => r.status === 'pending');
@@ -2171,10 +2199,14 @@ export default async function handler(req, res) {
         }
 
         if (action === "getAttendance") {
-            let query = supabase.from('attendance').select('*').order('checkIn', { ascending: true });
-            if (data.employeeId) query = query.eq('employeeId', data.employeeId);
-            const { data: sbAtt, error } = await query;
-            if (error) throw error;
+            let sbAtt;
+            if (data.employeeId) {
+                const { data: res, error } = await supabase.from('attendance').select('*').eq('employeeId', data.employeeId).order('checkIn', { ascending: true });
+                if (error) throw error;
+                sbAtt = res;
+            } else {
+                sbAtt = await fetchAllRows('attendance', '*', 'checkIn', true);
+            }
 
             let mergedAttendance = sbAtt || [];
 

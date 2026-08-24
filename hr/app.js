@@ -155,6 +155,7 @@ const HrCache = {
     clearAll: () => {
         try {
             localStorage.removeItem('hr_dashboard_data');
+            localStorage.removeItem('hr_dashboard_data_v2');
             localStorage.removeItem('hr_official_holidays');
         } catch (e) {
             console.error('Error clearing HrCache:', e);
@@ -307,7 +308,7 @@ async function initDashboard(forceRefresh = false) {
     if (isInitialDataLoaded && !forceRefresh) return;
 
     // Try loading from cache for instant rendering
-    const cachedData = HrCache.get('hr_dashboard_data');
+    const cachedData = HrCache.get('hr_dashboard_data_v2');
     const cachedHolidays = HrCache.get('hr_official_holidays');
 
     let hasCache = false;
@@ -364,7 +365,7 @@ async function initDashboard(forceRefresh = false) {
             }
 
             // Save to cache for future instant loading
-            HrCache.set('hr_dashboard_data', result);
+            HrCache.set('hr_dashboard_data_v2', result);
             HrCache.set('hr_official_holidays', allOfficialHolidays);
 
             isInitialDataLoaded = true;
