@@ -2276,6 +2276,189 @@ function doPost(e) {
         });
       }
 
+      // 5. Sync Attendance (Attendance Records with Smart Checkout Update)
+      if (Array.isArray(data.attendance) && data.attendance.length > 0) {
+        var attSheet = getOrCreateSheet("attendance",
+          ["employeeId","employeeName","siteId","siteName",
+           "checkIn","checkOut","latitude","longitude","status","totalHours","transportPrice"]
+        );
+        var attRows = attSheet.getDataRange().getValues();
+        var attSigMap = {};
+        for (var at = 1; at < attRows.length; at++) {
+          var eId = String(attRows[at][0] || "").trim();
+          var cIn = String(attRows[at][4] || "").trim();
+          if (eId && cIn) {
+            attSigMap[eId + "_" + cIn] = {
+              rowIdx: at + 1,
+              hasCheckOut: !!String(attRows[at][5] || "").trim()
+            };
+          }
+        }
+
+        data.attendance.forEach(function(rec) {
+          var eId = String(rec.employeeId || "").trim();
+          var cIn = String(rec.checkIn || "").trim();
+          if (!eId || !cIn) return;
+          var sig = eId + "_" + cIn;
+
+          if (attSigMap[sig]) {
+            if (!attSigMap[sig].hasCheckOut && rec.checkOut) {
+              var rIdx = attSigMap[sig].rowIdx;
+              attSheet.getRange(rIdx, 6).setValue(rec.checkOut || "");
+              attSheet.getRange(rIdx, 9).setValue(rec.status || "");
+              attSheet.getRange(rIdx, 10).setValue(rec.totalHours || "");
+              syncStats.attendanceUpdated = (syncStats.attendanceUpdated || 0) + 1;
+            }
+          } else {
+            attSheet.appendRow([
+              rec.employeeId || "",
+              rec.employeeName || "",
+              rec.siteId || "",
+              rec.siteName || "",
+              rec.checkIn || "",
+              rec.checkOut || "",
+              rec.latitude || "",
+              rec.longitude || "",
+              rec.status || "",
+              rec.totalHours || "",
+              rec.transportPrice || ""
+            ]);
+            attSigMap[sig] = { rowIdx: attSheet.getLastRow(), hasCheckOut: !!rec.checkOut };
+            syncStats.attendanceAdded = (syncStats.attendanceAdded || 0) + 1;
+          }
+        });
+      }
+
+      // 6. Sync Leave Requests
+      if (Array.isArray(data.leaveRequests) && data.leaveRequests.length > 0) {
+        var leaveSheet = getLeaveRequestsSheet();
+        var leaveRows = leaveSheet.getDataRange().getValues();
+        var leaveMap = {};
+        for (var l = 1; l < leaveRows.length; l++) {
+          var lId = String(leaveRows[l][0] || "").trim();
+          if (lId) leaveMap[lId] = l + 1;
+        }
+
+        data.leaveRequests.forEach(function(req) {
+          var reqId = String(req.id || "").trim();
+          if (!reqId) return;
+
+          if (leaveMap[reqId]) {
+            var lRow = leaveMap[reqId];
+            leaveSheet.getRange(lRow, 6).setValue(req.status || "");
+            leaveSheet.getRange(lRow, 8).setValue(req.approvedAt || "");
+            leaveSheet.getRange(lRow, 9).setValue(req.approvedBy || "");
+            leaveSheet.getRange(lRow, 10).setValue(req.rejectionReason || "");
+            syncStats.leaveRequestsUpdated = (syncStats.leaveRequestsUpdated || 0) + 1;
+          } else {
+            leaveSheet.appendRow([
+              reqId,
+              req.employeeId || "",
+              req.employeeName || "",
+              req.leaveDate || "",
+              req.reason || "",
+              req.status || "pending",
+              req.createdAt || "",
+              req.approvedAt || "",
+              req.approvedBy || "",
+              req.rejectionReason || ""
+            ]);
+            leaveMap[reqId] = leaveSheet.getLastRow();
+            syncStats.leaveRequestsAdded = (syncStats.leaveRequestsAdded || 0) + 1;
+          }
+        });
+      }
+
+      // 7. Sync Site Requests
+      if (Array.isArray(data.siteRequests) && data.siteRequests.length > 0) {
+        var siteReqSheet = getSiteRequestsSheet();
+        var sReqRows = siteReqSheet.getDataRange().getValues();
+        var sReqMap = {};
+        for (var sr = 1; sr < sReqRows.length; sr++) {
+          var srId = String(sReqRows[sr][0] || "").trim();
+          if (srId) sReqMap[srId] = sr + 1;
+        }
+
+        data.siteRequests.forEach(function(sr) {
+          var srId = String(sr.id || "").trim();
+          if (!srId) return;
+
+          if (sReqMap[srId]) {
+            var srRow = sReqMap[srId];
+            siteReqSheet.getRange(srRow, 8).setValue(sr.status || "");
+            siteReqSheet.getRange(srRow, 15).setValue(sr.approvedAt || "");
+            syncStats.siteRequestsUpdated = (syncStats.siteRequestsUpdated || 0) + 1;
+          } else {
+            siteReqSheet.appendRow([
+              srId,
+              sr.employeeId || "",
+              sr.employeeName || "",
+              sr.latitude || "",
+              sr.longitude || "",
+              sr.suggestedName || "",
+              sr.mapLink || "",
+              sr.status || "pending",
+              sr.timestamp || "",
+              toNumberSafe(sr.transportPrice, 0),
+              sr.note || "",
+              sr.receiptUrl || "",
+              sr.receiptName || "",
+              toNumberSafe(sr.tempRadius, 100),
+              sr.approvedAt || "",
+              toNumberSafe(sr.mapLatitude, null),
+              toNumberSafe(sr.mapLongitude, null),
+              sr.autoMeta || ""
+            ]);
+            sReqMap[srId] = siteReqSheet.getLastRow();
+            syncStats.siteRequestsAdded = (syncStats.siteRequestsAdded || 0) + 1;
+          }
+        });
+      }
+
+      // 8. Sync Allowance Requests
+      if (Array.isArray(data.allowanceRequests) && data.allowanceRequests.length > 0) {
+        var allReqSheet = getAllowanceRequestsSheet();
+        var allReqRows = allReqSheet.getDataRange().getValues();
+        var allReqMap = {};
+        for (var ar = 1; ar < allReqRows.length; ar++) {
+          var arId = String(allReqRows[ar][0] || "").trim();
+          if (arId) allReqMap[arId] = ar + 1;
+        }
+
+        data.allowanceRequests.forEach(function(ar) {
+          var arId = String(ar.id || "").trim();
+          if (!arId) return;
+
+          if (allReqMap[arId]) {
+            var arRow = allReqMap[arId];
+            allReqSheet.getRange(arRow, 10).setValue(ar.status || "");
+            allReqSheet.getRange(arRow, 12).setValue(ar.approvedAt || "");
+            allReqSheet.getRange(arRow, 13).setValue(ar.approvedBy || "");
+            allReqSheet.getRange(arRow, 14).setValue(ar.rejectionReason || "");
+            syncStats.allowancesRequestsUpdated = (syncStats.allowancesRequestsUpdated || 0) + 1;
+          } else {
+            allReqSheet.appendRow([
+              arId,
+              ar.employeeId || "",
+              ar.employeeName || "",
+              ar.attendanceId || "",
+              ar.siteId || "",
+              ar.siteName || "",
+              ar.requestDate || "",
+              toNumberSafe(ar.amount, 0),
+              ar.note || "",
+              ar.status || "pending",
+              ar.createdAt || "",
+              ar.approvedAt || "",
+              ar.approvedBy || "",
+              ar.rejectionReason || ""
+            ]);
+            allReqMap[arId] = allReqSheet.getLastRow();
+            syncStats.allowancesRequestsAdded = (syncStats.allowancesRequestsAdded || 0) + 1;
+          }
+        });
+      }
+
       return json({
         success: true,
         message: "تمت المزامنة الكاملة للنسخة الاحتياطية بنجاح",

@@ -4116,18 +4116,33 @@ export default async function handler(req, res) {
         }
 
         if (action === "triggerFullBackup") {
-            // 1. Fetch live tables from Supabase
-            const employees = await fetchAllRows('employees', '*');
-            const sites = await fetchAllRows('sites', '*');
-            const allowances = await fetchAllRows('siteAllowances', '*');
-            const { data: settingsRows } = await supabase.from('settings').select('*');
+            // 1. Fetch live tables from Supabase (All Employees, Sites, Attendance, Requests, Settings)
+            const [
+                employees,
+                sites,
+                attendance,
+                leaveRequests,
+                siteRequests,
+                allowanceRequests,
+                allowances,
+                { data: settingsRows }
+            ] = await Promise.all([
+                fetchAllRows('employees', '*'),
+                fetchAllRows('sites', '*'),
+                fetchAllRows('attendance', '*'),
+                fetchAllRows('leaveRequests', '*'),
+                fetchAllRows('siteRequests', '*'),
+                fetchAllRows('allowanceRequests', '*'),
+                fetchAllRows('siteAllowances', '*'),
+                supabase.from('settings').select('*')
+            ]);
 
             const settings = {};
             if (settingsRows) {
                 settingsRows.forEach(r => { settings[r.key] = r.value; });
             }
 
-            // 2. Prepare payload
+            // 2. Prepare comprehensive payload
             const backupPayload = {
                 action: 'syncFullBackup',
                 employees: employees.map(e => ({
@@ -4149,6 +4164,67 @@ export default async function handler(req, res) {
                     radius: s.radius,
                     transportPrice: s.transportPrice,
                     mapLink: s.mapLink
+                })),
+                attendance: attendance.map(a => ({
+                    employeeId: a.employeeId,
+                    employeeName: a.employeeName,
+                    siteId: a.siteId,
+                    siteName: a.siteName,
+                    checkIn: a.checkIn,
+                    checkOut: a.checkOut,
+                    latitude: a.latitude,
+                    longitude: a.longitude,
+                    status: a.status,
+                    totalHours: a.totalHours,
+                    transportPrice: a.transportPrice
+                })),
+                leaveRequests: leaveRequests.map(l => ({
+                    id: l.id,
+                    employeeId: l.employeeId,
+                    employeeName: l.employeeName,
+                    leaveDate: l.leaveDate,
+                    reason: l.reason,
+                    status: l.status,
+                    createdAt: l.createdAt,
+                    approvedAt: l.approvedAt,
+                    approvedBy: l.approvedBy,
+                    rejectionReason: l.rejectionReason
+                })),
+                siteRequests: siteRequests.map(sr => ({
+                    id: sr.id,
+                    employeeId: sr.employeeId,
+                    employeeName: sr.employeeName,
+                    latitude: sr.latitude,
+                    longitude: sr.longitude,
+                    suggestedName: sr.suggestedName,
+                    mapLink: sr.mapLink,
+                    status: sr.status,
+                    timestamp: sr.timestamp,
+                    transportPrice: sr.transportPrice,
+                    note: sr.note,
+                    receiptUrl: sr.receiptUrl,
+                    receiptName: sr.receiptName,
+                    tempRadius: sr.tempRadius,
+                    approvedAt: sr.approvedAt,
+                    mapLatitude: sr.mapLatitude,
+                    mapLongitude: sr.mapLongitude,
+                    autoMeta: sr.autoMeta
+                })),
+                allowanceRequests: allowanceRequests.map(ar => ({
+                    id: ar.id,
+                    employeeId: ar.employeeId,
+                    employeeName: ar.employeeName,
+                    attendanceId: ar.attendanceId,
+                    siteId: ar.siteId,
+                    siteName: ar.siteName,
+                    requestDate: ar.requestDate,
+                    amount: ar.amount,
+                    note: ar.note,
+                    status: ar.status,
+                    createdAt: ar.createdAt,
+                    approvedAt: ar.approvedAt,
+                    approvedBy: ar.approvedBy,
+                    rejectionReason: ar.rejectionReason
                 })),
                 settings: settings,
                 siteAllowances: allowances.map(a => ({
@@ -4180,11 +4256,13 @@ export default async function handler(req, res) {
                 console.warn("Batch syncFullBackup error:", err?.message || err);
             }
 
-            // Fallback: If batch sync is not supported or failed, sync missing employees individually
+            // Fallback: If batch sync is not supported or failed, sync missing employees and attendance individually
             if (!gsResponseData || !gsResponseData.success) {
                 syncMethod = "individual-sync";
-                let addedCount = 0;
+                let addedEmpCount = 0;
+                let addedAttCount = 0;
                 try {
+                    // 1. Sync missing employees
                     const sheetCheckRes = await fetch(`${GOOGLE_SCRIPT_URL}?action=getEmployees`);
                     const sheetJson = await sheetCheckRes.json();
                     const existingSheetEmpIds = new Set((sheetJson.data || []).map(r => String(r.id)));
@@ -4203,13 +4281,32 @@ export default async function handler(req, res) {
                                 faceDescriptor: emp.faceDescriptor,
                                 transportPrice: emp.transportPrice
                             });
-                            addedCount++;
+                            addedEmpCount++;
                         }
                     }
+
+                    // 2. Sync attendance via archiveAttendance (which is natively supported and deduplicated)
+                    if (backupPayload.attendance.length > 0) {
+                        const attRes = await fetch(GOOGLE_SCRIPT_URL, {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                action: 'archiveAttendance',
+                                records: backupPayload.attendance,
+                                archivedAt: new Date().toISOString()
+                            }),
+                            headers: { 'Content-Type': 'text/plain' }
+                        });
+                        if (attRes.ok) {
+                            const attJson = await attRes.json();
+                            addedAttCount = attJson.addedCount || 0;
+                        }
+                    }
+
                     gsResponseData = {
                         success: true,
-                        message: `تمت المزامنة بنجاح! تم فحص (${backupPayload.employees.length}) موظف، وإضافة (${addedCount}) موظف ناقص إلى Google Sheets.`,
-                        addedCount
+                        message: `تمت مزامنة النسخة الاحتياطية بنجاح! (فحص ${backupPayload.employees.length} موظف و ${backupPayload.attendance.length} سجل حضور).`,
+                        addedEmployees: addedEmpCount,
+                        addedAttendance: addedAttCount
                     };
                 } catch (fallbackErr) {
                     throw new Error(`تعذر الاتصال بخادم النسخ الاحتياطي: ${fallbackErr.message}`);
@@ -4218,11 +4315,14 @@ export default async function handler(req, res) {
 
             return res.status(200).json({
                 success: true,
-                message: gsResponseData?.message || "تمت مزامنة النسخة الاحتياطية بنجاح",
+                message: gsResponseData?.message || "تمت مزامنة كافة بيانات الموقع بنجاح",
                 syncMethod,
                 stats: {
                     employeesCount: employees.length,
                     sitesCount: sites.length,
+                    attendanceCount: attendance.length,
+                    leaveRequestsCount: leaveRequests.length,
+                    siteRequestsCount: siteRequests.length,
                     allowancesCount: allowances.length
                 },
                 details: gsResponseData

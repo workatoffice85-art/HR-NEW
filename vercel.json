@@ -2,6 +2,10 @@
   "version": 2,
   "rewrites": [
     {
+      "source": "/api/backup",
+      "destination": "/api/backup.js"
+    },
+    {
       "source": "/api/archive",
       "destination": "/api/archive.js"
     },
@@ -16,8 +20,8 @@
   ],
   "crons": [
     {
-      "path": "/api/sync",
-      "schedule": "0 0 * * *"
+      "path": "/api/backup?action=triggerFullBackup",
+      "schedule": "0 2 * * *"
     },
     {
       "path": "/api/archive",
