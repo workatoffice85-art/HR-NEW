@@ -1,4 +1,6 @@
-﻿import handler from './exec.js';
+import handler from './exec.js';
+
+export const maxDuration = 60;
 
 export default async function backupHandler(req, res) {
     if (req.method === 'GET' && !req.query?.action) {

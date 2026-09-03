@@ -1,6 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 
+export const maxDuration = 60;
+
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const GOOGLE_SCRIPT_URL = process.env.GOOGLE_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbwNhaRKDP-7M4dXSQend8RbYPkXRgs5nzN0-BmNzxEO8IkBN9lt6KDtJCdOqpovhJEY1Q/exec';
@@ -4300,7 +4302,7 @@ export default async function handler(req, res) {
             // Try fast batch endpoint first
             try {
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 25000);
+                const timeoutId = setTimeout(() => controller.abort(), 40000);
                 const gsRes = await fetch(GOOGLE_SCRIPT_URL, {
                     method: 'POST',
                     body: JSON.stringify(backupPayload),
@@ -4309,8 +4311,11 @@ export default async function handler(req, res) {
                 });
                 clearTimeout(timeoutId);
 
-                if (gsRes.ok) {
-                    gsResponseData = await gsRes.json();
+                const gsText = await gsRes.text();
+                try {
+                    gsResponseData = JSON.parse(gsText);
+                } catch (pe) {
+                    console.warn("syncFullBackup non-JSON response:", gsText.substring(0, 150));
                 }
             } catch (err) {
                 console.warn("Batch syncFullBackup error:", err?.message || err);
@@ -4324,8 +4329,14 @@ export default async function handler(req, res) {
                 try {
                     // 1. Sync missing employees
                     const sheetCheckRes = await fetch(`${GOOGLE_SCRIPT_URL}?action=getEmployees`);
-                    const sheetJson = await sheetCheckRes.json();
-                    const existingSheetEmpIds = new Set((sheetJson.data || []).map(r => String(r.id)));
+                    const checkText = await sheetCheckRes.text();
+                    let sheetJson = null;
+                    try {
+                        sheetJson = JSON.parse(checkText);
+                    } catch (err) {
+                        console.warn("getEmployees returned non-JSON:", checkText.substring(0, 150));
+                    }
+                    const existingSheetEmpIds = new Set((sheetJson?.data || []).map(r => String(r.id)));
 
                     for (const emp of backupPayload.employees) {
                         if (!existingSheetEmpIds.has(String(emp.id))) {
@@ -4356,9 +4367,12 @@ export default async function handler(req, res) {
                             }),
                             headers: { 'Content-Type': 'text/plain' }
                         });
-                        if (attRes.ok) {
-                            const attJson = await attRes.json();
+                        const attText = await attRes.text();
+                        try {
+                            const attJson = JSON.parse(attText);
                             addedAttCount = attJson.addedCount || 0;
+                        } catch (err) {
+                            console.warn("archiveAttendance non-JSON:", attText.substring(0, 150));
                         }
                     }
 

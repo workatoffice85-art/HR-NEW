@@ -2384,7 +2384,7 @@ function doPost(e) {
         });
       }
 
-      // 5. Sync Attendance (Attendance Records with Smart Checkout Update)
+      // 5. Sync Attendance (Ultra-Fast Batch Insert & Smart Checkout Update)
       if (Array.isArray(data.attendance) && data.attendance.length > 0) {
         var attSheet = getOrCreateSheet("attendance",
           ["employeeId","employeeName","siteId","siteName",
@@ -2403,6 +2403,7 @@ function doPost(e) {
           }
         }
 
+        var newAttRows = [];
         data.attendance.forEach(function(rec) {
           var eId = String(rec.employeeId || "").trim();
           var cIn = String(rec.checkIn || "").trim();
@@ -2418,7 +2419,7 @@ function doPost(e) {
               syncStats.attendanceUpdated = (syncStats.attendanceUpdated || 0) + 1;
             }
           } else {
-            attSheet.appendRow([
+            newAttRows.push([
               rec.employeeId || "",
               rec.employeeName || "",
               rec.siteId || "",
@@ -2431,13 +2432,18 @@ function doPost(e) {
               rec.totalHours || "",
               rec.transportPrice || ""
             ]);
-            attSigMap[sig] = { rowIdx: attSheet.getLastRow(), hasCheckOut: !!rec.checkOut };
+            attSigMap[sig] = { rowIdx: -1, hasCheckOut: !!rec.checkOut };
             syncStats.attendanceAdded = (syncStats.attendanceAdded || 0) + 1;
           }
         });
+
+        if (newAttRows.length > 0) {
+          var lastR = attSheet.getLastRow();
+          attSheet.getRange(lastR + 1, 1, newAttRows.length, newAttRows[0].length).setValues(newAttRows);
+        }
       }
 
-      // 6. Sync Leave Requests
+      // 6. Sync Leave Requests (Batch Insert)
       if (Array.isArray(data.leaveRequests) && data.leaveRequests.length > 0) {
         var leaveSheet = getLeaveRequestsSheet();
         var leaveRows = leaveSheet.getDataRange().getValues();
@@ -2447,6 +2453,7 @@ function doPost(e) {
           if (lId) leaveMap[lId] = l + 1;
         }
 
+        var newLeaveRows = [];
         data.leaveRequests.forEach(function(req) {
           var reqId = String(req.id || "").trim();
           if (!reqId) return;
@@ -2459,7 +2466,7 @@ function doPost(e) {
             leaveSheet.getRange(lRow, 10).setValue(req.rejectionReason || "");
             syncStats.leaveRequestsUpdated = (syncStats.leaveRequestsUpdated || 0) + 1;
           } else {
-            leaveSheet.appendRow([
+            newLeaveRows.push([
               reqId,
               req.employeeId || "",
               req.employeeName || "",
@@ -2471,13 +2478,17 @@ function doPost(e) {
               req.approvedBy || "",
               req.rejectionReason || ""
             ]);
-            leaveMap[reqId] = leaveSheet.getLastRow();
+            leaveMap[reqId] = -1;
             syncStats.leaveRequestsAdded = (syncStats.leaveRequestsAdded || 0) + 1;
           }
         });
+
+        if (newLeaveRows.length > 0) {
+          leaveSheet.getRange(leaveSheet.getLastRow() + 1, 1, newLeaveRows.length, newLeaveRows[0].length).setValues(newLeaveRows);
+        }
       }
 
-      // 7. Sync Site Requests
+      // 7. Sync Site Requests (Batch Insert)
       if (Array.isArray(data.siteRequests) && data.siteRequests.length > 0) {
         var siteReqSheet = getSiteRequestsSheet();
         var sReqRows = siteReqSheet.getDataRange().getValues();
@@ -2487,6 +2498,7 @@ function doPost(e) {
           if (srId) sReqMap[srId] = sr + 1;
         }
 
+        var newSiteReqRows = [];
         data.siteRequests.forEach(function(sr) {
           var srId = String(sr.id || "").trim();
           if (!srId) return;
@@ -2497,7 +2509,7 @@ function doPost(e) {
             siteReqSheet.getRange(srRow, 15).setValue(sr.approvedAt || "");
             syncStats.siteRequestsUpdated = (syncStats.siteRequestsUpdated || 0) + 1;
           } else {
-            siteReqSheet.appendRow([
+            newSiteReqRows.push([
               srId,
               sr.employeeId || "",
               sr.employeeName || "",
@@ -2517,13 +2529,17 @@ function doPost(e) {
               toNumberSafe(sr.mapLongitude, null),
               sr.autoMeta || ""
             ]);
-            sReqMap[srId] = siteReqSheet.getLastRow();
+            sReqMap[srId] = -1;
             syncStats.siteRequestsAdded = (syncStats.siteRequestsAdded || 0) + 1;
           }
         });
+
+        if (newSiteReqRows.length > 0) {
+          siteReqSheet.getRange(siteReqSheet.getLastRow() + 1, 1, newSiteReqRows.length, newSiteReqRows[0].length).setValues(newSiteReqRows);
+        }
       }
 
-      // 8. Sync Allowance Requests
+      // 8. Sync Allowance Requests (Batch Insert)
       if (Array.isArray(data.allowanceRequests) && data.allowanceRequests.length > 0) {
         var allReqSheet = getAllowanceRequestsSheet();
         var allReqRows = allReqSheet.getDataRange().getValues();
@@ -2533,6 +2549,7 @@ function doPost(e) {
           if (arId) allReqMap[arId] = ar + 1;
         }
 
+        var newAllowReqRows = [];
         data.allowanceRequests.forEach(function(ar) {
           var arId = String(ar.id || "").trim();
           if (!arId) return;
@@ -2545,7 +2562,7 @@ function doPost(e) {
             allReqSheet.getRange(arRow, 14).setValue(ar.rejectionReason || "");
             syncStats.allowancesRequestsUpdated = (syncStats.allowancesRequestsUpdated || 0) + 1;
           } else {
-            allReqSheet.appendRow([
+            newAllowReqRows.push([
               arId,
               ar.employeeId || "",
               ar.employeeName || "",
@@ -2561,13 +2578,17 @@ function doPost(e) {
               ar.approvedBy || "",
               ar.rejectionReason || ""
             ]);
-            allReqMap[arId] = allReqSheet.getLastRow();
+            allReqMap[arId] = -1;
             syncStats.allowancesRequestsAdded = (syncStats.allowancesRequestsAdded || 0) + 1;
           }
         });
+
+        if (newAllowReqRows.length > 0) {
+          allReqSheet.getRange(allReqSheet.getLastRow() + 1, 1, newAllowReqRows.length, newAllowReqRows[0].length).setValues(newAllowReqRows);
+        }
       }
 
-      // 9. Sync Devices
+      // 9. Sync Devices (Batch Insert)
       if (Array.isArray(data.devices) && data.devices.length > 0) {
         var devSheet = getDevicesSheet();
         var devRows = devSheet.getDataRange().getValues();
@@ -2577,6 +2598,7 @@ function doPost(e) {
           if (pair !== "_") devMap[pair] = d + 1;
         }
 
+        var newDevRows = [];
         data.devices.forEach(function(dev) {
           var uId = String(dev.userId || dev.user_id || "").trim();
           var dId = String(dev.deviceId || dev.device_id || "").trim();
@@ -2588,7 +2610,7 @@ function doPost(e) {
             devSheet.getRange(row, 7).setValue(dev.isActive !== false && dev.is_active !== false);
             devSheet.getRange(row, 9).setValue(dev.updatedAt || dev.updated_at || "");
           } else {
-            devSheet.appendRow([
+            newDevRows.push([
               dev.id || "",
               uId,
               dId,
@@ -2599,13 +2621,17 @@ function doPost(e) {
               dev.createdAt || dev.created_at || "",
               dev.updatedAt || dev.updated_at || ""
             ]);
-            devMap[key] = devSheet.getLastRow();
+            devMap[key] = -1;
             syncStats.devicesAdded = (syncStats.devicesAdded || 0) + 1;
           }
         });
+
+        if (newDevRows.length > 0) {
+          devSheet.getRange(devSheet.getLastRow() + 1, 1, newDevRows.length, newDevRows[0].length).setValues(newDevRows);
+        }
       }
 
-      // 10. Sync Device Change Requests
+      // 10. Sync Device Change Requests (Batch Insert)
       if (Array.isArray(data.deviceChangeRequests) && data.deviceChangeRequests.length > 0) {
         var dcrSheet = getDeviceChangeRequestsSheet();
         var dcrRows = dcrSheet.getDataRange().getValues();
@@ -2615,6 +2641,7 @@ function doPost(e) {
           if (id) dcrMap[id] = dc + 1;
         }
 
+        var newDcrRows = [];
         data.deviceChangeRequests.forEach(function(req) {
           var rId = String(req.id || "").trim();
           if (!rId) return;
@@ -2626,7 +2653,7 @@ function doPost(e) {
             dcrSheet.getRange(rRow, 13).setValue(req.processedAt || req.processed_at || "");
             dcrSheet.getRange(rRow, 14).setValue(req.processedBy || req.processed_by || "");
           } else {
-            dcrSheet.appendRow([
+            newDcrRows.push([
               rId,
               req.userId || req.user_id || "",
               req.userName || req.user_name || "",
@@ -2642,13 +2669,17 @@ function doPost(e) {
               req.processedAt || req.processed_at || "",
               req.processedBy || req.processed_by || ""
             ]);
-            dcrMap[rId] = dcrSheet.getLastRow();
+            dcrMap[rId] = -1;
             syncStats.deviceChangeRequestsAdded = (syncStats.deviceChangeRequestsAdded || 0) + 1;
           }
         });
+
+        if (newDcrRows.length > 0) {
+          dcrSheet.getRange(dcrSheet.getLastRow() + 1, 1, newDcrRows.length, newDcrRows[0].length).setValues(newDcrRows);
+        }
       }
 
-      // 11. Sync Official Holidays
+      // 11. Sync Official Holidays (Batch Insert)
       if (Array.isArray(data.officialHolidays) && data.officialHolidays.length > 0) {
         var holSheet = getOfficialHolidaysSheet();
         var holRows = holSheet.getDataRange().getValues();
@@ -2658,6 +2689,7 @@ function doPost(e) {
           if (dKey) holMap[dKey] = h + 1;
         }
 
+        var newHolRows = [];
         data.officialHolidays.forEach(function(hol) {
           var dKey = toDateKey(hol.holidayDate);
           if (!dKey) return;
@@ -2665,19 +2697,23 @@ function doPost(e) {
           if (holMap[dKey]) {
             holSheet.getRange(holMap[dKey], 3).setValue(hol.holidayName || "");
           } else {
-            holSheet.appendRow([
+            newHolRows.push([
               hol.id || "",
               dKey,
               hol.holidayName || "",
               hol.createdAt || ""
             ]);
-            holMap[dKey] = holSheet.getLastRow();
+            holMap[dKey] = -1;
             syncStats.officialHolidaysAdded = (syncStats.officialHolidaysAdded || 0) + 1;
           }
         });
+
+        if (newHolRows.length > 0) {
+          holSheet.getRange(holSheet.getLastRow() + 1, 1, newHolRows.length, newHolRows[0].length).setValues(newHolRows);
+        }
       }
 
-      // 12. Sync Approval Logs
+      // 12. Sync Approval Logs (Batch Insert)
       if (Array.isArray(data.approvalLogs) && data.approvalLogs.length > 0) {
         var logSheet = getApprovalLogsSheet();
         var logRows = logSheet.getDataRange().getValues();
@@ -2687,11 +2723,12 @@ function doPost(e) {
           if (lgId) logMap[lgId] = lg + 1;
         }
 
+        var newLogRows = [];
         data.approvalLogs.forEach(function(l) {
           var lId = String(l.id || "").trim();
           if (!lId || logMap[lId]) return;
 
-          logSheet.appendRow([
+          newLogRows.push([
             lId,
             l.requestId || "",
             l.adminId || "",
@@ -2700,12 +2737,16 @@ function doPost(e) {
             typeof l.details === 'object' ? JSON.stringify(l.details) : String(l.details || ""),
             l.timestamp || ""
           ]);
-          logMap[lId] = logSheet.getLastRow();
+          logMap[lId] = -1;
           syncStats.approvalLogsAdded = (syncStats.approvalLogsAdded || 0) + 1;
         });
+
+        if (newLogRows.length > 0) {
+          logSheet.getRange(logSheet.getLastRow() + 1, 1, newLogRows.length, newLogRows[0].length).setValues(newLogRows);
+        }
       }
 
-      // 13. Sync Telegram Mappings
+      // 13. Sync Telegram Mappings (Batch Insert)
       if (Array.isArray(data.employeeTelegram) && data.employeeTelegram.length > 0) {
         var tgSheet = getEmployeeTelegramSheet();
         var tgRows = tgSheet.getDataRange().getValues();
@@ -2715,6 +2756,7 @@ function doPost(e) {
           if (tId) tgMap[tId] = t + 1;
         }
 
+        var newTgRows = [];
         data.employeeTelegram.forEach(function(tg) {
           var empId = String(tg.employee_id || tg.employeeId || "").trim();
           if (!empId) return;
@@ -2723,19 +2765,23 @@ function doPost(e) {
             tgSheet.getRange(tgMap[empId], 2).setValue(String(tg.telegram_chat_id || tg.telegramChatId || ""));
             tgSheet.getRange(tgMap[empId], 4).setValue(String(tg.last_verified_at || tg.lastVerifiedAt || ""));
           } else {
-            tgSheet.appendRow([
+            newTgRows.push([
               empId,
               String(tg.telegram_chat_id || tg.telegramChatId || ""),
               String(tg.linked_at || tg.linkedAt || ""),
               String(tg.last_verified_at || tg.lastVerifiedAt || "")
             ]);
-            tgMap[empId] = tgSheet.getLastRow();
+            tgMap[empId] = -1;
             syncStats.employeeTelegramAdded = (syncStats.employeeTelegramAdded || 0) + 1;
           }
         });
+
+        if (newTgRows.length > 0) {
+          tgSheet.getRange(tgSheet.getLastRow() + 1, 1, newTgRows.length, newTgRows[0].length).setValues(newTgRows);
+        }
       }
 
-      // 14. Sync Notification Logs
+      // 14. Sync Notification Logs (Batch Insert)
       if (Array.isArray(data.notificationLogs) && data.notificationLogs.length > 0) {
         var nlSheet = getNotificationLogsSheet();
         var nlRows = nlSheet.getDataRange().getValues();
@@ -2745,11 +2791,12 @@ function doPost(e) {
           if (nId) nlMap[nId] = n + 1;
         }
 
+        var newNlRows = [];
         data.notificationLogs.forEach(function(nl) {
           var nlId = String(nl.id || "").trim();
           if (!nlId || nlMap[nlId]) return;
 
-          nlSheet.appendRow([
+          newNlRows.push([
             nlId,
             nl.employee_id || nl.employeeId || "",
             nl.channel || "",
@@ -2759,12 +2806,16 @@ function doPost(e) {
             nl.sent_at || nl.sentAt || "",
             nl.notification_date || nl.notificationDate || ""
           ]);
-          nlMap[nlId] = nlSheet.getLastRow();
+          nlMap[nlId] = -1;
           syncStats.notificationLogsAdded = (syncStats.notificationLogsAdded || 0) + 1;
         });
+
+        if (newNlRows.length > 0) {
+          nlSheet.getRange(nlSheet.getLastRow() + 1, 1, newNlRows.length, newNlRows[0].length).setValues(newNlRows);
+        }
       }
 
-      // 15. Sync Push Subscriptions
+      // 15. Sync Push Subscriptions (Batch Insert)
       if (Array.isArray(data.pushSubscriptions) && data.pushSubscriptions.length > 0) {
         var psSheet = getPushSubscriptionsSheet();
         var psRows = psSheet.getDataRange().getValues();
@@ -2774,11 +2825,12 @@ function doPost(e) {
           if (ep) psMap[ep] = p + 1;
         }
 
+        var newPsRows = [];
         data.pushSubscriptions.forEach(function(ps) {
           var ep = String(ps.endpoint || "").trim();
           if (!ep || psMap[ep]) return;
 
-          psSheet.appendRow([
+          newPsRows.push([
             ps.id || "",
             ps.employee_id || ps.employeeId || "",
             ep,
@@ -2788,9 +2840,13 @@ function doPost(e) {
             ps.created_at || ps.createdAt || "",
             ps.updated_at || ps.updatedAt || ""
           ]);
-          psMap[ep] = psSheet.getLastRow();
+          psMap[ep] = -1;
           syncStats.pushSubscriptionsAdded = (syncStats.pushSubscriptionsAdded || 0) + 1;
         });
+
+        if (newPsRows.length > 0) {
+          psSheet.getRange(psSheet.getLastRow() + 1, 1, newPsRows.length, newPsRows[0].length).setValues(newPsRows);
+        }
       }
 
       return json({
