@@ -1423,10 +1423,12 @@ function handleGeoError(error) {
     setStatus(msg, 'error-text');
 }
 
+let userSelectedSiteId = null;
+
 function verifyLocation() {
     if (!lastLocation || sitesData.length === 0) return;
     
-    let detectedSite = null;
+    const matchingSites = [];
     let minDistance = Infinity;
     let closestSiteName = "";
 
@@ -1439,22 +1441,94 @@ function verifyLocation() {
         }
         
         if (dist <= site.radius) {
-            detectedSite = site;
-            break;
+            matchingSites.push({ ...site, dist: dist });
         }
     }
 
-    if (detectedSite) {
-        document.getElementById('siteText').innerText = `✅ أنت في موقع: ${detectedSite.name}`;
-        document.getElementById('btnRequestSite').classList.add('hidden');
-        lastDetectedSite = detectedSite;
-    } else {
+    // Sort matching sites by distance ascending (closest first)
+    matchingSites.sort((a, b) => a.dist - b.dist);
+
+    const siteSelectionContainer = document.getElementById('siteSelectionContainer');
+    const siteSelectDropdown = document.getElementById('siteSelectDropdown');
+    const matchingSitesCountBadge = document.getElementById('matchingSitesCountBadge');
+    const siteTextEl = document.getElementById('siteText');
+    const btnRequestSite = document.getElementById('btnRequestSite');
+
+    if (matchingSites.length === 0) {
+        // Out of range
+        if (siteSelectionContainer) siteSelectionContainer.classList.add('hidden');
         const distText = minDistance === Infinity ? "" : `(أقرب موقع لك هو ${closestSiteName} ويبعد ${(minDistance/1000).toFixed(2)} كم)`;
-        document.getElementById('siteText').innerText = `❌ أنت خارج النطاق. ${distText}`;
-        document.getElementById('btnRequestSite').classList.remove('hidden');
+        if (siteTextEl) siteTextEl.innerText = `❌ أنت خارج النطاق. ${distText}`;
+        if (btnRequestSite) btnRequestSite.classList.remove('hidden');
         lastDetectedSite = null;
+        userSelectedSiteId = null;
+    } else if (matchingSites.length === 1) {
+        // Single site in range
+        if (siteSelectionContainer) siteSelectionContainer.classList.add('hidden');
+        lastDetectedSite = matchingSites[0];
+        userSelectedSiteId = lastDetectedSite.id;
+        if (siteTextEl) siteTextEl.innerText = `✅ أنت في موقع: ${lastDetectedSite.name}`;
+        if (btnRequestSite) btnRequestSite.classList.add('hidden');
+    } else {
+        // Multiple sites in range within the same zone!
+        if (btnRequestSite) btnRequestSite.classList.add('hidden');
+
+        // Check if user already had a valid selection that is still matching
+        let activeSite = null;
+        if (userSelectedSiteId) {
+            activeSite = matchingSites.find(s => String(s.id) === String(userSelectedSiteId));
+        }
+        if (!activeSite) {
+            // Default to closest site
+            activeSite = matchingSites[0];
+            userSelectedSiteId = activeSite.id;
+        }
+        lastDetectedSite = activeSite;
+
+        // Render options in dropdown
+        if (siteSelectDropdown) {
+            siteSelectDropdown.innerHTML = '';
+            matchingSites.forEach(site => {
+                const opt = document.createElement('option');
+                opt.value = site.id;
+                const distanceM = Math.round(site.dist);
+                const transportNotice = (site.transportPrice && Number(site.transportPrice) > 0) ? ` - بدل: ${site.transportPrice} ج.م` : '';
+                opt.textContent = `${site.name} (${distanceM}م)${transportNotice}`;
+                if (String(site.id) === String(activeSite.id)) {
+                    opt.selected = true;
+                }
+                siteSelectDropdown.appendChild(opt);
+            });
+        }
+
+        if (matchingSitesCountBadge) {
+            matchingSitesCountBadge.textContent = `${matchingSites.length} مواقع`;
+        }
+
+        if (siteSelectionContainer) {
+            siteSelectionContainer.classList.remove('hidden');
+        }
+
+        if (siteTextEl) {
+            siteTextEl.innerText = `✅ الموقع المختار: ${activeSite.name}`;
+        }
     }
     updateActionButtonsState();
+}
+
+function onSiteSelectionChange(selectedId) {
+    if (!selectedId || sitesData.length === 0) return;
+    const chosen = sitesData.find(s => String(s.id) === String(selectedId));
+    if (chosen) {
+        userSelectedSiteId = chosen.id;
+        lastDetectedSite = chosen;
+        const siteTextEl = document.getElementById('siteText');
+        if (siteTextEl) {
+            siteTextEl.innerText = `✅ الموقع المختار: ${chosen.name}`;
+        }
+        vibrateSuccess();
+        updateActionButtonsState();
+    }
 }
 
 function getDistanceFromLatLonInM(lat1, lon1, lat2, lon2) {
@@ -1543,6 +1617,8 @@ async function handleCheckIn() {
     const payload = {
         action: 'addAttendance', employeeId: currentUser.id, employeeName: currentUser.name,
         checkIn: new Date().toISOString(), latitude: lastLocation.lat, longitude: lastLocation.lng,
+        siteId: lastDetectedSite ? lastDetectedSite.id : null,
+        siteName: lastDetectedSite ? lastDetectedSite.name : null,
         biometricType: finalBioType,
         biometricData: finalBiometricData ? JSON.stringify(finalBiometricData) : null,
         faceDescriptor: finalBiometricData ? JSON.stringify(finalBiometricData) : null, // Legacy support

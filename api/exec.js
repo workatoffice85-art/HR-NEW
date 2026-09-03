@@ -2431,10 +2431,24 @@ export default async function handler(req, res) {
             let matchedSite = null;
             let isRequest = false;
 
-            if (sites) {
-                for (let s of sites) {
-                    let d = getDistance(data.latitude, data.longitude, s.latitude, s.longitude);
-                    if (d <= s.radius) { matchedSite = s; break; }
+            if (sites && sites.length > 0) {
+                // If client explicitly selected a siteId, check if client is within this site's radius
+                if (data.siteId) {
+                    const requestedSite = sites.find(s => String(s.id) === String(data.siteId));
+                    if (requestedSite) {
+                        const d = getDistance(data.latitude, data.longitude, requestedSite.latitude, requestedSite.longitude);
+                        if (d <= requestedSite.radius) {
+                            matchedSite = requestedSite;
+                        }
+                    }
+                }
+
+                // Fallback: If siteId was not provided or outside selected site's radius, pick first matching site
+                if (!matchedSite) {
+                    for (let s of sites) {
+                        let d = getDistance(data.latitude, data.longitude, s.latitude, s.longitude);
+                        if (d <= s.radius) { matchedSite = s; break; }
+                    }
                 }
             }
 

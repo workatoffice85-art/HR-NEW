@@ -969,6 +969,22 @@ function validateAll(ss, data) {
   sites.shift();
 
   // 1. Check Permanent Sites
+  if (data.siteId) {
+    for (var i = 0; i < sites.length; i++) {
+      if (String(sites[i][0]) === String(data.siteId)) {
+        var dist = getDistance(
+          parseFloat(data.latitude),
+          parseFloat(data.longitude),
+          parseFloat(sites[i][2]),
+          parseFloat(sites[i][3])
+        );
+        if (dist <= parseFloat(sites[i][4])) {
+          return { id: sites[i][0], name: sites[i][1], transportPrice: toNumberSafe(sites[i][5], 0) };
+        }
+      }
+    }
+  }
+
   for (var i = 0; i < sites.length; i++) {
     var dist = getDistance(
       parseFloat(data.latitude),
