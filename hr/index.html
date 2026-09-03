@@ -969,8 +969,52 @@
                                 الإيميل
                             </label>
                         </div>
-                        <button class="btn-primary" onclick="saveSettings()">حفظ إعدادات الإشعارات</button>
+                    </div>
 
+                    <!-- Backup & Recovery Section -->
+                    <div class="glass-card" style="padding:25px; grid-column: 1 / -1; border: 1px solid rgba(16, 185, 129, 0.25); background: linear-gradient(135deg, rgba(16, 185, 129, 0.03) 0%, rgba(30, 41, 59, 0.5) 100%);">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
+                            <h3 style="margin:0; color:#34d399; display:flex; align-items:center; gap:8px;">
+                                🛡️ مركز النسخ الاحتياطي ومطابقة البيانات (Backup & Recovery)
+                            </h3>
+                            <span id="backupSyncBadge" style="background:rgba(59, 130, 246, 0.15); color:#60a5fa; border:1px solid rgba(59, 130, 246, 0.3); border-radius:20px; padding: 5px 14px; font-size:0.85rem; font-weight:600;">
+                                جاري فحص الحالة...
+                            </span>
+                        </div>
+                        <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom:18px;">
+                            نظام الحماية والمطابقة المزدوج: قاعدة البيانات السحابية (Supabase) متصلة بالنسخة الاحتياطية الدائمة في (Google Sheets). يمكنك التحقق من مطابقة البيانات لحظياً أو عمل مزامنة شاملة أو تنزيل نسخة أوفلاين.
+                        </p>
+                        
+                        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:15px; margin-bottom:20px;">
+                            <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:14px; text-align:center;">
+                                <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:4px;">الموظفون في Supabase</div>
+                                <div id="backupSbEmpCount" style="font-size:1.6rem; font-weight:bold; color:var(--primary);">-</div>
+                            </div>
+                            <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:14px; text-align:center;">
+                                <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:4px;">الموظفون في Google Sheets</div>
+                                <div id="backupGsEmpCount" style="font-size:1.6rem; font-weight:bold; color:#10b981;">-</div>
+                            </div>
+                            <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:14px; text-align:center;">
+                                <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:4px;">سيرفر Google Apps Script</div>
+                                <div id="backupGsStatus" style="font-size:1.1rem; font-weight:bold; color:#38bdf8;">فحص...</div>
+                            </div>
+                        </div>
+
+                        <div id="backupStatusText" style="margin-bottom:18px; font-size:0.9rem; padding:10px 14px; border-radius:8px; background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); color:var(--text-muted);">
+                            جاري فحص تطابق البيانات بين السحابة وشيت جوجل...
+                        </div>
+
+                        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                            <button id="btnTriggerBackup" class="btn-primary" style="background:#10b981; width:auto; padding:10px 22px; font-weight:600; display:flex; align-items:center; gap:6px;" onclick="triggerManualBackup()">
+                                ⚡ مزامنة وتحديث Google Sheets الآن
+                            </button>
+                            <button class="btn-primary" style="background:#6366f1; width:auto; padding:10px 22px; font-weight:600; display:flex; align-items:center; gap:6px;" onclick="downloadFullBackupJson()">
+                                💾 تنزيل نسخة احتياطية كاملة (JSON File)
+                            </button>
+                            <button class="btn-secondary" style="width:auto; padding:10px 16px; background:transparent; border:1px solid rgba(255,255,255,0.15);" onclick="loadBackupStatus()">
+                                🔄 فحص التطابق
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>

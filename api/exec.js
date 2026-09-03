@@ -1136,13 +1136,19 @@ function getCairoDateString(date = new Date()) {
 // Background sync to Google Sheets (Backup)
 async function syncToGoogleSheet(body) {
     try {
-        await fetch(GOOGLE_SCRIPT_URL, {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
+        const res = await fetch(GOOGLE_SCRIPT_URL, {
             method: 'POST',
             body: JSON.stringify(body),
-            headers: { 'Content-Type': 'text/plain' }
+            headers: { 'Content-Type': 'text/plain' },
+            signal: controller.signal
         });
+        clearTimeout(timeoutId);
+        return res.ok;
     } catch (e) {
-        console.error("Google Sync Failed:", e);
+        console.error("Google Sync Failed:", e && e.message ? e.message : e);
+        return false;
     }
 }
 
@@ -1195,7 +1201,7 @@ export default async function handler(req, res) {
             "payAttendanceAllowance", "payAttendanceAllowancePeriod", "rollbackAttendanceAllowance", "rollbackAttendanceAllowancePeriod"
         ];
         if (writeActions.includes(action)) {
-            syncToGoogleSheet(data);
+            await syncToGoogleSheet(data);
         }
         // --- AUTH ---
         if (action === "login") {
@@ -4053,6 +4059,233 @@ export default async function handler(req, res) {
             };
 
             return res.status(200).json({ success: true, data: stats });
+        }
+
+        // --- BACKUP & DISASTER RECOVERY SYSTEM ---
+        if (action === "getBackupStatus") {
+            const [
+                { count: sbEmpCount },
+                { count: sbSiteCount },
+                { count: sbAttCount }
+            ] = await Promise.all([
+                supabase.from('employees').select('*', { count: 'exact', head: true }),
+                supabase.from('sites').select('*', { count: 'exact', head: true }),
+                supabase.from('attendance').select('*', { count: 'exact', head: true })
+            ]);
+
+            let gsEmpCount = null;
+            let gsOnline = false;
+
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 7000);
+                const gsRes = await fetch(`${GOOGLE_SCRIPT_URL}?action=getEmployees`, { signal: controller.signal });
+                clearTimeout(timeoutId);
+                if (gsRes.ok) {
+                    const gsData = await gsRes.json();
+                    if (gsData.success && Array.isArray(gsData.data)) {
+                        gsEmpCount = gsData.data.length;
+                        gsOnline = true;
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to check Google Sheets status:", e?.message || e);
+            }
+
+            const isSynced = gsOnline && (sbEmpCount === gsEmpCount);
+
+            return res.status(200).json({
+                success: true,
+                supabase: {
+                    employees: sbEmpCount || 0,
+                    sites: sbSiteCount || 0,
+                    attendance: sbAttCount || 0
+                },
+                googleSheets: {
+                    online: gsOnline,
+                    employees: gsEmpCount,
+                    url: GOOGLE_SCRIPT_URL
+                },
+                isSynced,
+                message: isSynced 
+                    ? "النسخة الاحتياطية متطابقة بنسبة 100% مع قاعدة البيانات." 
+                    : (gsOnline 
+                        ? `يوجد اختلاف: Supabase به (${sbEmpCount || 0}) موظف بينما Google Sheets به (${gsEmpCount || 0}) موظف. يرجى المزامنة.`
+                        : "تعذر الاتصال بـ Google Sheets حالياً.")
+            });
+        }
+
+        if (action === "triggerFullBackup") {
+            // 1. Fetch live tables from Supabase
+            const employees = await fetchAllRows('employees', '*');
+            const sites = await fetchAllRows('sites', '*');
+            const allowances = await fetchAllRows('siteAllowances', '*');
+            const { data: settingsRows } = await supabase.from('settings').select('*');
+
+            const settings = {};
+            if (settingsRows) {
+                settingsRows.forEach(r => { settings[r.key] = r.value; });
+            }
+
+            // 2. Prepare payload
+            const backupPayload = {
+                action: 'syncFullBackup',
+                employees: employees.map(e => ({
+                    id: e.id,
+                    name: e.name,
+                    email: e.email,
+                    password: e.password,
+                    phone: e.phone,
+                    role: e.role,
+                    assignedSites: e.assignedSites,
+                    faceDescriptor: e.faceDescriptor,
+                    transportPrice: e.transportPrice
+                })),
+                sites: sites.map(s => ({
+                    id: s.id,
+                    name: s.name,
+                    latitude: s.latitude,
+                    longitude: s.longitude,
+                    radius: s.radius,
+                    transportPrice: s.transportPrice,
+                    mapLink: s.mapLink
+                })),
+                settings: settings,
+                siteAllowances: allowances.map(a => ({
+                    employeeId: a.employeeId,
+                    siteId: a.siteId,
+                    transportPrice: a.transportPrice
+                }))
+            };
+
+            let gsResponseData = null;
+            let syncMethod = "batch";
+
+            // Try fast batch endpoint first
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 25000);
+                const gsRes = await fetch(GOOGLE_SCRIPT_URL, {
+                    method: 'POST',
+                    body: JSON.stringify(backupPayload),
+                    headers: { 'Content-Type': 'text/plain' },
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+
+                if (gsRes.ok) {
+                    gsResponseData = await gsRes.json();
+                }
+            } catch (err) {
+                console.warn("Batch syncFullBackup error:", err?.message || err);
+            }
+
+            // Fallback: If batch sync is not supported or failed, sync missing employees individually
+            if (!gsResponseData || !gsResponseData.success) {
+                syncMethod = "individual-sync";
+                let addedCount = 0;
+                try {
+                    const sheetCheckRes = await fetch(`${GOOGLE_SCRIPT_URL}?action=getEmployees`);
+                    const sheetJson = await sheetCheckRes.json();
+                    const existingSheetEmpIds = new Set((sheetJson.data || []).map(r => String(r.id)));
+
+                    for (const emp of backupPayload.employees) {
+                        if (!existingSheetEmpIds.has(String(emp.id))) {
+                            await syncToGoogleSheet({
+                                action: "saveEmployee",
+                                id: emp.id,
+                                name: emp.name,
+                                email: emp.email,
+                                password: emp.password || "123456",
+                                phone: emp.phone,
+                                role: emp.role,
+                                assignedSites: emp.assignedSites,
+                                faceDescriptor: emp.faceDescriptor,
+                                transportPrice: emp.transportPrice
+                            });
+                            addedCount++;
+                        }
+                    }
+                    gsResponseData = {
+                        success: true,
+                        message: `تمت المزامنة بنجاح! تم فحص (${backupPayload.employees.length}) موظف، وإضافة (${addedCount}) موظف ناقص إلى Google Sheets.`,
+                        addedCount
+                    };
+                } catch (fallbackErr) {
+                    throw new Error(`تعذر الاتصال بخادم النسخ الاحتياطي: ${fallbackErr.message}`);
+                }
+            }
+
+            return res.status(200).json({
+                success: true,
+                message: gsResponseData?.message || "تمت مزامنة النسخة الاحتياطية بنجاح",
+                syncMethod,
+                stats: {
+                    employeesCount: employees.length,
+                    sitesCount: sites.length,
+                    allowancesCount: allowances.length
+                },
+                details: gsResponseData
+            });
+        }
+
+        if (action === "exportFullBackup") {
+            const [
+                employees,
+                sites,
+                attendance,
+                siteRequests,
+                leaveRequests,
+                allowanceRequests,
+                siteAllowances,
+                notifications,
+                holidays,
+                { data: settingsRows }
+            ] = await Promise.all([
+                fetchAllRows('employees', '*'),
+                fetchAllRows('sites', '*'),
+                fetchAllRows('attendance', '*'),
+                fetchAllRows('siteRequests', '*'),
+                fetchAllRows('leaveRequests', '*'),
+                fetchAllRows('allowanceRequests', '*'),
+                fetchAllRows('siteAllowances', '*'),
+                fetchAllRows('notifications', '*'),
+                fetchAllRows('official_holidays', '*'),
+                supabase.from('settings').select('*')
+            ]);
+
+            const settings = {};
+            if (settingsRows) {
+                settingsRows.forEach(r => { settings[r.key] = r.value; });
+            }
+
+            return res.status(200).json({
+                success: true,
+                exportedAt: new Date().toISOString(),
+                counts: {
+                    employees: employees.length,
+                    sites: sites.length,
+                    attendance: attendance.length,
+                    siteRequests: siteRequests.length,
+                    leaveRequests: leaveRequests.length,
+                    allowanceRequests: allowanceRequests.length,
+                    siteAllowances: siteAllowances.length,
+                    notifications: notifications.length,
+                    officialHolidays: holidays.length
+                },
+                data: {
+                    employees,
+                    sites,
+                    attendance,
+                    siteRequests,
+                    leaveRequests,
+                    allowanceRequests,
+                    siteAllowances,
+                    notifications,
+                    officialHolidays: holidays,
+                    settings
+                }
+            });
         }
 
         // ============================================

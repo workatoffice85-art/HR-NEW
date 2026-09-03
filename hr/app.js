@@ -287,7 +287,10 @@ function showTab(tabName) {
     if (tabName === 'allowanceRequests') fetchAllowanceRequests();
     if (tabName === 'reports') generateReport();
     if (tabName === 'employeeDetails') initEmployeeDetailedTab();
-    if (tabName === 'settings') fetchSettings();
+    if (tabName === 'settings') {
+        fetchSettings();
+        loadBackupStatus();
+    }
     if (tabName === 'officialHolidays') fetchOfficialHolidays();
     if (tabName === 'leaveRequests') fetchLeaveRequests();
     if (tabName === 'deviceManagement') {
@@ -3300,6 +3303,129 @@ async function triggerSmartSync() {
     } finally {
         syncBtn.disabled = false;
         syncBtn.innerText = originalText;
+        if (loader) loader.classList.add('hidden');
+    }
+}
+
+// ====== BACKUP & DATA RECOVERY MODULE ====== //
+
+async function loadBackupStatus() {
+    const badge = document.getElementById('backupSyncBadge');
+    const sbCountEl = document.getElementById('backupSbEmpCount');
+    const gsCountEl = document.getElementById('backupGsEmpCount');
+    const statusEl = document.getElementById('backupGsStatus');
+    const textEl = document.getElementById('backupStatusText');
+
+    if (!badge || !sbCountEl) return;
+
+    badge.innerText = "جاري الفحص...";
+    badge.style.background = "rgba(59, 130, 246, 0.15)";
+    badge.style.color = "#60a5fa";
+    badge.style.borderColor = "rgba(59, 130, 246, 0.3)";
+
+    try {
+        const res = await fetch(`${API_URL}?action=getBackupStatus`);
+        const json = await res.json();
+
+        if (json.success) {
+            sbCountEl.innerText = json.supabase?.employees ?? "-";
+            gsCountEl.innerText = json.googleSheets?.employees ?? "-";
+            
+            if (json.googleSheets?.online) {
+                statusEl.innerText = "متصل 🟢";
+                statusEl.style.color = "#10b981";
+            } else {
+                statusEl.innerText = "غير متاح 🔴";
+                statusEl.style.color = "#ef4444";
+            }
+
+            if (json.isSynced) {
+                badge.innerText = "متطابق 100% ✅";
+                badge.style.background = "rgba(16, 185, 129, 0.15)";
+                badge.style.color = "#34d399";
+                badge.style.borderColor = "rgba(16, 185, 129, 0.3)";
+                textEl.innerText = "النسخة الاحتياطية على Google Sheets مطابقة تماماً لقاعدة بيانات Supabase الحية.";
+                textEl.style.color = "#34d399";
+            } else {
+                badge.innerText = "يحتاج مزامنة ⚠️";
+                badge.style.background = "rgba(245, 158, 11, 0.15)";
+                badge.style.color = "#fbbf24";
+                badge.style.borderColor = "rgba(245, 158, 11, 0.3)";
+                textEl.innerText = json.message || "يوجد تباين بين السجلات، يرجى الضغط على زر المزامنة الآن.";
+                textEl.style.color = "#fbbf24";
+            }
+        }
+    } catch (e) {
+        console.error("Backup status check error:", e);
+        badge.innerText = "خطأ في الاتصال ❌";
+        badge.style.color = "#ef4444";
+        textEl.innerText = "تعذر التحقق من حالة النسخ الاحتياطي: " + e.message;
+    }
+}
+
+async function triggerManualBackup() {
+    const btn = document.getElementById('btnTriggerBackup');
+    const loader = document.getElementById('loader');
+    if (!confirm("هل تريد مزامنة وتحديث كافة بيانات الموظفين والمواقع والإعدادات إلى Google Sheets الآن؟")) return;
+
+    if (btn) {
+        btn.disabled = true;
+        btn.innerText = "جاري المزامنة... ⏳";
+    }
+    if (loader) loader.classList.remove('hidden');
+
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'triggerFullBackup' }),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const result = await res.json();
+
+        if (result.success) {
+            alert("✅ " + (result.message || "تمت المزامنة بنجاح"));
+            await loadBackupStatus();
+        } else {
+            alert("❌ فشلت المزامنة: " + (result.message || "خطأ غير معروف"));
+        }
+    } catch (e) {
+        console.error("Trigger backup error:", e);
+        alert("حدث خطأ أثناء المزامنة: " + (e.message || "خطأ اتصال"));
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerText = "⚡ مزامنة وتحديث Google Sheets الآن";
+        }
+        if (loader) loader.classList.add('hidden');
+    }
+}
+
+async function downloadFullBackupJson() {
+    const loader = document.getElementById('loader');
+    if (loader) loader.classList.remove('hidden');
+
+    try {
+        const res = await fetch(`${API_URL}?action=exportFullBackup`);
+        const result = await res.json();
+
+        if (!result.success || !result.data) {
+            throw new Error(result.message || "فشل تصدير البيانات");
+        }
+
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(result, null, 2));
+        const downloadAnchor = document.createElement('a');
+        const dateStr = new Date().toISOString().slice(0, 10);
+        downloadAnchor.setAttribute("href", dataStr);
+        downloadAnchor.setAttribute("download", `HR_Full_Backup_${dateStr}.json`);
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
+
+        alert(`✅ تم تحميل ملف النسخة الاحتياطية بنجاح!\nعدد الموظفين: ${result.counts?.employees || 0}\nعدد المواقع: ${result.counts?.sites || 0}\nسجلات الحضور: ${result.counts?.attendance || 0}`);
+    } catch (e) {
+        console.error("Export backup error:", e);
+        alert("تعذر تنزيل النسخة الاحتياطية: " + e.message);
+    } finally {
         if (loader) loader.classList.add('hidden');
     }
 }

@@ -2124,6 +2124,165 @@ function doPost(e) {
       });
     }
 
+    // 🔥 SYNC FULL BACKUP FROM SUPABASE (MASTER MIRROR)
+    if (data.action === "syncFullBackup") {
+      var syncStats = {
+        employeesAdded: 0,
+        employeesUpdated: 0,
+        sitesAdded: 0,
+        sitesUpdated: 0,
+        settingsUpdated: 0,
+        allowancesSynced: 0
+      };
+
+      // 1. Sync Employees
+      if (Array.isArray(data.employees) && data.employees.length > 0) {
+        var empSheet = getOrCreateSheet("employees",
+          ["id","name","email","password","phone","role","assignedSites","faceDescriptor","transportPrice"]
+        );
+        var empRows = empSheet.getDataRange().getValues();
+        var empRowMap = {};
+        for (var i = 1; i < empRows.length; i++) {
+          var id = String(empRows[i][0] || "").trim();
+          if (id) empRowMap[id] = i + 1;
+        }
+
+        data.employees.forEach(function(emp) {
+          var empId = String(emp.id || "").trim();
+          if (!empId) return;
+
+          var assignedSitesStr = Array.isArray(emp.assignedSites) ? emp.assignedSites.join(',') : String(emp.assignedSites || "");
+          var transportPrice = toNumberSafe(emp.transportPrice, 0);
+          var faceDesc = emp.faceDescriptor ? (typeof emp.faceDescriptor === 'object' ? JSON.stringify(emp.faceDescriptor) : String(emp.faceDescriptor)) : "";
+
+          if (empRowMap[empId]) {
+            var rowIdx = empRowMap[empId];
+            var currentPwd = empSheet.getRange(rowIdx, 4).getValue();
+            var newPwd = emp.password ? String(emp.password) : currentPwd;
+            empSheet.getRange(rowIdx, 1, 1, 9).setValues([[
+              empId,
+              emp.name || "",
+              emp.email || "",
+              newPwd,
+              emp.phone || "",
+              emp.role || "employee",
+              assignedSitesStr,
+              faceDesc || empSheet.getRange(rowIdx, 8).getValue(),
+              transportPrice
+            ]]);
+            syncStats.employeesUpdated++;
+          } else {
+            empSheet.appendRow([
+              empId,
+              emp.name || "",
+              emp.email || "",
+              emp.password || "",
+              emp.phone || "",
+              emp.role || "employee",
+              assignedSitesStr,
+              faceDesc,
+              transportPrice
+            ]);
+            empRowMap[empId] = empSheet.getLastRow();
+            syncStats.employeesAdded++;
+          }
+        });
+      }
+
+      // 2. Sync Sites
+      if (Array.isArray(data.sites) && data.sites.length > 0) {
+        var siteSheet = getOrCreateSheet("sites",
+          ["id","name","latitude","longitude","radius","transportPrice","mapLink"]
+        );
+        var siteRows = siteSheet.getDataRange().getValues();
+        var siteRowMap = {};
+        for (var s = 1; s < siteRows.length; s++) {
+          var sId = String(siteRows[s][0] || "").trim();
+          if (sId) siteRowMap[sId] = s + 1;
+        }
+
+        data.sites.forEach(function(site) {
+          var siteId = String(site.id || "").trim();
+          if (!siteId) return;
+
+          var lat = parseFloat(site.latitude) || 0;
+          var lng = parseFloat(site.longitude) || 0;
+          var radius = toNumberSafe(site.radius, 100);
+          var transportPrice = toNumberSafe(site.transportPrice, 0);
+          var mapLink = site.mapLink || "";
+
+          if (siteRowMap[siteId]) {
+            var sRowIdx = siteRowMap[siteId];
+            siteSheet.getRange(sRowIdx, 1, 1, 7).setValues([[
+              siteId, site.name || "", lat, lng, radius, transportPrice, mapLink
+            ]]);
+            syncStats.sitesUpdated++;
+          } else {
+            siteSheet.appendRow([
+              siteId, site.name || "", lat, lng, radius, transportPrice, mapLink
+            ]);
+            siteRowMap[siteId] = siteSheet.getLastRow();
+            syncStats.sitesAdded++;
+          }
+        });
+      }
+
+      // 3. Sync Settings
+      if (data.settings && typeof data.settings === 'object') {
+        var setSheet = getOrCreateSheet("settings", ["key", "value"]);
+        var setRows = setSheet.getDataRange().getValues();
+        var setKeyMap = {};
+        for (var k = 1; k < setRows.length; k++) {
+          var key = String(setRows[k][0] || "").trim();
+          if (key) setKeyMap[key] = k + 1;
+        }
+
+        Object.keys(data.settings).forEach(function(k) {
+          var val = String(data.settings[k] === null || data.settings[k] === undefined ? "" : data.settings[k]);
+          if (setKeyMap[k]) {
+            setSheet.getRange(setKeyMap[k], 2).setValue(val);
+          } else {
+            setSheet.appendRow([k, val]);
+            setKeyMap[k] = setSheet.getLastRow();
+          }
+          syncStats.settingsUpdated++;
+        });
+      }
+
+      // 4. Sync Site Allowances
+      if (Array.isArray(data.siteAllowances) && data.siteAllowances.length > 0) {
+        var allowSheet = getOrCreateSheet("siteAllowances", ["employeeId", "siteId", "transportPrice"]);
+        var allowRows = allowSheet.getDataRange().getValues();
+        var allowMap = {};
+        for (var a = 1; a < allowRows.length; a++) {
+          var pair = String(allowRows[a][0] || "").trim() + "_" + String(allowRows[a][1] || "").trim();
+          if (pair !== "_") allowMap[pair] = a + 1;
+        }
+
+        data.siteAllowances.forEach(function(item) {
+          var eId = String(item.employeeId || "").trim();
+          var sId = String(item.siteId || "").trim();
+          if (!eId || !sId) return;
+          var pairKey = eId + "_" + sId;
+          var price = toNumberSafe(item.transportPrice, 0);
+
+          if (allowMap[pairKey]) {
+            allowSheet.getRange(allowMap[pairKey], 3).setValue(price);
+          } else {
+            allowSheet.appendRow([eId, sId, price]);
+            allowMap[pairKey] = allowSheet.getLastRow();
+          }
+          syncStats.allowancesSynced++;
+        });
+      }
+
+      return json({
+        success: true,
+        message: "تمت المزامنة الكاملة للنسخة الاحتياطية بنجاح",
+        stats: syncStats
+      });
+    }
+
   } catch(e){
     return json({success:false,message:e.toString().replace('Error: ', '')});
   }
