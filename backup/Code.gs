@@ -206,6 +206,92 @@ function getAllowanceRequestsSheet() {
   return sheet;
 }
 
+var DEVICE_HEADERS = ["id", "userId", "deviceId", "deviceModel", "osType", "browserInfo", "isActive", "createdAt", "updatedAt"];
+var DEVICE_CHANGE_REQUEST_HEADERS = ["id", "userId", "userName", "oldDeviceId", "newDeviceId", "newDeviceModel", "newOsType", "newBrowserInfo", "reason", "status", "adminNote", "createdAt", "processedAt", "processedBy"];
+var OFFICIAL_HOLIDAY_HEADERS = ["id", "holidayDate", "holidayName", "createdAt"];
+var APPROVAL_LOG_HEADERS = ["id", "requestId", "adminId", "adminName", "action", "details", "timestamp"];
+var EMPLOYEE_TELEGRAM_HEADERS = ["employeeId", "telegramChatId", "linkedAt", "lastVerifiedAt"];
+var TELEGRAM_LINK_TOKEN_HEADERS = ["token", "employeeId", "createdAt", "expiresAt"];
+var NOTIFICATION_LOG_HEADERS = ["id", "employeeId", "channel", "notificationType", "slot", "status", "sentAt", "notificationDate"];
+var PUSH_SUBSCRIPTION_HEADERS = ["id", "employeeId", "endpoint", "expirationTime", "p256dh", "auth", "createdAt", "updatedAt"];
+var ACTION_TOKEN_HEADERS = ["id", "token", "actionType", "relatedId", "payload", "expiresAt", "usedAt", "createdAt"];
+
+function getDevicesSheet() {
+  var sheet = getOrCreateSheet("devices", DEVICE_HEADERS);
+  ensureSheetHeaders(sheet, DEVICE_HEADERS);
+  return sheet;
+}
+
+function getDeviceChangeRequestsSheet() {
+  var sheet = getOrCreateSheet("device_change_requests", DEVICE_CHANGE_REQUEST_HEADERS);
+  ensureSheetHeaders(sheet, DEVICE_CHANGE_REQUEST_HEADERS);
+  return sheet;
+}
+
+function getOfficialHolidaysSheet() {
+  var sheet = getOrCreateSheet("official_holidays", OFFICIAL_HOLIDAY_HEADERS);
+  ensureSheetHeaders(sheet, OFFICIAL_HOLIDAY_HEADERS);
+  return sheet;
+}
+
+function getApprovalLogsSheet() {
+  var sheet = getOrCreateSheet("approvalLogs", APPROVAL_LOG_HEADERS);
+  ensureSheetHeaders(sheet, APPROVAL_LOG_HEADERS);
+  return sheet;
+}
+
+function getEmployeeTelegramSheet() {
+  var sheet = getOrCreateSheet("employee_telegram", EMPLOYEE_TELEGRAM_HEADERS);
+  ensureSheetHeaders(sheet, EMPLOYEE_TELEGRAM_HEADERS);
+  return sheet;
+}
+
+function getTelegramLinkTokensSheet() {
+  var sheet = getOrCreateSheet("telegram_link_tokens", TELEGRAM_LINK_TOKEN_HEADERS);
+  ensureSheetHeaders(sheet, TELEGRAM_LINK_TOKEN_HEADERS);
+  return sheet;
+}
+
+function getNotificationLogsSheet() {
+  var sheet = getOrCreateSheet("notification_logs", NOTIFICATION_LOG_HEADERS);
+  ensureSheetHeaders(sheet, NOTIFICATION_LOG_HEADERS);
+  return sheet;
+}
+
+function getPushSubscriptionsSheet() {
+  var sheet = getOrCreateSheet("push_subscriptions", PUSH_SUBSCRIPTION_HEADERS);
+  ensureSheetHeaders(sheet, PUSH_SUBSCRIPTION_HEADERS);
+  return sheet;
+}
+
+function getActionTokensSheet() {
+  var sheet = getOrCreateSheet("action_tokens", ACTION_TOKEN_HEADERS);
+  ensureSheetHeaders(sheet, ACTION_TOKEN_HEADERS);
+  return sheet;
+}
+
+function initAllSheets() {
+  getOrCreateSheet("employees", ["id","name","email","password","phone","role","assignedSites","faceDescriptor","transportPrice"]);
+  getOrCreateSheet("sites", ["id","name","latitude","longitude","radius","transportPrice","mapLink"]);
+  getOrCreateSheet("attendance", ["employeeId","employeeName","siteId","siteName","checkIn","checkOut","latitude","longitude","status","totalHours","transportPrice","isPaid","paidAmount","penaltyAmount","device_id"]);
+  getOrCreateSheet("settings", ["key", "value"]);
+  getOrCreateSheet("siteAllowances", ["employeeId", "siteId", "transportPrice"]);
+  getSiteRequestsSheet();
+  getLeaveRequestsSheet();
+  getAllowanceRequestsSheet();
+  getNotificationsSheet();
+  getDevicesSheet();
+  getDeviceChangeRequestsSheet();
+  getOfficialHolidaysSheet();
+  getApprovalLogsSheet();
+  getEmployeeTelegramSheet();
+  getTelegramLinkTokensSheet();
+  getNotificationLogsSheet();
+  getPushSubscriptionsSheet();
+  getActionTokensSheet();
+  return { success: true, message: "تمت تهيئة كافة الجداول الـ 18 بنجاح" };
+}
+
 function getTodayKey() {
   return Utilities.formatDate(new Date(), "Africa/Cairo", "yyyy-MM-dd");
 }
@@ -1092,6 +1178,24 @@ function doGet(e) {
 
   try {
 
+    if (action === "initAllSheets") {
+      return json(initAllSheets());
+    }
+
+    if (action === "getStats" || action === "getBackupStatus") {
+      var ss = getSpreadsheet();
+      var empSheet = ss.getSheetByName("employees");
+      var siteSheet = ss.getSheetByName("sites");
+      var attSheet = ss.getSheetByName("attendance");
+
+      return json({
+        success: true,
+        employees: empSheet ? Math.max(0, empSheet.getLastRow() - 1) : 0,
+        sites: siteSheet ? Math.max(0, siteSheet.getLastRow() - 1) : 0,
+        attendance: attSheet ? Math.max(0, attSheet.getLastRow() - 1) : 0
+      });
+    }
+
     if (action === "getDashboardData") {
       var ss = getSpreadsheet();
       return json({
@@ -1347,6 +1451,10 @@ function doPost(e) {
     var data = JSON.parse(e.postData.contents);
     var ss = getSpreadsheet();
     var action = data.action;
+
+    if (action === "initAllSheets") {
+      return json(initAllSheets());
+    }
 
     // 1. CREATE TRIGGERS (Auto Reporting Schedule)
     if (action === "createTriggers") {
@@ -2459,9 +2567,235 @@ function doPost(e) {
         });
       }
 
+      // 9. Sync Devices
+      if (Array.isArray(data.devices) && data.devices.length > 0) {
+        var devSheet = getDevicesSheet();
+        var devRows = devSheet.getDataRange().getValues();
+        var devMap = {};
+        for (var d = 1; d < devRows.length; d++) {
+          var pair = String(devRows[d][1] || "").trim() + "_" + String(devRows[d][2] || "").trim();
+          if (pair !== "_") devMap[pair] = d + 1;
+        }
+
+        data.devices.forEach(function(dev) {
+          var uId = String(dev.userId || dev.user_id || "").trim();
+          var dId = String(dev.deviceId || dev.device_id || "").trim();
+          if (!uId || !dId) return;
+          var key = uId + "_" + dId;
+
+          if (devMap[key]) {
+            var row = devMap[key];
+            devSheet.getRange(row, 7).setValue(dev.isActive !== false && dev.is_active !== false);
+            devSheet.getRange(row, 9).setValue(dev.updatedAt || dev.updated_at || "");
+          } else {
+            devSheet.appendRow([
+              dev.id || "",
+              uId,
+              dId,
+              dev.deviceModel || dev.device_model || "",
+              dev.osType || dev.os_type || "",
+              dev.browserInfo || dev.browser_info || "",
+              dev.isActive !== false && dev.is_active !== false,
+              dev.createdAt || dev.created_at || "",
+              dev.updatedAt || dev.updated_at || ""
+            ]);
+            devMap[key] = devSheet.getLastRow();
+            syncStats.devicesAdded = (syncStats.devicesAdded || 0) + 1;
+          }
+        });
+      }
+
+      // 10. Sync Device Change Requests
+      if (Array.isArray(data.deviceChangeRequests) && data.deviceChangeRequests.length > 0) {
+        var dcrSheet = getDeviceChangeRequestsSheet();
+        var dcrRows = dcrSheet.getDataRange().getValues();
+        var dcrMap = {};
+        for (var dc = 1; dc < dcrRows.length; dc++) {
+          var id = String(dcrRows[dc][0] || "").trim();
+          if (id) dcrMap[id] = dc + 1;
+        }
+
+        data.deviceChangeRequests.forEach(function(req) {
+          var rId = String(req.id || "").trim();
+          if (!rId) return;
+
+          if (dcrMap[rId]) {
+            var rRow = dcrMap[rId];
+            dcrSheet.getRange(rRow, 10).setValue(req.status || "");
+            dcrSheet.getRange(rRow, 11).setValue(req.adminNote || req.admin_note || "");
+            dcrSheet.getRange(rRow, 13).setValue(req.processedAt || req.processed_at || "");
+            dcrSheet.getRange(rRow, 14).setValue(req.processedBy || req.processed_by || "");
+          } else {
+            dcrSheet.appendRow([
+              rId,
+              req.userId || req.user_id || "",
+              req.userName || req.user_name || "",
+              req.oldDeviceId || req.old_device_id || "",
+              req.newDeviceId || req.new_device_id || "",
+              req.newDeviceModel || req.new_device_model || "",
+              req.newOsType || req.new_os_type || "",
+              req.newBrowserInfo || req.new_browser_info || "",
+              req.reason || "",
+              req.status || "pending",
+              req.adminNote || req.admin_note || "",
+              req.createdAt || req.created_at || "",
+              req.processedAt || req.processed_at || "",
+              req.processedBy || req.processed_by || ""
+            ]);
+            dcrMap[rId] = dcrSheet.getLastRow();
+            syncStats.deviceChangeRequestsAdded = (syncStats.deviceChangeRequestsAdded || 0) + 1;
+          }
+        });
+      }
+
+      // 11. Sync Official Holidays
+      if (Array.isArray(data.officialHolidays) && data.officialHolidays.length > 0) {
+        var holSheet = getOfficialHolidaysSheet();
+        var holRows = holSheet.getDataRange().getValues();
+        var holMap = {};
+        for (var h = 1; h < holRows.length; h++) {
+          var dKey = toDateKey(holRows[h][1]);
+          if (dKey) holMap[dKey] = h + 1;
+        }
+
+        data.officialHolidays.forEach(function(hol) {
+          var dKey = toDateKey(hol.holidayDate);
+          if (!dKey) return;
+
+          if (holMap[dKey]) {
+            holSheet.getRange(holMap[dKey], 3).setValue(hol.holidayName || "");
+          } else {
+            holSheet.appendRow([
+              hol.id || "",
+              dKey,
+              hol.holidayName || "",
+              hol.createdAt || ""
+            ]);
+            holMap[dKey] = holSheet.getLastRow();
+            syncStats.officialHolidaysAdded = (syncStats.officialHolidaysAdded || 0) + 1;
+          }
+        });
+      }
+
+      // 12. Sync Approval Logs
+      if (Array.isArray(data.approvalLogs) && data.approvalLogs.length > 0) {
+        var logSheet = getApprovalLogsSheet();
+        var logRows = logSheet.getDataRange().getValues();
+        var logMap = {};
+        for (var lg = 1; lg < logRows.length; lg++) {
+          var lgId = String(logRows[lg][0] || "").trim();
+          if (lgId) logMap[lgId] = lg + 1;
+        }
+
+        data.approvalLogs.forEach(function(l) {
+          var lId = String(l.id || "").trim();
+          if (!lId || logMap[lId]) return;
+
+          logSheet.appendRow([
+            lId,
+            l.requestId || "",
+            l.adminId || "",
+            l.adminName || "",
+            l.action || "",
+            typeof l.details === 'object' ? JSON.stringify(l.details) : String(l.details || ""),
+            l.timestamp || ""
+          ]);
+          logMap[lId] = logSheet.getLastRow();
+          syncStats.approvalLogsAdded = (syncStats.approvalLogsAdded || 0) + 1;
+        });
+      }
+
+      // 13. Sync Telegram Mappings
+      if (Array.isArray(data.employeeTelegram) && data.employeeTelegram.length > 0) {
+        var tgSheet = getEmployeeTelegramSheet();
+        var tgRows = tgSheet.getDataRange().getValues();
+        var tgMap = {};
+        for (var t = 1; t < tgRows.length; t++) {
+          var tId = String(tgRows[t][0] || "").trim();
+          if (tId) tgMap[tId] = t + 1;
+        }
+
+        data.employeeTelegram.forEach(function(tg) {
+          var empId = String(tg.employee_id || tg.employeeId || "").trim();
+          if (!empId) return;
+
+          if (tgMap[empId]) {
+            tgSheet.getRange(tgMap[empId], 2).setValue(String(tg.telegram_chat_id || tg.telegramChatId || ""));
+            tgSheet.getRange(tgMap[empId], 4).setValue(String(tg.last_verified_at || tg.lastVerifiedAt || ""));
+          } else {
+            tgSheet.appendRow([
+              empId,
+              String(tg.telegram_chat_id || tg.telegramChatId || ""),
+              String(tg.linked_at || tg.linkedAt || ""),
+              String(tg.last_verified_at || tg.lastVerifiedAt || "")
+            ]);
+            tgMap[empId] = tgSheet.getLastRow();
+            syncStats.employeeTelegramAdded = (syncStats.employeeTelegramAdded || 0) + 1;
+          }
+        });
+      }
+
+      // 14. Sync Notification Logs
+      if (Array.isArray(data.notificationLogs) && data.notificationLogs.length > 0) {
+        var nlSheet = getNotificationLogsSheet();
+        var nlRows = nlSheet.getDataRange().getValues();
+        var nlMap = {};
+        for (var n = 1; n < nlRows.length; n++) {
+          var nId = String(nlRows[n][0] || "").trim();
+          if (nId) nlMap[nId] = n + 1;
+        }
+
+        data.notificationLogs.forEach(function(nl) {
+          var nlId = String(nl.id || "").trim();
+          if (!nlId || nlMap[nlId]) return;
+
+          nlSheet.appendRow([
+            nlId,
+            nl.employee_id || nl.employeeId || "",
+            nl.channel || "",
+            nl.notification_type || nl.notificationType || "",
+            nl.slot || "",
+            nl.status || "",
+            nl.sent_at || nl.sentAt || "",
+            nl.notification_date || nl.notificationDate || ""
+          ]);
+          nlMap[nlId] = nlSheet.getLastRow();
+          syncStats.notificationLogsAdded = (syncStats.notificationLogsAdded || 0) + 1;
+        });
+      }
+
+      // 15. Sync Push Subscriptions
+      if (Array.isArray(data.pushSubscriptions) && data.pushSubscriptions.length > 0) {
+        var psSheet = getPushSubscriptionsSheet();
+        var psRows = psSheet.getDataRange().getValues();
+        var psMap = {};
+        for (var p = 1; p < psRows.length; p++) {
+          var ep = String(psRows[p][2] || "").trim();
+          if (ep) psMap[ep] = p + 1;
+        }
+
+        data.pushSubscriptions.forEach(function(ps) {
+          var ep = String(ps.endpoint || "").trim();
+          if (!ep || psMap[ep]) return;
+
+          psSheet.appendRow([
+            ps.id || "",
+            ps.employee_id || ps.employeeId || "",
+            ep,
+            ps.expiration_time || ps.expirationTime || "",
+            ps.p256dh || "",
+            ps.auth || "",
+            ps.created_at || ps.createdAt || "",
+            ps.updated_at || ps.updatedAt || ""
+          ]);
+          psMap[ep] = psSheet.getLastRow();
+          syncStats.pushSubscriptionsAdded = (syncStats.pushSubscriptionsAdded || 0) + 1;
+        });
+      }
+
       return json({
         success: true,
-        message: "تمت المزامنة الكاملة للنسخة الاحتياطية بنجاح",
+        message: "تمت المزامنة الكاملة للنسخة الاحتياطية لكافة الجداول بنجاح",
         stats: syncStats
       });
     }

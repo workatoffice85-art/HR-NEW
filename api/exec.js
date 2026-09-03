@@ -4063,6 +4063,7 @@ export default async function handler(req, res) {
 
         // --- BACKUP & DISASTER RECOVERY SYSTEM ---
         if (action === "getBackupStatus") {
+            const now = Date.now();
             const [
                 { count: sbEmpCount },
                 { count: sbSiteCount },
@@ -4076,20 +4077,40 @@ export default async function handler(req, res) {
             let gsEmpCount = null;
             let gsOnline = false;
 
+            // 1. Try fast getStats endpoint first (super fast response)
             try {
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 7000);
-                const gsRes = await fetch(`${GOOGLE_SCRIPT_URL}?action=getEmployees`, { signal: controller.signal });
+                const timeoutId = setTimeout(() => controller.abort(), 6000);
+                const statsRes = await fetch(`${GOOGLE_SCRIPT_URL}?action=getStats&t=${now}`, { signal: controller.signal });
                 clearTimeout(timeoutId);
-                if (gsRes.ok) {
-                    const gsData = await gsRes.json();
-                    if (gsData.success && Array.isArray(gsData.data)) {
-                        gsEmpCount = gsData.data.length;
+                if (statsRes.ok) {
+                    const statsJson = await statsRes.json();
+                    if (statsJson.success && typeof statsJson.employees === 'number') {
+                        gsEmpCount = statsJson.employees;
                         gsOnline = true;
                     }
                 }
-            } catch (e) {
-                console.error("Failed to check Google Sheets status:", e?.message || e);
+            } catch (fastErr) {
+                // Fallback to getEmployees below
+            }
+
+            // 2. Fallback to getEmployees with ample timeout (22 seconds)
+            if (!gsOnline) {
+                try {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 22000);
+                    const gsRes = await fetch(`${GOOGLE_SCRIPT_URL}?action=getEmployees&t=${now}`, { signal: controller.signal });
+                    clearTimeout(timeoutId);
+                    if (gsRes.ok) {
+                        const gsData = await gsRes.json();
+                        if (gsData.success && Array.isArray(gsData.data)) {
+                            gsEmpCount = gsData.data.length;
+                            gsOnline = true;
+                        }
+                    }
+                } catch (e) {
+                    console.error("Failed to check Google Sheets status:", e?.message || e);
+                }
             }
 
             const isSynced = gsOnline && (sbEmpCount === gsEmpCount);
@@ -4110,13 +4131,22 @@ export default async function handler(req, res) {
                 message: isSynced 
                     ? "النسخة الاحتياطية متطابقة بنسبة 100% مع قاعدة البيانات." 
                     : (gsOnline 
-                        ? `يوجد اختلاف: Supabase به (${sbEmpCount || 0}) موظف بينما Google Sheets به (${gsEmpCount || 0}) موظف. يرجى المزامنة.`
-                        : "تعذر الاتصال بـ Google Sheets حالياً.")
+                        ? `يوجد اختلاف: Supabase به (${sbEmpCount || 0}) موظف بينما Google Sheets به (${gsEmpCount || 0}) موظف. اضغط على زر المزامنة الآن.`
+                        : "تعذر الاتصال بـ Google Sheets حالياً (استجابة خوادم جوجل استغرقت وقتاً أطول). يرجى الضغط على زر إعادة الفحص.")
             });
         }
 
         if (action === "triggerFullBackup") {
-            // 1. Fetch live tables from Supabase (All Employees, Sites, Attendance, Requests, Settings)
+            async function fetchSafeTable(tbl) {
+                try {
+                    return await fetchAllRows(tbl, '*');
+                } catch (err) {
+                    console.warn(`Backup: safe fetch for ${tbl} skipped:`, err?.message || err);
+                    return [];
+                }
+            }
+
+            // 1. Fetch live tables from Supabase in parallel
             const [
                 employees,
                 sites,
@@ -4125,15 +4155,35 @@ export default async function handler(req, res) {
                 siteRequests,
                 allowanceRequests,
                 allowances,
+                devices,
+                deviceChangeRequests,
+                officialHolidays,
+                approvalLogs,
+                employeeTelegram,
+                telegramLinkTokens,
+                notificationLogs,
+                pushSubscriptions,
+                actionTokens,
+                notifications,
                 { data: settingsRows }
             ] = await Promise.all([
-                fetchAllRows('employees', '*'),
-                fetchAllRows('sites', '*'),
-                fetchAllRows('attendance', '*'),
-                fetchAllRows('leaveRequests', '*'),
-                fetchAllRows('siteRequests', '*'),
-                fetchAllRows('allowanceRequests', '*'),
-                fetchAllRows('siteAllowances', '*'),
+                fetchSafeTable('employees'),
+                fetchSafeTable('sites'),
+                fetchSafeTable('attendance'),
+                fetchSafeTable('leaveRequests'),
+                fetchSafeTable('siteRequests'),
+                fetchSafeTable('allowanceRequests'),
+                fetchSafeTable('siteAllowances'),
+                fetchSafeTable('devices'),
+                fetchSafeTable('device_change_requests'),
+                fetchSafeTable('official_holidays'),
+                fetchSafeTable('approvalLogs'),
+                fetchSafeTable('employee_telegram'),
+                fetchSafeTable('telegram_link_tokens'),
+                fetchSafeTable('notification_logs'),
+                fetchSafeTable('push_subscriptions'),
+                fetchSafeTable('action_tokens'),
+                fetchSafeTable('notifications'),
                 supabase.from('settings').select('*')
             ]);
 
@@ -4142,7 +4192,7 @@ export default async function handler(req, res) {
                 settingsRows.forEach(r => { settings[r.key] = r.value; });
             }
 
-            // 2. Prepare comprehensive payload
+            // 2. Prepare comprehensive payload of ALL 18 tables
             const backupPayload = {
                 action: 'syncFullBackup',
                 employees: employees.map(e => ({
@@ -4226,6 +4276,16 @@ export default async function handler(req, res) {
                     approvedBy: ar.approvedBy,
                     rejectionReason: ar.rejectionReason
                 })),
+                devices,
+                deviceChangeRequests,
+                officialHolidays,
+                approvalLogs,
+                employeeTelegram,
+                telegramLinkTokens,
+                notificationLogs,
+                pushSubscriptions,
+                actionTokens,
+                notifications,
                 settings: settings,
                 siteAllowances: allowances.map(a => ({
                     employeeId: a.employeeId,
@@ -4323,13 +4383,29 @@ export default async function handler(req, res) {
                     attendanceCount: attendance.length,
                     leaveRequestsCount: leaveRequests.length,
                     siteRequestsCount: siteRequests.length,
-                    allowancesCount: allowances.length
+                    allowancesCount: allowances.length,
+                    devicesCount: devices.length,
+                    deviceChangeRequestsCount: deviceChangeRequests.length,
+                    officialHolidaysCount: officialHolidays.length,
+                    approvalLogsCount: approvalLogs.length,
+                    employeeTelegramCount: employeeTelegram.length,
+                    notificationLogsCount: notificationLogs.length,
+                    pushSubscriptionsCount: pushSubscriptions.length
                 },
                 details: gsResponseData
             });
         }
 
         if (action === "exportFullBackup") {
+            async function fetchSafeTable(tbl) {
+                try {
+                    return await fetchAllRows(tbl, '*');
+                } catch (err) {
+                    console.warn(`Export: safe fetch for ${tbl} skipped:`, err?.message || err);
+                    return [];
+                }
+            }
+
             const [
                 employees,
                 sites,
@@ -4340,17 +4416,33 @@ export default async function handler(req, res) {
                 siteAllowances,
                 notifications,
                 holidays,
+                devices,
+                deviceChangeRequests,
+                approvalLogs,
+                employeeTelegram,
+                telegramLinkTokens,
+                notificationLogs,
+                pushSubscriptions,
+                actionTokens,
                 { data: settingsRows }
             ] = await Promise.all([
-                fetchAllRows('employees', '*'),
-                fetchAllRows('sites', '*'),
-                fetchAllRows('attendance', '*'),
-                fetchAllRows('siteRequests', '*'),
-                fetchAllRows('leaveRequests', '*'),
-                fetchAllRows('allowanceRequests', '*'),
-                fetchAllRows('siteAllowances', '*'),
-                fetchAllRows('notifications', '*'),
-                fetchAllRows('official_holidays', '*'),
+                fetchSafeTable('employees'),
+                fetchSafeTable('sites'),
+                fetchSafeTable('attendance'),
+                fetchSafeTable('siteRequests'),
+                fetchSafeTable('leaveRequests'),
+                fetchSafeTable('allowanceRequests'),
+                fetchSafeTable('siteAllowances'),
+                fetchSafeTable('notifications'),
+                fetchSafeTable('official_holidays'),
+                fetchSafeTable('devices'),
+                fetchSafeTable('device_change_requests'),
+                fetchSafeTable('approvalLogs'),
+                fetchSafeTable('employee_telegram'),
+                fetchSafeTable('telegram_link_tokens'),
+                fetchSafeTable('notification_logs'),
+                fetchSafeTable('push_subscriptions'),
+                fetchSafeTable('action_tokens'),
                 supabase.from('settings').select('*')
             ]);
 
@@ -4371,7 +4463,15 @@ export default async function handler(req, res) {
                     allowanceRequests: allowanceRequests.length,
                     siteAllowances: siteAllowances.length,
                     notifications: notifications.length,
-                    officialHolidays: holidays.length
+                    officialHolidays: holidays.length,
+                    devices: devices.length,
+                    deviceChangeRequests: deviceChangeRequests.length,
+                    approvalLogs: approvalLogs.length,
+                    employeeTelegram: employeeTelegram.length,
+                    telegramLinkTokens: telegramLinkTokens.length,
+                    notificationLogs: notificationLogs.length,
+                    pushSubscriptions: pushSubscriptions.length,
+                    actionTokens: actionTokens.length
                 },
                 data: {
                     employees,
@@ -4383,6 +4483,14 @@ export default async function handler(req, res) {
                     siteAllowances,
                     notifications,
                     officialHolidays: holidays,
+                    devices,
+                    deviceChangeRequests,
+                    approvalLogs,
+                    employeeTelegram,
+                    telegramLinkTokens,
+                    notificationLogs,
+                    pushSubscriptions,
+                    actionTokens,
                     settings
                 }
             });
