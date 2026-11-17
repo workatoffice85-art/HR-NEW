@@ -2423,6 +2423,143 @@ async function fetchEmployees(force = false) {
     document.getElementById('loader').classList.add('hidden');
 }
 
+let currentEmployeeFilter = 'all'; // 'all', 'inactive', 'never', 'long_inactive', 'active'
+let currentEmployeeSearchQuery = '';
+
+// Helper: Calculate employee last attendance date and activity status
+function getEmployeeActivityStatus(employeeId) {
+    if (!allAttendanceData || allAttendanceData.length === 0) {
+        return {
+            status: 'never',
+            label: 'لم يحضر أبداً ⚠️',
+            color: '#ef4444',
+            bg: 'rgba(239, 68, 68, 0.12)',
+            diffDays: Infinity,
+            lastDateStr: null,
+            isInactive: true
+        };
+    }
+
+    let latestCheckIn = null;
+    const empIdStr = String(employeeId);
+    for (let i = 0; i < allAttendanceData.length; i++) {
+        const att = allAttendanceData[i];
+        if (String(att.employeeId) === empIdStr && att.checkIn) {
+            if (!latestCheckIn || att.checkIn > latestCheckIn) {
+                latestCheckIn = att.checkIn;
+            }
+        }
+    }
+
+    if (!latestCheckIn) {
+        return {
+            status: 'never',
+            label: 'لم يحضر أبداً ⚠️',
+            color: '#ef4444',
+            bg: 'rgba(239, 68, 68, 0.12)',
+            diffDays: Infinity,
+            lastDateStr: null,
+            isInactive: true
+        };
+    }
+
+    const lastDate = new Date(latestCheckIn);
+    const now = new Date();
+    const diffMs = now - lastDate;
+    const diffDays = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+    const dateFormatted = formatCairoDate(latestCheckIn);
+
+    if (diffDays >= 30) {
+        return {
+            status: 'long_inactive',
+            label: `${dateFormatted} (منذ ${diffDays} يوم) ⚠️`,
+            color: '#f59e0b',
+            bg: 'rgba(245, 158, 11, 0.12)',
+            diffDays: diffDays,
+            lastDateStr: dateFormatted,
+            isInactive: true
+        };
+    } else {
+        const timeLabel = diffDays === 0 ? 'اليوم' : diffDays === 1 ? 'أمس' : `منذ ${diffDays} يوم`;
+        return {
+            status: 'active',
+            label: `${dateFormatted} (${timeLabel})`,
+            color: '#10b981',
+            bg: 'rgba(16, 185, 129, 0.12)',
+            diffDays: diffDays,
+            lastDateStr: dateFormatted,
+            isInactive: false
+        };
+    }
+}
+
+function setEmployeeFilter(filter) {
+    currentEmployeeFilter = filter;
+    document.querySelectorAll('.btn-filter').forEach(btn => btn.classList.remove('active'));
+    if (filter === 'all') document.getElementById('btnFilterAll')?.classList.add('active');
+    else if (filter === 'inactive') document.getElementById('btnFilterInactive')?.classList.add('active');
+    else if (filter === 'never') document.getElementById('btnFilterNever')?.classList.add('active');
+    else if (filter === 'long_inactive') document.getElementById('btnFilterLongInactive')?.classList.add('active');
+    else if (filter === 'active') document.getElementById('btnFilterActive')?.classList.add('active');
+    filterEmployeesList();
+}
+
+function filterEmployeesList() {
+    const input = document.getElementById('employeeSearchInput');
+    currentEmployeeSearchQuery = (input?.value || '').toLowerCase().trim();
+    renderEmployeesTable(allEmployees);
+}
+
+function toggleSelectAllEmployees(checked) {
+    document.querySelectorAll('.emp-checkbox').forEach(cb => {
+        cb.checked = checked;
+    });
+    updateSelectedEmployeesCount();
+}
+
+function updateSelectedEmployeesCount() {
+    const selected = document.querySelectorAll('.emp-checkbox:checked').length;
+    const container = document.getElementById('bulkDeleteContainer');
+    const badge = document.getElementById('selectedCountBadge');
+    if (badge) badge.innerText = String(selected);
+    if (container) container.style.display = selected > 0 ? 'flex' : 'none';
+}
+
+async function bulkDeleteSelectedEmployees() {
+    const selectedBoxes = Array.from(document.querySelectorAll('.emp-checkbox:checked'));
+    if (selectedBoxes.length === 0) return alert('يرجى تحديد موظف واحد على الأقل للحذف.');
+
+    const count = selectedBoxes.length;
+    const names = selectedBoxes.slice(0, 5).map(cb => cb.dataset.name).join('، ');
+    const moreText = count > 5 ? ` و ${count - 5} موظفين آخرين` : '';
+
+    if (!confirm(`⚠️ تحذير: هل أنت متأكد من حذف ${count} حساب موظف (${names}${moreText}) نهائياً؟\nسيتم حذف جميع سجلاتهم وحساباتهم ولا يمكن التراجع عن هذا الإجراء.`)) {
+        return;
+    }
+
+    document.getElementById('loader').classList.remove('hidden');
+    let successCount = 0;
+    try {
+        for (const cb of selectedBoxes) {
+            const empId = cb.value;
+            const res = await fetch(API_URL, {
+                method: 'POST',
+                body: JSON.stringify({ action: 'deleteEmployee', id: empId }),
+                headers: { 'Content-Type': 'text/plain' }
+            });
+            const result = await res.json();
+            if (result.success) successCount++;
+        }
+        alert(`✅ تم حذف ${successCount} موظف بنجاح.`);
+        fetchEmployees(true);
+    } catch (e) {
+        console.error("Bulk delete error:", e);
+        alert("حدث خطأ أثناء الحذف: " + e.message);
+        fetchEmployees(true);
+    }
+    document.getElementById('loader').classList.add('hidden');
+}
+
 function renderEmployeesTable(data) {
     const canManageEmp = canManageEmployees();
     const btnAddEmp = document.getElementById('btnAddEmployee');
@@ -2431,25 +2568,93 @@ function renderEmployeesTable(data) {
     const thEmpActions = document.getElementById('thEmployeeActions');
     if (thEmpActions) thEmpActions.style.display = canManageEmp ? 'table-cell' : 'none';
 
+    const thCheckbox = document.getElementById('thEmployeeCheckbox');
+    if (thCheckbox) thCheckbox.style.display = canManageEmp ? 'table-cell' : 'none';
+
+    const selectAllCheckbox = document.getElementById('selectAllEmployeesCheckbox');
+    if (selectAllCheckbox) selectAllCheckbox.checked = false;
+    updateSelectedEmployeesCount();
+
     const tbody = document.getElementById('employeesTableBody');
     tbody.innerHTML = '';
 
     // Hide full HR admins (role === 'hr') from hr_viewer accounts
-    const filteredData = canManageEmp ? data : data.filter(record => record.role !== 'hr');
+    const baseList = canManageEmp ? data : data.filter(record => record.role !== 'hr');
+
+    // Calculate counts for the filter tabs
+    let countAll = 0, countInactive = 0, countNever = 0, countLongInactive = 0, countActive = 0;
+    baseList.forEach(record => {
+        countAll++;
+        const act = getEmployeeActivityStatus(record.id);
+        if (act.isInactive) countInactive++;
+        if (act.status === 'never') countNever++;
+        if (act.status === 'long_inactive') countLongInactive++;
+        if (act.status === 'active') countActive++;
+    });
+
+    if (document.getElementById('countEmpAll')) document.getElementById('countEmpAll').innerText = `(${countAll})`;
+    if (document.getElementById('countEmpInactive')) document.getElementById('countEmpInactive').innerText = `(${countInactive})`;
+    if (document.getElementById('countEmpNever')) document.getElementById('countEmpNever').innerText = `(${countNever})`;
+    if (document.getElementById('countEmpLongInactive')) document.getElementById('countEmpLongInactive').innerText = `(${countLongInactive})`;
+    if (document.getElementById('countEmpActive')) document.getElementById('countEmpActive').innerText = `(${countActive})`;
+
+    // Filter display list
+    const filteredData = baseList.filter(record => {
+        const act = getEmployeeActivityStatus(record.id);
+        if (currentEmployeeFilter === 'inactive' && !act.isInactive) return false;
+        if (currentEmployeeFilter === 'never' && act.status !== 'never') return false;
+        if (currentEmployeeFilter === 'long_inactive' && act.status !== 'long_inactive') return false;
+        if (currentEmployeeFilter === 'active' && act.status !== 'active') return false;
+
+        if (currentEmployeeSearchQuery) {
+            const name = (record.name || '').toLowerCase();
+            const email = (record.email || '').toLowerCase();
+            const phone = (record.phone || '').toLowerCase();
+            if (!name.includes(currentEmployeeSearchQuery) &&
+                !email.includes(currentEmployeeSearchQuery) &&
+                !phone.includes(currentEmployeeSearchQuery)) {
+                return false;
+            }
+        }
+        return true;
+    });
+
+    if (filteredData.length === 0) {
+        const colSpanCount = canManageEmp ? 9 : 8;
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="${colSpanCount}" style="text-align:center; padding:30px; color:var(--text-muted); font-size:0.95rem;">
+                    لا يوجد موظفون يطابقون خيارات الفرز الحالية.
+                </td>
+            </tr>
+        `;
+        return;
+    }
 
     filteredData.forEach(record => {
         let roleText = 'موظف (Employee)';
         if (record.role === 'hr') roleText = 'إدارة HR (كاملة)';
         else if (record.role === 'hr_viewer') roleText = 'مسؤول HR (عرض واطلاع)';
 
+        const act = getEmployeeActivityStatus(record.id);
+
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td data-label="الاسم">${record.name}</td>
+            ${canManageEmp ? `
+            <td style="text-align: center; vertical-align: middle;">
+                <input type="checkbox" class="emp-checkbox" value="${record.id}" data-name="${record.name}" onchange="updateSelectedEmployeesCount()">
+            </td>` : ''}
+            <td data-label="الاسم" style="font-weight: bold;">${record.name}</td>
             <td data-label="البريد">${record.email}</td>
-            <td data-label="الهاتف">${record.phone || '-'}</td>
+            <td data-label="الهاتف" dir="ltr" style="text-align: right;">${record.phone || '-'}</td>
             <td data-label="المرتب">${record.salary ? parseFloat(record.salary).toFixed(0) + ' ج.م' : '-'}</td>
             <td data-label="الصلاحية">${roleText}</td>
             <td data-label="البصمة">${record.faceDescriptor ? '✅ مسجل' : '❌ لا يوجد'}</td>
+            <td data-label="آخر حضور / النشاط">
+                <span style="color:${act.color}; background:${act.bg}; padding: 4px 10px; border-radius: 6px; font-weight: bold; font-size: 0.8rem; display: inline-block;">
+                    ${act.label}
+                </span>
+            </td>
             ${canManageEmp ? `
             <td data-label="الإجراءات" style="display:flex; gap:8px; justify-content:center; padding:10px;">
                 <button class="btn-primary" style="padding:5px 12px; font-size:0.85rem; width:auto;" onclick="editEmployee('${record.id}')">تعديل ✏️</button>

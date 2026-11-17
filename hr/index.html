@@ -68,6 +68,31 @@
             color: var(--text-muted);
         }
 
+        /* Employee Filter Button Styles */
+        .btn-filter {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--card-border);
+            color: var(--text-muted);
+            padding: 6px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s ease;
+            font-family: inherit;
+        }
+
+        .btn-filter:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-main);
+        }
+
+        .btn-filter.active {
+            background: var(--secondary);
+            color: #fff;
+            border-color: var(--secondary);
+            font-weight: bold;
+        }
+
         /* Modal Styles */
         .modal {
             position: fixed;
@@ -639,25 +664,68 @@
             </div>
             <!-- Employees Tab -->
             <div id="tab-employees" class="tab-content hidden">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-                    <h2>قائمة الموظفين</h2>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
+                    <div>
+                        <h2 style="margin:0;">قائمة الموظفين</h2>
+                        <small style="color:var(--text-muted);">إدارة الحسابات ومتابعة النشاط وفرز وحذف الحسابات غير النشطة</small>
+                    </div>
                     <div style="display:flex; gap:10px;">
-                        <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="refreshData()">تحديث
-                            مجمع 🔄</button>
+                        <button class="btn-primary" style="width:auto; padding:8px 15px;" onclick="refreshData()">تحديث مجمع 🔄</button>
                         <button id="btnAddEmployee" class="btn-primary" style="width:auto; background:var(--secondary);"
                             onclick="openEmployeeModal()">+ إضافة موظف</button>
                     </div>
                 </div>
+
+                <!-- Filter & Search Bar -->
+                <div class="glass-card" style="margin-bottom: 20px; padding: 15px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; flex:1;">
+                            <input type="text" id="employeeSearchInput" placeholder="🔍 بحث بالاسم أو البريد أو الهاتف..." 
+                                oninput="filterEmployeesList()" 
+                                style="min-width: 240px; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--card-border); background: rgba(0,0,0,0.2); color: inherit;">
+                            
+                            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                                <button type="button" class="btn-filter active" id="btnFilterAll" onclick="setEmployeeFilter('all')">
+                                    الكل <span id="countEmpAll" style="opacity:0.8;">(0)</span>
+                                </button>
+                                <button type="button" class="btn-filter" id="btnFilterInactive" onclick="setEmployeeFilter('inactive')" style="color:#ef4444; border-color:rgba(239,68,68,0.3);">
+                                    غير النشطين ⚠️ <span id="countEmpInactive" style="font-weight:bold;">(0)</span>
+                                </button>
+                                <button type="button" class="btn-filter" id="btnFilterNever" onclick="setEmployeeFilter('never')">
+                                    لم يحضروا أبداً ❌ <span id="countEmpNever">(0)</span>
+                                </button>
+                                <button type="button" class="btn-filter" id="btnFilterLongInactive" onclick="setEmployeeFilter('long_inactive')">
+                                    منقطعون 30+ يوم ⏱️ <span id="countEmpLongInactive">(0)</span>
+                                </button>
+                                <button type="button" class="btn-filter" id="btnFilterActive" onclick="setEmployeeFilter('active')">
+                                    النشطين فقط ✅ <span id="countEmpActive">(0)</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="bulkDeleteContainer" style="display:none; align-items:center; gap:8px;">
+                            <button class="btn-danger" onclick="bulkDeleteSelectedEmployees()" style="padding: 8px 16px; font-size: 0.85rem; font-weight: bold; background: #ef4444; color: #fff; border: none; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                                <span>حذف المحددين 🗑️</span>
+                                <span id="selectedCountBadge" style="background: rgba(0,0,0,0.3); padding: 2px 7px; border-radius: 10px;">0</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="table-container">
                     <table>
                         <thead>
                             <tr>
+                                <th id="thEmployeeCheckbox" style="padding: 15px; width: 40px; text-align: center;">
+                                    <input type="checkbox" id="selectAllEmployeesCheckbox" onchange="toggleSelectAllEmployees(this.checked)" title="تحديد الكل">
+                                </th>
                                 <th style="padding: 15px;">الاسم</th>
                                 <th style="padding: 15px;">البريد</th>
                                 <th style="padding: 15px;">الهاتف</th>
                                 <th style="padding: 15px;">المرتب</th>
                                 <th style="padding: 15px;">الصلاحية</th>
                                 <th style="padding: 15px;">البصمة</th>
+                                <th style="padding: 15px;">آخر حضور / النشاط</th>
                                 <th id="thEmployeeActions" style="padding: 15px;">الإجراءات</th>
                             </tr>
                         </thead>
