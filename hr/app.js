@@ -275,6 +275,25 @@ function showTab(tabName) {
     // Save active tab
     localStorage.setItem('hrActiveTab', tabName);
 
+    // Update active tab title in executive top header
+    const tabTitles = {
+        'attendance': 'مراقبة الحضور والعمليات اليومية',
+        'reports': 'التقارير الشهرية ومسيرات الرواتب',
+        'employeeDetails': 'التقرير التفصيلي لكل موظف',
+        'employees': 'إدارة الموظفين والصلاحيات',
+        'sites': 'إدارة مواقع وفروع العمل',
+        'siteRequests': 'طلبات تسجيل المواقع الجديدة 📍',
+        'allowanceRequests': 'طلبات زيادة البدلات 💰',
+        'leaveRequests': 'طلبات الإجازات 📅',
+        'deviceManagement': 'إدارة الأجهزة المعتمدة 📱',
+        'officialHolidays': 'العطلات الرسمية والإجازات 🌴',
+        'settings': 'إعدادات النظام العامة ⚙️'
+    };
+    const titleEl = document.getElementById('currentTabTitle');
+    if (titleEl && tabTitles[tabName]) {
+        titleEl.innerText = tabTitles[tabName];
+    }
+
     // Reset loader state before fetching new data
     const loader = document.getElementById('loader');
     if (loader) loader.classList.add('hidden');
@@ -300,9 +319,9 @@ function showTab(tabName) {
         }, 0);
     }
 
-    // Close sidebar on mobile after clicking a link
+    // Close sidebar on mobile/tablet after clicking a link
     const sidebar = document.querySelector('.sidebar');
-    if (window.innerWidth <= 768 && sidebar && sidebar.classList.contains('active')) {
+    if (window.innerWidth <= 1024 && sidebar && sidebar.classList.contains('active')) {
         toggleSidebar();
     }
 }

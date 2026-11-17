@@ -15,36 +15,79 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
     <style>
-        /* Sidebar Styles (HR-specific) */
+        /* Enterprise Sidebar Styles (HR-specific) */
         .sidebar {
-            width: 250px;
-            background: rgba(15, 23, 42, 0.9);
-            padding: 20px;
+            width: 260px;
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
             border-left: 1px solid var(--card-border);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px 14px;
+            box-sizing: border-box;
+            z-index: 1000;
         }
 
-        .sidebar h2 {
+        .sidebar-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 8px 18px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            margin-bottom: 12px;
+        }
+
+        .sidebar-brand h2 {
+            margin: 0;
+            font-size: 1.25rem;
             color: var(--secondary);
-            margin-bottom: 30px;
-            font-size: 1.5rem;
-            text-align: center;
+            font-weight: 800;
+        }
+
+        .sidebar-category {
+            font-size: 0.72rem;
+            font-weight: 800;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 12px 10px 4px;
+            margin-top: 4px;
         }
 
         .nav-link {
-            display: block;
-            padding: 12px 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
             color: var(--text-muted);
             text-decoration: none;
-            border-radius: 8px;
-            margin-bottom: 10px;
-            transition: all 0.3s;
+            border-radius: 12px;
+            margin-bottom: 4px;
+            transition: all 0.2s ease;
             cursor: pointer;
+            font-size: 0.88rem;
+            font-weight: 600;
         }
 
-        .nav-link:hover,
+        .nav-link:hover {
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+            transform: translateX(-3px);
+        }
+
         .nav-link.active {
-            background: rgba(79, 70, 229, 0.2);
-            color: var(--primary);
+            background: linear-gradient(135deg, rgba(94, 173, 50, 0.25), rgba(41, 180, 23, 0.15)) !important;
+            color: var(--primary) !important;
+            border: 1px solid rgba(94, 173, 50, 0.35) !important;
+            font-weight: 700 !important;
+        }
+
+        .sidebar-footer {
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            padding-top: 14px;
+            margin-top: 14px;
         }
 
         /* Table Styles */
@@ -117,32 +160,68 @@
             overflow-y: auto;
         }
 
-        /* Responsive Utilities */
-        @media (min-width: 769px) {
-            .mobile-only {
-                display: none !important;
+        /* Responsive Layout & Sidebar System */
+        @media (min-width: 1025px) {
+            .dashboard-layout {
+                display: flex !important;
+                flex-direction: row;
+                min-height: 100vh;
             }
 
-            .pc-only {
+            .sidebar {
+                position: sticky;
+                top: 0;
+                height: 100vh;
+                overflow-y: auto;
                 display: flex !important;
             }
 
-            .dashboard-layout {
-                display: block;
+            .main-content {
+                flex: 1;
+                min-width: 0;
+                padding: 24px 30px;
+                overflow-y: auto;
             }
-        }
 
-        @media (max-width: 768px) {
-            .pc-only {
+            .mobile-toggle,
+            .mobile-toggle-btn {
                 display: none !important;
             }
 
-            .mobile-only {
+            .sidebar-overlay {
+                display: none !important;
+            }
+        }
+
+        @media (max-width: 1024px) {
+            .dashboard-layout {
                 display: block !important;
             }
 
-            .dashboard-layout {
-                display: flex;
+            .sidebar {
+                position: fixed;
+                top: 0;
+                right: -290px;
+                width: 275px;
+                height: 100vh;
+                box-shadow: -10px 0 40px rgba(0, 0, 0, 0.6);
+                transition: right 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+                overflow-y: auto;
+                z-index: 10000;
+            }
+
+            .sidebar.active {
+                right: 0 !important;
+            }
+
+            .main-content {
+                width: 100%;
+                padding: 16px 12px;
+                box-sizing: border-box;
+            }
+
+            .mobile-toggle-btn {
+                display: flex !important;
             }
         }
 
@@ -254,23 +333,37 @@
         }
 
         .kpi-card {
-            background: rgba(30, 41, 59, 0.8);
+            background: rgba(30, 41, 59, 0.7);
             border: 1px solid var(--card-border);
-            padding: 20px;
-            border-radius: 12px;
+            padding: 22px 18px;
+            border-radius: 18px;
             text-align: center;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .kpi-card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(94, 173, 50, 0.4);
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
         }
 
         .kpi-card h3 {
             color: var(--text-muted);
-            font-size: 1rem;
-            margin-bottom: 10px;
+            font-size: 0.92rem;
+            margin-bottom: 8px;
+            font-weight: 600;
         }
 
         .kpi-value {
             color: var(--primary);
-            font-size: 2rem;
-            font-weight: bold;
+            font-size: 2.2rem;
+            font-weight: 800;
+            letter-spacing: -0.5px;
         }
 
         .charts-grid {
@@ -324,115 +417,142 @@
 
     <!-- Dashboard Layout -->
     <div id="dashboardSection" class="dashboard-layout hidden fade-in">
-        <!-- Sidebar (Mobile Only) -->
-        <div class="sidebar mobile-only">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-                <div style="display:flex; align-items:center; gap:8px;">
+        <!-- Unified Sidebar (Desktop Sticky & Mobile Drawer) -->
+        <div class="sidebar">
+            <div>
+                <div class="sidebar-brand">
                     <img src="../assets/app_icon.png" alt="Logo"
-                        style="width: 28px; height: 28px; filter: drop-shadow(0 0 4px rgba(94, 173, 50, 0.3));">
-                    <h2 style="margin:0; font-size:1.3rem; color:var(--secondary); font-family:'Tajawal',sans-serif;">
-                        حضور وانصراف</h2>
+                        style="width: 34px; height: 34px; filter: drop-shadow(0 0 6px rgba(94, 173, 50, 0.4));">
+                    <h2>حضور وانصراف</h2>
                 </div>
-                <!-- Mobile Notification Bell -->
-                <div id="notificationContainerMobile" style="position:relative;">
-                    <button id="notificationBellMobile" onclick="toggleNotifications('mobile')"
-                        style="background:transparent; border:1px solid var(--card-border); color:#fff; padding:8px; border-radius:10px; cursor:pointer; position:relative;">
-                        🔔 <span id="notificationBadgeMobile" class="hidden badge-dot"></span>
-                    </button>
-                    <!-- Mobile Dropdown -->
-                    <div id="notificationDropdownMobile" class="hidden"
-                        style="position:absolute; top:100%; left:0; margin-top:10px; width:280px; max-height:350px; overflow-y:auto; background:#1e293b; border:1px solid var(--card-border); border-radius:12px; z-index:1100; box-shadow:0 15px 40px rgba(0,0,0,0.6);">
+
+                <div class="sidebar-category">العمليات اليومية</div>
+                <a class="nav-link active" onclick="showTab('attendance')">
+                    <span>🕒</span>
+                    <span>مراقبة الحضور</span>
+                </a>
+                <a class="nav-link" onclick="showTab('siteRequests')">
+                    <span>📍</span>
+                    <span>طلبات المواقع</span>
+                </a>
+                <a class="nav-link" onclick="showTab('allowanceRequests')">
+                    <span>💰</span>
+                    <span>طلبات البدلات</span>
+                </a>
+                <a class="nav-link" onclick="showTab('leaveRequests')">
+                    <span>📅</span>
+                    <span>طلبات الإجازات</span>
+                </a>
+
+                <div class="sidebar-category">التقارير المالية</div>
+                <a class="nav-link" onclick="showTab('reports')">
+                    <span>📊</span>
+                    <span>التقارير الشهرية</span>
+                </a>
+                <a class="nav-link" onclick="showTab('employeeDetails')">
+                    <span>📑</span>
+                    <span>التقرير التفصيلي</span>
+                </a>
+
+                <div class="sidebar-category">إدارة النظام</div>
+                <a class="nav-link" onclick="showTab('employees')">
+                    <span>👥</span>
+                    <span>إدارة الموظفين</span>
+                </a>
+                <a class="nav-link" onclick="showTab('sites')">
+                    <span>🏢</span>
+                    <span>إدارة المواقع</span>
+                </a>
+                <a class="nav-link" onclick="showTab('deviceManagement')">
+                    <span>📱</span>
+                    <span>إدارة الأجهزة</span>
+                </a>
+                <a class="nav-link" onclick="showTab('officialHolidays')">
+                    <span>🌴</span>
+                    <span>العطلات الرسمية</span>
+                </a>
+                <a class="nav-link" onclick="showTab('settings')">
+                    <span>⚙️</span>
+                    <span>إعدادات النظام</span>
+                </a>
+            </div>
+
+            <div class="sidebar-footer">
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 10px;">
+                    <div style="display:flex; align-items:center; gap:8px;">
                         <div
-                            style="padding:10px 15px; border-bottom:1px solid var(--card-border); display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02);">
-                            <strong style="font-size:0.9rem;">الإشعارات</strong>
-                            <button
-                                style="background:none; border:none; color:var(--secondary); cursor:pointer; font-size:11px;"
-                                onclick="markAllNotificationsAsRead()">مسح</button>
+                            style="width:34px; height:34px; background:linear-gradient(135deg, var(--primary), var(--secondary)); border-radius:10px; display:flex; align-items:center; justify-content:center; font-weight:bold; color:#fff; font-size:0.8rem;">
+                            HR</div>
+                        <div>
+                            <div id="hrNameDisplay" style="font-weight:bold; color:var(--text-main); font-size:0.85rem;">مدير النظام</div>
+                            <small style="color:var(--text-muted); font-size:0.75rem;">مسؤول الإدارة</small>
                         </div>
-                        <div id="notificationListMobile"></div>
                     </div>
                 </div>
+                <button onclick="logout()"
+                    style="width:100%; padding:9px; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.25); color:var(--danger); border-radius:10px; font-weight:bold; font-size:0.85rem; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:6px; font-family:inherit;">
+                    <span>تسجيل خروج</span>
+                    <span>🚪</span>
+                </button>
             </div>
-            <a class="nav-link active" onclick="showTab('attendance')">مراقبة الحضور اليومي</a>
-            <a class="nav-link" onclick="showTab('reports')">التقارير الشهرية</a>
-            <a class="nav-link" onclick="showTab('employeeDetails')">التقرير التفصيلي لكل موظف</a>
-            <a class="nav-link" onclick="showTab('employees')">إدارة الموظفين</a>
-            <a class="nav-link" onclick="showTab('sites')">إدارة المواقع</a>
-            <a class="nav-link" onclick="showTab('siteRequests')">طلبات تسجيل المواقع 📍</a>
-            <a class="nav-link" onclick="showTab('allowanceRequests')">زيادة البدلات 💰</a>
-            <a class="nav-link" onclick="showTab('leaveRequests')">طلبات الإجازات 📅</a>
-            <a class="nav-link" onclick="showTab('deviceManagement')">إدارة الأجهزة 📱</a>
-            <a class="nav-link" onclick="showTab('officialHolidays')">الإجازات الرسمية 📅</a>
-            <a class="nav-link" onclick="showTab('settings')">الإعدادات ⚙️</a>
-            <a class="nav-link" onclick="logout()" style="color:var(--danger); margin-top:50px;">تسجيل خروج</a>
         </div>
 
         <div class="main-content">
-            <!-- Top Header (PC Only) -->
-            <div class="top-header pc-only"
-                style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; background:var(--card-bg); padding:12px 25px; border-radius:16px; border:1px solid var(--card-border); backdrop-filter:blur(10px); position:sticky; top:10px; z-index:1001; box-shadow:0 10px 30px rgba(0,0,0,0.3);">
+            <!-- Executive Top Header -->
+            <div class="top-header"
+                style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; background:var(--card-bg); padding:14px 22px; border-radius:18px; border:1px solid var(--card-border); backdrop-filter:blur(16px); position:sticky; top:12px; z-index:100; box-shadow:0 10px 30px rgba(0,0,0,0.25);">
+                
                 <div style="display:flex; align-items:center; gap:12px;">
-                    <img src="../assets/app_icon.png" alt="Logo"
-                        style="width: 32px; height: 32px; filter: drop-shadow(0 0 6px rgba(94, 173, 50, 0.3));">
-                    <h2 style="margin:0; font-size:1.3rem; color:var(--secondary); font-family:'Tajawal',sans-serif;">
-                        حضور وانصراف - HR</h2>
+                    <button class="mobile-toggle-btn" onclick="toggleSidebar()"
+                        style="background:rgba(255,255,255,0.06); border:1px solid var(--card-border); color:#fff; width:38px; height:38px; border-radius:10px; cursor:pointer; font-size:1.2rem; display:none; align-items:center; justify-content:center;">☰</button>
+                    <div>
+                        <h2 id="currentTabTitle" style="margin:0; font-size:1.25rem; color:var(--text-main); font-weight:800;">سجلات العمليات الشاملة</h2>
+                        <small style="color:var(--text-muted); font-size:0.8rem;">لوحة إدارة الموارد البشرية ومراقبة الدوام</small>
+                    </div>
+                </div>
+
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <!-- Refresh Data -->
+                    <button class="btn-primary" style="width:auto; padding:8px 16px; font-size:0.85rem; height:38px !important; display:flex; align-items:center; gap:6px;" onclick="refreshData()">
+                        <span>تحديث البيانات</span>
+                        <span>🔄</span>
+                    </button>
+
+                    <!-- Send Email Report -->
+                    <button class="btn-primary" style="width:auto; padding:8px 12px; font-size:0.85rem; height:38px !important; background:rgba(255,255,255,0.06) !important; border:1px solid var(--card-border) !important; color:#fff !important; box-shadow:none !important;" onclick="sendEmailDashboard()" title="إرسال ملخص بالبريد الإلكتروني">
+                        ✉️
+                    </button>
+
+                    <!-- Notifications Dropdown (PC) -->
                     <div id="notificationContainerPC" style="position:relative;">
                         <button id="notificationBellPC" onclick="toggleNotifications('pc')"
-                            style="background:rgba(255,255,255,0.05); border:1px solid var(--card-border); color:#fff; padding:10px; border-radius:12px; cursor:pointer; position:relative;">
+                            style="background:rgba(255,255,255,0.06); border:1px solid var(--card-border); color:#fff; width:38px; height:38px; border-radius:12px; cursor:pointer; position:relative; display:flex; align-items:center; justify-content:center;">
                             <span style="font-size:1.1rem;">🔔</span>
                             <span id="notificationBadgePC" class="hidden badge-count">0</span>
                         </button>
                         <!-- PC Dropdown -->
                         <div id="notificationDropdownPC" class="hidden"
-                            style="position:absolute; top:100%; right:0; margin-top:10px; width:350px; max-height:450px; overflow-y:auto; background:#1e293b; border:1px solid var(--card-border); border-radius:16px; z-index:1100; box-shadow:0 20px 50px rgba(0,0,0,0.6); animation: fadeIn 0.3s ease;">
+                            style="position:absolute; top:100%; left:0; margin-top:10px; width:340px; max-height:450px; overflow-y:auto; background:#1e293b; border:1px solid var(--card-border); border-radius:16px; z-index:1100; box-shadow:0 20px 50px rgba(0,0,0,0.6); animation: fadeIn 0.3s ease;">
                             <div
-                                style="padding:15px 20px; border-bottom:1px solid var(--card-border); display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02);">
-                                <strong style="font-size:1.1rem;">الإشعارات</strong>
+                                style="padding:14px 18px; border-bottom:1px solid var(--card-border); display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.02);">
+                                <strong style="font-size:1rem;">الإشعارات</strong>
                                 <button
-                                    style="background:none; border:none; color:var(--secondary); cursor:pointer; font-size:13px; font-weight:bold;"
+                                    style="background:none; border:none; color:var(--secondary); cursor:pointer; font-size:12px; font-weight:bold;"
                                     onclick="markAllNotificationsAsRead()">تحديد الكل كمقروء</button>
                             </div>
                             <div id="notificationListPC"></div>
                         </div>
                     </div>
-                </div>
 
-                <!-- Horizontal Navigation (PC Only) -->
-                <nav class="top-nav"
-                    style="display:flex; gap:6px; flex-wrap:wrap; justify-content:center; flex:1; margin:0 10px;">
-                    <a class="nav-link active" onclick="showTab('attendance')"
-                        style="padding:6px 8px; font-size:0.8rem;">الحضور</a>
-                    <a class="nav-link" onclick="showTab('reports')"
-                        style="padding:6px 10px; font-size:0.85rem;">التقارير الشهري</a>
-                    <a class="nav-link" onclick="showTab('employeeDetails')"
-                        style="padding:6px 10px; font-size:0.85rem;">التقرير التفصيلي للموظف</a>
-                    <a class="nav-link" onclick="showTab('employees')"
-                        style="padding:6px 10px; font-size:0.85rem;">ادارة الموظفين</a>
-                    <a class="nav-link" onclick="showTab('sites')" style="padding:6px 8px; font-size:0.8rem;">ادارة
-                        المواقع</a>
-                    <a class="nav-link" onclick="showTab('siteRequests')"
-                        style="padding:6px 8px; font-size:0.8rem;">طلبات المواقع</a>
-                    <a class="nav-link" onclick="showTab('allowanceRequests')"
-                        style="padding:6px 10px; font-size:0.85rem;">طلبات البدلات</a>
-                    <a class="nav-link" onclick="showTab('leaveRequests')"
-                        style="padding:6px 10px; font-size:0.85rem;">طلبات الإجازات</a>
-                    <a class="nav-link" onclick="showTab('deviceManagement')"
-                        style="padding:6px 8px; font-size:0.8rem;">ادارة الأجهزة</a>
-                    <a class="nav-link" onclick="showTab('officialHolidays')"
-                        style="padding:6px 8px; font-size:0.8rem;">العطلات الرسمية</a>
-                    <a class="nav-link" onclick="showTab('settings')" style="padding:6px 8px; font-size:0.8rem;">⚙️</a>
-                </nav>
-
-                <div style="display:flex; align-items:center; gap:12px;">
-                    <div style="text-align:left;">
-                        <div id="hrNameDisplay" style="font-weight:bold; color:var(--text-main); font-size:0.85rem;">
-                            مدير النظام</div>
-                        <button onclick="logout()"
-                            style="background:none; border:none; color:var(--danger); cursor:pointer; font-size:0.7rem; padding:0; display:block; width:100%; text-align:left;">خروج</button>
+                    <!-- Hidden Notification Container for mobile JS compatibility -->
+                    <div id="notificationContainerMobile" style="display: none;">
+                        <button id="notificationBellMobile" onclick="toggleNotifications('mobile')">
+                            <span id="notificationBadgeMobile" class="hidden badge-dot"></span>
+                        </button>
+                        <div id="notificationDropdownMobile" class="hidden">
+                            <div id="notificationListMobile"></div>
+                        </div>
                     </div>
-                    <div
-                        style="width:32px; height:32px; background:linear-gradient(45deg, var(--primary), var(--secondary)); border-radius:8px; display:flex; align-items:center; justify-content:center; font-weight:bold; color:#fff; font-size:0.75rem;">
-                        HR</div>
                 </div>
             </div>
 

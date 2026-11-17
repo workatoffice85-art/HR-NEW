@@ -548,6 +548,182 @@
             }
         }
 
+        /* Modernized Layout & Desktop Enhancements */
+        .portal-container {
+            max-width: 480px;
+            width: 100%;
+            margin: auto;
+            padding: 20px 16px 85px; /* safe bottom space for bottom nav bar */
+            box-sizing: border-box;
+            position: relative;
+            z-index: 1;
+            transition: max-width 0.3s ease;
+        }
+
+        @media (min-width: 860px) {
+            .portal-container.logged-in {
+                max-width: 980px !important;
+                padding: 30px 24px 90px !important;
+            }
+            .emp-dashboard-grid {
+                display: grid !important;
+                grid-template-columns: 1.15fr 0.85fr !important;
+                gap: 24px !important;
+                align-items: start !important;
+            }
+            #myReportsSection,
+            #myRequestsSection {
+                max-width: 980px !important;
+            }
+        }
+
+        .emp-dashboard-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        /* Smart Shift Card */
+        .emp-shift-card {
+            background: rgba(30, 41, 59, 0.45);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 20px;
+            padding: 16px 18px;
+            margin-bottom: 16px;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .emp-shift-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            transition: all 0.3s ease;
+        }
+
+        /* Quick Services Grid */
+        .emp-services-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 14px;
+        }
+
+        .emp-service-btn {
+            background: rgba(255, 255, 255, 0.04) !important;
+            border: 1px solid rgba(255, 255, 255, 0.09) !important;
+            border-radius: 16px !important;
+            padding: 16px 10px !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: center !important;
+            gap: 8px !important;
+            color: var(--text-main) !important;
+            font-size: 0.88rem !important;
+            font-weight: 700 !important;
+            cursor: pointer !important;
+            transition: all 0.25s ease !important;
+            height: auto !important;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1) !important;
+            font-family: inherit !important;
+        }
+
+        .emp-service-btn:hover {
+            background: rgba(94, 173, 50, 0.12) !important;
+            border-color: rgba(94, 173, 50, 0.4) !important;
+            transform: translateY(-2px) !important;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.25) !important;
+        }
+
+        .emp-service-btn:active {
+            transform: scale(0.97) !important;
+        }
+
+        .emp-service-icon {
+            font-size: 1.5rem;
+            line-height: 1;
+        }
+
+        /* Modern Bottom Navigation Bar */
+        .emp-bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 64px;
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            z-index: 9999;
+            padding: 0 10px;
+            padding-bottom: env(safe-area-inset-bottom, 4px);
+            box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.5);
+            transition: transform 0.3s ease, opacity 0.3s ease;
+        }
+
+        .emp-bottom-nav.hidden {
+            display: none !important;
+        }
+
+        .emp-nav-item {
+            flex: 1;
+            max-width: 100px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            font-size: 0.72rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            padding: 6px 4px;
+            border-radius: 12px;
+            background: transparent;
+            border: none;
+            font-family: inherit;
+            gap: 3px;
+        }
+
+        .emp-nav-item:hover,
+        .emp-nav-item.active {
+            color: var(--secondary);
+        }
+
+        .emp-nav-item.active .emp-nav-icon {
+            transform: scale(1.15);
+            filter: drop-shadow(0 0 10px rgba(41, 180, 23, 0.6));
+        }
+
+        .emp-nav-icon {
+            font-size: 1.25rem;
+            line-height: 1;
+            transition: transform 0.2s ease;
+        }
+
+        /* Action Buttons Pulse */
+        .action-btn.check-in-btn:not(:disabled) {
+            animation: pulse-green-btn 2s infinite ease-in-out !important;
+        }
+        .action-btn.check-out-btn:not(:disabled) {
+            animation: pulse-red-btn 2s infinite ease-in-out !important;
+        }
+        @keyframes pulse-green-btn {
+            0%, 100% { box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4); transform: scale(1); }
+            50% { box-shadow: 0 8px 30px rgba(16, 185, 129, 0.75); transform: scale(1.02); }
+        }
+        @keyframes pulse-red-btn {
+            0%, 100% { box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4); transform: scale(1); }
+            50% { box-shadow: 0 8px 30px rgba(239, 68, 68, 0.75); transform: scale(1.02); }
+        }
+
         /* Premium GPS Loader Styles & Animations */
         #gpsLoaderOverlay {
             position: fixed;
@@ -726,12 +902,50 @@
 
         <!-- 5. Dashboard Section -->
         <div id="dashboardSection" class="glass-card hidden">
-            <div class="header" style="text-align: center;">
-                <img src="../assets/app_icon.png" alt="Logo" style="width: 64px; height: 64px; filter: drop-shadow(0 0 8px rgba(94, 173, 50, 0.3)); margin-bottom: 10px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-                    <div style="text-align: right; width: 100%;">
-                        <h2 id="welcomeText" style="display: inline-block;">مرحباً</h2>
-                        <p id="siteText" style="color:var(--text-muted); font-size:0.9rem; margin-top: 4px;"></p>
+            <div class="emp-dashboard-grid">
+                <!-- Column 1: Scanner & Punch Actions -->
+                <div class="emp-column-main">
+                    <div class="camera-container">
+                        <video id="videoElement" autoplay muted playsinline></video>
+                        <canvas id="overlay"></canvas>
+                        <div id="faceIdRing" class="faceid-ring scanning"></div>
+                    </div>
+
+                    <div id="statusMessage">جاري تهيئة النظام...</div>
+
+                    <!-- Timer Display -->
+                    <div id="timerContainer" class="hidden"
+                        style="margin-bottom: 20px; background: rgba(99, 102, 241, 0.12); padding: 15px; border-radius: 16px; border: 1px solid rgba(99, 102, 241, 0.25);">
+                        <div style="font-size: 0.9rem; color: #818cf8; margin-bottom: 5px;">وقت العمل الحالي</div>
+                        <div id="workTimer"
+                            style="font-size: 2.2rem; font-weight: bold; font-family: monospace; letter-spacing: 2px;">00:00:00
+                        </div>
+                    </div>
+
+                    <div class="action-buttons">
+                        <button id="btnCheckIn" class="action-btn check-in-btn hidden" disabled onclick="handleCheckIn()">
+                            تسجيل حضور
+                        </button>
+                        <button id="btnCheckOut" class="action-btn check-out-btn hidden" disabled onclick="handleCheckOut()">
+                            تسجيل انصراف
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Column 2: Status & Quick Services -->
+                <div class="emp-column-side">
+                    <!-- User Header -->
+                    <div class="header" style="text-align: right; margin-bottom: 15px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+                            <div>
+                                <h2 id="welcomeText" style="display: inline-block; margin:0; font-size:1.35rem;">مرحباً</h2>
+                                <p id="siteText" style="color:var(--text-muted); font-size:0.85rem; margin-top: 4px;"></p>
+                            </div>
+                            <div id="currentBioDisplay" style="font-size:0.75rem; color:var(--secondary); background:rgba(16,185,129,0.1); padding:4px 10px; border-radius:20px;">
+                                🔐 <span id="bioTypeBadge">جاري التحديد...</span>
+                            </div>
+                        </div>
+
                         <!-- Multi-Site Selection Container with Allowance Warning -->
                         <div id="siteSelectionContainer" class="hidden" style="margin-top: 12px; text-align: right;">
                             <div style="background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 12px; padding: 10px 14px; margin-bottom: 10px; text-align: right;">
@@ -752,76 +966,52 @@
                             </select>
                         </div>
                     </div>
+
+                    <!-- Smart Shift Card -->
+                    <div id="empShiftCard" class="emp-shift-card">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <span id="empCurrentDateText" style="color: var(--text-muted); font-size: 0.85rem; font-weight: 600;">اليوم</span>
+                            <span id="empCurrentTimeText" style="color: #a5b4fc; font-size: 0.9rem; font-family: monospace; font-weight: bold;">--:--:--</span>
+                        </div>
+                        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span id="empShiftStatusDot" class="emp-shift-dot" style="background: #94a3b8;"></span>
+                                <span id="empShiftStatusText" style="font-weight: 700; font-size: 0.92rem; color: #fff;">لم تسجل حضورك بعد</span>
+                            </div>
+                            <span id="empShiftSiteBadge" style="font-size: 0.75rem; background: rgba(94, 173, 50, 0.15); color: var(--secondary); padding: 3px 8px; border-radius: 20px; font-weight: 600; display: none;">-</span>
+                        </div>
+                    </div>
+
+                    <!-- Quick Services 2x2 Grid -->
+                    <div style="margin-top: 15px;">
+                        <h4 style="margin: 0 0 10px 0; color: var(--text-muted); font-size: 0.85rem; font-weight: 700; text-align: right;">الخدمات والطلبات السريعة</h4>
+                        <div class="emp-services-grid">
+                            <button id="btnAllowanceRequest" class="emp-service-btn" onclick="openAllowanceModal()">
+                                <span class="emp-service-icon">💰</span>
+                                <span>زيادة بدلات</span>
+                            </button>
+                            <button id="btnLeaveRequest" class="emp-service-btn" onclick="openLeaveModal()">
+                                <span class="emp-service-icon">📅</span>
+                                <span>طلب إجازة</span>
+                            </button>
+                            <button id="btnRequestSite" class="emp-service-btn hidden" onclick="openRequestModal()">
+                                <span class="emp-service-icon">📍</span>
+                                <span>تسجيل موقع</span>
+                            </button>
+                            <button id="btnUpdateBiometric" class="emp-service-btn" onclick="openBiometricUpdateModal()">
+                                <span class="emp-service-icon">🔐</span>
+                                <span>تحديث البصمة</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Secondary Actions (PWA install, etc) -->
+                    <button id="pwaInstallBtnDashboard" class="btn-primary"
+                        style="margin-top:14px; background: linear-gradient(135deg, #4f46e5, #4338ca) !important; box-shadow: 0 4px 15px rgba(79, 70, 229, 0.35) !important;" onclick="triggerPwaInstall()">
+                        📥 تثبيت التطبيق على الهاتف
+                    </button>
                 </div>
-                <div id="currentBioDisplay" style="font-size:0.8rem; color:var(--secondary); margin-top:8px; background:rgba(16,185,129,0.1); padding:6px 12px; border-radius:20px; display:inline-block;">
-                    🔐 <span id="bioTypeBadge">جاري التحديد...</span>
-                </div>
             </div>
-
-            <div id="loader" class="loader hidden"></div>
-
-            <div class="camera-container">
-                <video id="videoElement" autoplay muted playsinline></video>
-                <canvas id="overlay"></canvas>
-                <div id="faceIdRing" class="faceid-ring scanning"></div>
-            </div>
-
-            <div id="statusMessage">جاري تهيئة النظام...</div>
-
-            <!-- Timer Display -->
-            <div id="timerContainer" class="hidden"
-                style="margin-bottom: 20px; background: rgba(99, 102, 241, 0.12); padding: 15px; border-radius: 16px; border: 1px solid rgba(99, 102, 241, 0.25);">
-                <div style="font-size: 0.9rem; color: #818cf8; margin-bottom: 5px;">وقت العمل الحالي</div>
-                <div id="workTimer"
-                    style="font-size: 2.2rem; font-weight: bold; font-family: monospace; letter-spacing: 2px;">00:00:00
-                </div>
-            </div>
-
-            <div class="action-buttons">
-                <button id="btnCheckIn" class="action-btn check-in-btn hidden" disabled onclick="handleCheckIn()">
-                    تسجيل حضور
-                </button>
-                <button id="btnCheckOut" class="action-btn check-out-btn hidden" disabled onclick="handleCheckOut()">
-                    تسجيل انصراف
-                </button>
-            </div>
-
-            <!-- PWA Install Button inside Dashboard -->
-            <button id="pwaInstallBtnDashboard" class="btn-primary"
-                style="margin-top:10px; background: linear-gradient(135deg, #4f46e5, #4338ca) !important; box-shadow: 0 4px 15px rgba(79, 70, 229, 0.35) !important;" onclick="triggerPwaInstall()">
-                📥 تثبيت التطبيق على الهاتف
-            </button>
-
-            <!-- Request Site Button (Hidden by default) -->
-            <button id="btnAllowanceRequest" class="btn-primary"
-                style="margin-top:10px; background: linear-gradient(135deg, #8b5cf6, #7c3aed) !important; box-shadow: 0 4px 15px rgba(139, 92, 246, 0.35) !important;" onclick="openAllowanceModal()">
-                💰 طلب زيادة بدلات
-            </button>
-
-            <button id="btnLeaveRequest" class="btn-primary"
-                style="margin-top:10px; background: linear-gradient(135deg, #f59e0b, #d97706) !important; color:#fff !important; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.35) !important;" onclick="openLeaveModal()">
-                📅 طلب إجازة
-            </button>
-
-            <!-- Update Biometric Button (Always visible) -->
-            <button id="btnUpdateBiometric" class="btn-primary"
-                style="margin-top:10px;" onclick="openBiometricUpdateModal()">
-                🔐 تحديث/تغيير بصمة الإصبع
-            </button>
-
-            <!-- Request Site Button (Hidden by default, shown when outside range) -->
-            <button id="btnRequestSite" class="btn-primary hidden"
-                style="margin-top:10px; background: linear-gradient(135deg, #f59e0b, #d97706) !important; color:#fff !important; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.35) !important;" onclick="openRequestModal()">
-                📍 طلب تسجيل هذا الموقع كفرع عمل
-            </button>
-
-            <button class="btn-primary" style="margin-top:20px;"
-                onclick="showMyReports()">تقارير الحضور الخاصة بي</button>
-            <button class="btn-primary" style="margin-top:10px; background: linear-gradient(135deg, #3b82f6, #1d4ed8) !important; box-shadow: 0 4px 15px rgba(59, 130, 246, 0.35) !important;"
-                onclick="showMyRequests()">📊 متابعة طلباتي</button>
-            <button class="btn-primary"
-                style="margin-top:10px; background:transparent !important; border:1px solid rgba(255,255,255,0.2) !important; box-shadow: none !important;"
-                onclick="logout()">تسجيل خروج</button>
         </div>
 
         <!-- Allowance Modal -->
@@ -1115,6 +1305,67 @@
             <small style="color: rgba(255, 255, 255, 0.35); font-size: 0.75rem; display: block; line-height: 1.4;">يرجى السماح بالحصول على إذن الموقع وتفعيل الـ GPS إذا طال الانتظار.</small>
         </div>
     </div>
+
+    <!-- Employee Profile & Account Modal -->
+    <div id="empProfileModal" class="modal hidden"
+        style="position:fixed; top:0; left:0; width:100%; height:100%; display:none; align-items:center; justify-content:center; z-index:10000; direction: rtl;">
+        <div class="glass-card" style="max-width: 420px; width: 92%; padding: 26px 20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 18px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 12px;">
+                <div style="display:flex; align-items:center; gap: 10px;">
+                    <div style="width: 44px; height: 44px; border-radius: 14px; background: linear-gradient(135deg, var(--primary), var(--secondary)); display:flex; align-items:center; justify-content:center; font-size: 1.4rem;">👤</div>
+                    <div>
+                        <h3 id="profileModalName" style="margin: 0; font-size: 1.1rem; color: #fff;">اسم الموظف</h3>
+                        <small id="profileModalRole" style="color: var(--text-muted); font-size: 0.8rem;">موظف</small>
+                    </div>
+                </div>
+                <button onclick="closeProfileModal()" style="background:none; border:none; color:var(--text-muted); font-size:1.3rem; cursor:pointer;">✕</button>
+            </div>
+
+            <div style="background: rgba(255,255,255,0.03); border-radius: 14px; padding: 14px; margin-bottom: 16px; border: 1px solid rgba(255,255,255,0.06); font-size: 0.88rem; line-height: 2;">
+                <div style="display:flex; justify-content:space-between;">
+                    <span style="color:var(--text-muted);">📧 البريد:</span>
+                    <span id="profileModalEmail" style="font-weight:600;">-</span>
+                </div>
+                <div style="display:flex; justify-content:space-between;">
+                    <span style="color:var(--text-muted);">📱 الهاتف:</span>
+                    <span id="profileModalPhone" dir="ltr" style="font-weight:600;">-</span>
+                </div>
+                <div style="display:flex; justify-content:space-between;">
+                    <span style="color:var(--text-muted);">🔐 البصمة:</span>
+                    <span id="profileModalBio" style="color:var(--secondary); font-weight:600;">-</span>
+                </div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+                <button class="btn-primary" style="height: 44px !important; font-size: 0.9rem !important;" onclick="closeProfileModal(); openBiometricUpdateModal();">
+                    🔐 تحديث بصمة الإصبع / الوجه
+                </button>
+                <button class="btn-danger" style="height: 44px !important; font-size: 0.9rem !important;" onclick="logout()">
+                    🚪 تسجيل الخروج
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Employee Modern Bottom App Bar -->
+    <nav id="empBottomNav" class="emp-bottom-nav hidden">
+        <button id="empNavHome" class="emp-nav-item active" onclick="showSection('dashboardSection')">
+            <span class="emp-nav-icon">🏠</span>
+            <span>الرئيسية</span>
+        </button>
+        <button id="empNavReports" class="emp-nav-item" onclick="showMyReports()">
+            <span class="emp-nav-icon">📊</span>
+            <span>تقاريري</span>
+        </button>
+        <button id="empNavRequests" class="emp-nav-item" onclick="showMyRequests()">
+            <span class="emp-nav-icon">📋</span>
+            <span>طلباتي</span>
+        </button>
+        <button id="empNavProfile" class="emp-nav-item" onclick="openProfileModal()">
+            <span class="emp-nav-icon">👤</span>
+            <span>حسابي</span>
+        </button>
+    </nav>
 
     <!-- PWA Service Worker Registration & Installation Prompt -->
     <script>
