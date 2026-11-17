@@ -1135,6 +1135,35 @@ function getCairoDateString(date = new Date()) {
     return `${year}-${month}-${day}`;
 }
 
+// Helper: Calculate overtime hours (after overtimeStartTime e.g. 19:00)
+function calculateOvertimeHours(checkIn, checkOut, overtimeStartTime = "19:00") {
+    if (!checkIn || !checkOut) return 0;
+    try {
+        const outStr = String(checkOut);
+        const inStr = String(checkIn);
+        const outMatch = outStr.match(/(?:T|\b)(\d{2}):(\d{2})/);
+        if (!outMatch) return 0;
+        const checkoutTotalMins = parseInt(outMatch[1], 10) * 60 + parseInt(outMatch[2], 10);
+
+        const [otH, otM] = (overtimeStartTime || "19:00").split(':').map(n => parseInt(n, 10) || 0);
+        const otStartTotalMins = otH * 60 + otM;
+
+        let checkinTotalMins = 0;
+        const inMatch = inStr.match(/(?:T|\b)(\d{2}):(\d{2})/);
+        if (inMatch) {
+            checkinTotalMins = parseInt(inMatch[1], 10) * 60 + parseInt(inMatch[2], 10);
+        }
+
+        const effectiveStartMins = Math.max(otStartTotalMins, checkinTotalMins);
+        if (checkoutTotalMins > effectiveStartMins) {
+            return parseFloat(((checkoutTotalMins - effectiveStartMins) / 60).toFixed(2));
+        }
+    } catch (e) {
+        console.error("calculateOvertimeHours error:", e);
+    }
+    return 0;
+}
+
 // Background sync to Google Sheets (Backup)
 async function syncToGoogleSheet(body) {
     try {
@@ -2644,14 +2673,36 @@ export default async function handler(req, res) {
                 totalHours = parseFloat(((checkOut - checkIn) / 36e5).toFixed(2));
             }
 
-            const { error } = await supabase.from('attendance')
-                .update({
-                    checkOut: serverCheckoutTime,
-                    totalHours: totalHours,
-                    status: existing[0].status // Keep the original status (overtime, late, present)
-                })
+            // Fetch overtimeStartTime setting (default 19:00)
+            let overtimeStartTime = "19:00";
+            try {
+                const { data: otSet } = await supabase.from('settings').select('value').eq('key', 'overtimeStartTime').maybeSingle();
+                if (otSet && otSet.value) overtimeStartTime = otSet.value;
+            } catch (e) {
+                console.error("Error fetching overtimeStartTime:", e);
+            }
+
+            const overtimeHours = calculateOvertimeHours(existing[0].checkIn, serverCheckoutTime, overtimeStartTime);
+
+            const checkoutPayload = {
+                checkOut: serverCheckoutTime,
+                totalHours: totalHours,
+                status: existing[0].status // Keep the original status (overtime, late, present)
+            };
+
+            let { error } = await supabase.from('attendance')
+                .update({ ...checkoutPayload, overtimeHours: overtimeHours })
                 .eq('id', existing[0].id);
-            if (error) throw error;
+
+            // Safe fallback if overtimeHours column does not exist in DB yet
+            if (error && error.message && error.message.includes('overtimeHours')) {
+                const retryResult = await supabase.from('attendance')
+                    .update(checkoutPayload)
+                    .eq('id', existing[0].id);
+                if (retryResult.error) throw retryResult.error;
+            } else if (error) {
+                throw error;
+            }
 
             // Sync to Google Sheets with actual server-generated data
             syncToGoogleSheet({
@@ -2659,7 +2710,8 @@ export default async function handler(req, res) {
                 attendanceId: existing[0].id,
                 employeeId: existing[0].employeeId,
                 checkOut: serverCheckoutTime,
-                totalHours: totalHours
+                totalHours: totalHours,
+                overtimeHours: overtimeHours
             });
 
             return res.status(200).json({ success: true, message: "تم تسجيل الانصراف بنجاح" });
@@ -2718,22 +2770,44 @@ export default async function handler(req, res) {
                 }
             }
 
-            const { error } = await supabase.from('attendance')
-                .update({
-                    checkOut: finalCheckoutTime,
-                    totalHours: totalHours,
-                    status: finalStatus
-                })
+            // Fetch overtimeStartTime setting (default 19:00)
+            let overtimeStartTime = "19:00";
+            try {
+                const { data: otSet } = await supabase.from('settings').select('value').eq('key', 'overtimeStartTime').maybeSingle();
+                if (otSet && otSet.value) overtimeStartTime = otSet.value;
+            } catch (e) {
+                console.error("Error fetching overtimeStartTime:", e);
+            }
+
+            const overtimeHours = calculateOvertimeHours(existing.checkIn, finalCheckoutTime, overtimeStartTime);
+
+            const checkoutPayload = {
+                checkOut: finalCheckoutTime,
+                totalHours: totalHours,
+                status: finalStatus
+            };
+
+            let { error } = await supabase.from('attendance')
+                .update({ ...checkoutPayload, overtimeHours: overtimeHours })
                 .eq('id', attendanceId);
 
-            if (error) throw error;
+            // Safe fallback if overtimeHours column does not exist in DB yet
+            if (error && error.message && error.message.includes('overtimeHours')) {
+                const retryResult = await supabase.from('attendance')
+                    .update(checkoutPayload)
+                    .eq('id', attendanceId);
+                if (retryResult.error) throw retryResult.error;
+            } else if (error) {
+                throw error;
+            }
 
             syncToGoogleSheet({
                 action: 'checkoutAttendance',
                 attendanceId: attendanceId,
                 employeeId: existing.employeeId,
                 checkOut: finalCheckoutTime,
-                totalHours: totalHours
+                totalHours: totalHours,
+                overtimeHours: overtimeHours
             });
 
             return res.status(200).json({ success: true, message: "تم تسجيل انصراف الموظف بنجاح" });
@@ -2800,9 +2874,10 @@ export default async function handler(req, res) {
             }
 
             // 4. Calculate status
-            const { data: setRows } = await supabase.from('settings').select('*').in('key', ['workStartTime', 'weekendDays']);
+            const { data: setRows } = await supabase.from('settings').select('*').in('key', ['workStartTime', 'weekendDays', 'overtimeStartTime']);
             let workStart = "09:00";
             let weekendDays = [5, 6];
+            let overtimeStartTime = "19:00";
             if (setRows && setRows.length > 0) {
                 const workStartRow = setRows.find(r => r.key === 'workStartTime');
                 if (workStartRow) workStart = workStartRow.value;
@@ -2810,6 +2885,8 @@ export default async function handler(req, res) {
                 if (weekendRow && weekendRow.value) {
                     weekendDays = weekendRow.value.split(',').map(d => parseInt(d.trim())).filter(d => !isNaN(d));
                 }
+                const otStartRow = setRows.find(r => r.key === 'overtimeStartTime');
+                if (otStartRow && otStartRow.value) overtimeStartTime = otStartRow.value;
             }
 
             const checkInDateObj = new Date(checkInISO);
@@ -2824,6 +2901,8 @@ export default async function handler(req, res) {
                 status = "late";
             }
 
+            const overtimeHours = checkOutISO ? calculateOvertimeHours(checkInISO, checkOutISO, overtimeStartTime) : 0;
+
             const payload = {
                 employeeId: emp.id,
                 employeeName: emp.name,
@@ -2833,12 +2912,20 @@ export default async function handler(req, res) {
                 checkOut: checkOutISO,
                 status: status,
                 totalHours: totalHours,
+                overtimeHours: overtimeHours,
                 transportPrice: transportPrice,
                 device_id: 'MANUAL_HR'
             };
 
-            const { error: insErr } = await supabase.from('attendance').insert([payload]);
-            if (insErr) throw insErr;
+            let { error: insErr } = await supabase.from('attendance').insert([payload]);
+            if (insErr && insErr.message && insErr.message.includes('overtimeHours')) {
+                const fallbackPayload = { ...payload };
+                delete fallbackPayload.overtimeHours;
+                const retryIns = await supabase.from('attendance').insert([fallbackPayload]);
+                if (retryIns.error) throw retryIns.error;
+            } else if (insErr) {
+                throw insErr;
+            }
 
             try {
                 syncToGoogleSheet({ action: 'addAttendance', ...payload });
@@ -2906,9 +2993,10 @@ export default async function handler(req, res) {
             }
 
             // 5. Calculate status
-            const { data: setRows } = await supabase.from('settings').select('*').in('key', ['workStartTime', 'weekendDays']);
+            const { data: setRows } = await supabase.from('settings').select('*').in('key', ['workStartTime', 'weekendDays', 'overtimeStartTime']);
             let workStart = "09:00";
             let weekendDays = [5, 6];
+            let overtimeStartTime = "19:00";
             if (setRows && setRows.length > 0) {
                 const workStartRow = setRows.find(r => r.key === 'workStartTime');
                 if (workStartRow) workStart = workStartRow.value;
@@ -2916,6 +3004,8 @@ export default async function handler(req, res) {
                 if (weekendRow && weekendRow.value) {
                     weekendDays = weekendRow.value.split(',').map(d => parseInt(d.trim())).filter(d => !isNaN(d));
                 }
+                const otStartRow = setRows.find(r => r.key === 'overtimeStartTime');
+                if (otStartRow && otStartRow.value) overtimeStartTime = otStartRow.value;
             }
 
             const checkInDateObj = new Date(checkInISO);
@@ -2930,6 +3020,8 @@ export default async function handler(req, res) {
                 status = "late";
             }
 
+            const overtimeHours = checkOutISO ? calculateOvertimeHours(checkInISO, checkOutISO, overtimeStartTime) : 0;
+
             const updatePayload = {
                 employeeId: targetEmployeeId,
                 employeeName: employeeName,
@@ -2939,14 +3031,24 @@ export default async function handler(req, res) {
                 checkOut: checkOutISO,
                 status: status,
                 totalHours: totalHours,
+                overtimeHours: overtimeHours,
                 transportPrice: transportPrice
             };
 
-            const { error: updErr } = await supabase.from('attendance')
+            let { error: updErr } = await supabase.from('attendance')
                 .update(updatePayload)
                 .eq('id', attendanceId);
 
-            if (updErr) throw updErr;
+            if (updErr && updErr.message && updErr.message.includes('overtimeHours')) {
+                const fallbackPayload = { ...updatePayload };
+                delete fallbackPayload.overtimeHours;
+                const retryUpd = await supabase.from('attendance')
+                    .update(fallbackPayload)
+                    .eq('id', attendanceId);
+                if (retryUpd.error) throw retryUpd.error;
+            } else if (updErr) {
+                throw updErr;
+            }
 
             try {
                 syncToGoogleSheet({ action: 'updateAttendance', attendanceId, ...updatePayload });

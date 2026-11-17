@@ -236,6 +236,35 @@ function formatCairoDate(isoString) {
     return `${day}/${parseInt(month, 10)}/${year}`;
 }
 
+// Helper: Calculate overtime hours after overtimeStartTime (default: 19:00)
+function calculateOvertimeHours(checkIn, checkOut, overtimeStartTime = "19:00") {
+    if (!checkIn || !checkOut) return 0;
+    try {
+        const outStr = String(checkOut);
+        const inStr = String(checkIn);
+        const outMatch = outStr.match(/(?:T|\b)(\d{2}):(\d{2})/);
+        if (!outMatch) return 0;
+        const checkoutTotalMins = parseInt(outMatch[1], 10) * 60 + parseInt(outMatch[2], 10);
+
+        const [otH, otM] = (overtimeStartTime || "19:00").split(':').map(n => parseInt(n, 10) || 0);
+        const otStartTotalMins = otH * 60 + otM;
+
+        let checkinTotalMins = 0;
+        const inMatch = inStr.match(/(?:T|\b)(\d{2}):(\d{2})/);
+        if (inMatch) {
+            checkinTotalMins = parseInt(inMatch[1], 10) * 60 + parseInt(inMatch[2], 10);
+        }
+
+        const effectiveStartMins = Math.max(otStartTotalMins, checkinTotalMins);
+        if (checkoutTotalMins > effectiveStartMins) {
+            return parseFloat(((checkoutTotalMins - effectiveStartMins) / 60).toFixed(2));
+        }
+    } catch (e) {
+        console.error("calculateOvertimeHours error:", e);
+    }
+    return 0;
+}
+
 // Audio feedback functions
 function playSuccessSound() {
     try {
@@ -2569,11 +2598,14 @@ function renderMyReports(data, monthStr) {
 
     let totalLates = lateDates.size; // Only count one late per unique date
     let totalOvertime = overtimeDates.size; // Only count one overtime per unique date
+    let totalOvertimeHours = 0;
     const fullReport = [];
 
     // Add Present Records
     presentRecords.forEach(record => {
         const dateKey = record.checkIn ? record.checkIn.slice(0, 10) : null;
+        const recOtHours = calculateOvertimeHours(record.checkIn, record.checkOut, appSettings.overtimeStartTime || "19:00");
+        totalOvertimeHours += recOtHours;
 
         if (dateKey) {
             const transportValue = getCurrentTransportPrice(record);
@@ -2587,6 +2619,7 @@ function renderMyReports(data, monthStr) {
             date: record.checkIn, // Keep as ISO string
             checkIn: record.checkIn,
             checkOut: record.checkOut,
+            overtimeHours: recOtHours,
             siteName: record.siteName || '-',
             status: record.status, // 'present' or 'late'
             transport: getCurrentTransportPrice(record),
@@ -2667,11 +2700,14 @@ function renderMyReports(data, monthStr) {
                 transportDisplay = `0.00 ج.م`;
             }
 
+            const otDisplay = item.overtimeHours > 0 ? `<span style="color:#60a5fa; font-weight: bold;">${item.overtimeHours.toFixed(1)} س</span>` : '-';
+
             tbody.innerHTML += `
                 <tr style="border-bottom: 1px solid var(--card-border);">
                     <td data-label="التاريخ" style="padding: 8px 5px;">${formatCairoDate(item.checkIn)}</td>
                     <td data-label="الحضور" style="padding: 8px 5px; font-family: monospace;">${formatCairoTime(item.checkIn)}</td>
                     <td data-label="الانصراف" style="padding: 8px 5px; font-family: monospace;">${checkOutDisplay}</td>
+                    <td data-label="إضافي" style="padding: 8px 5px; font-family: monospace;">${otDisplay}</td>
                     <td data-label="الموقع" style="padding: 8px 5px; font-size: 0.8rem;">${item.siteName || '-'}</td>
                     <td data-label="الحالة" style="padding: 8px 5px;"><span style="color:${statusColor}; font-weight: bold;">${statusText}</span></td>
                 </tr>
@@ -2681,7 +2717,7 @@ function renderMyReports(data, monthStr) {
             tbody.innerHTML += `
                 <tr style="background: rgba(16, 185, 129, 0.05); border-bottom: 1px solid var(--card-border);">
                     <td data-label="التاريخ" style="padding: 8px 5px;">${formatCairoDate(item.date)}</td>
-                    <td data-label="التفاصيل" colspan="3" style="text-align:center !important; color:var(--secondary); font-size:0.8rem; padding: 8px 5px;">إجازة معتمدة: ${item.reason}</td>
+                    <td data-label="التفاصيل" colspan="4" style="text-align:center !important; color:var(--secondary); font-size:0.8rem; padding: 8px 5px;">إجازة معتمدة: ${item.reason}</td>
                     <td data-label="الحالة" style="padding: 8px 5px;"><span style="color:var(--secondary); font-weight: bold;">إجازة</span></td>
                 </tr>
             `;
@@ -2690,7 +2726,7 @@ function renderMyReports(data, monthStr) {
             tbody.innerHTML += `
                 <tr style="background: rgba(239, 68, 68, 0.05); border-bottom: 1px solid var(--card-border);">
                     <td data-label="التاريخ" style="padding: 8px 5px;">${formatCairoDate(item.date)}</td>
-                    <td data-label="التفاصيل" colspan="3" style="text-align:center !important; color:var(--danger); font-size:0.8rem; padding: 8px 5px;">غائب (لم يتم تسجيل حضور)</td>
+                    <td data-label="التفاصيل" colspan="4" style="text-align:center !important; color:var(--danger); font-size:0.8rem; padding: 8px 5px;">غائب (لم يتم تسجيل حضور)</td>
                     <td data-label="الحالة" style="padding: 8px 5px;"><span style="color:var(--danger); font-weight: bold;">غائب</span></td>
                 </tr>
             `;
@@ -2716,6 +2752,9 @@ function renderMyReports(data, monthStr) {
 
     const elTotalOvertime = document.getElementById('empTotalOvertime');
     if (elTotalOvertime) elTotalOvertime.innerText = totalOvertime;
+
+    const elTotalOvertimeHours = document.getElementById('empTotalOvertimeHours');
+    if (elTotalOvertimeHours) elTotalOvertimeHours.innerText = totalOvertimeHours.toFixed(1) + " س";
 
     const elTotalNoCheckout = document.getElementById('empTotalNoCheckout');
     if (elTotalNoCheckout) elTotalNoCheckout.innerText = totalNoCheckout;

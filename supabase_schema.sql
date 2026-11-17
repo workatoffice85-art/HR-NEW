@@ -82,7 +82,8 @@ CREATE TABLE IF NOT EXISTS attendance (
     "paidAt" TEXT,
     "paidBy" TEXT,
     device_id TEXT,
-    "penaltyAmount" NUMERIC DEFAULT 0
+    "penaltyAmount" NUMERIC DEFAULT 0,
+    "overtimeHours" NUMERIC DEFAULT 0
 );
 
 -- Table: settings

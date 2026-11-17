@@ -477,6 +477,35 @@ function formatDate(isoString) {
     return formatCairoDate(isoString);
 }
 
+// Helper: Calculate overtime hours after overtimeStartTime (default: 19:00)
+function calculateOvertimeHours(checkIn, checkOut, overtimeStartTime = "19:00") {
+    if (!checkIn || !checkOut) return 0;
+    try {
+        const outStr = String(checkOut);
+        const inStr = String(checkIn);
+        const outMatch = outStr.match(/(?:T|\b)(\d{2}):(\d{2})/);
+        if (!outMatch) return 0;
+        const checkoutTotalMins = parseInt(outMatch[1], 10) * 60 + parseInt(outMatch[2], 10);
+
+        const [otH, otM] = (overtimeStartTime || "19:00").split(':').map(n => parseInt(n, 10) || 0);
+        const otStartTotalMins = otH * 60 + otM;
+
+        let checkinTotalMins = 0;
+        const inMatch = inStr.match(/(?:T|\b)(\d{2}):(\d{2})/);
+        if (inMatch) {
+            checkinTotalMins = parseInt(inMatch[1], 10) * 60 + parseInt(inMatch[2], 10);
+        }
+
+        const effectiveStartMins = Math.max(otStartTotalMins, checkinTotalMins);
+        if (checkoutTotalMins > effectiveStartMins) {
+            return parseFloat(((checkoutTotalMins - effectiveStartMins) / 60).toFixed(2));
+        }
+    } catch (e) {
+        console.error("calculateOvertimeHours error:", e);
+    }
+    return 0;
+}
+
 function getLocalDateKey(date) {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -780,6 +809,8 @@ function resetEmployeeDetailedReportView(message) {
     document.getElementById('employeeDetailAbsent').innerText = '0';
     document.getElementById('employeeDetailLate').innerText = '0';
     document.getElementById('employeeDetailOvertime').innerText = '0';
+    const elOtHours = document.getElementById('employeeDetailOvertimeHours');
+    if (elOtHours) elOtHours.innerText = '0.00';
     document.getElementById('employeeDetailLeaveRequests').innerText = '0';
     document.getElementById('employeeDetailNoCheckout').innerText = '0';
     document.getElementById('employeeDetailOvertimePay').innerText = '0.00';
@@ -790,7 +821,7 @@ function resetEmployeeDetailedReportView(message) {
     if (tbody) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="7" class="employee-report-empty">لا توجد بيانات معروضة بعد.</td>
+                <td colspan="8" class="employee-report-empty">لا توجد بيانات معروضة بعد.</td>
             </tr>
         `;
     }
@@ -1267,10 +1298,17 @@ async function generateEmployeeDetailedReport() {
     const calculatedTotalTransport = Object.values(dailyTotalTransport).reduce((sum, val) => sum + val, 0);
     const remainingAllowances = Math.max(calculatedTotalTransport - paidAllowances, 0);
 
+    let totalOvertimeHours = 0;
+    sortedRecords.forEach(record => {
+        totalOvertimeHours += calculateOvertimeHours(record.checkIn, record.checkOut, appSettings.overtimeStartTime || "19:00");
+    });
+
     document.getElementById('employeeDetailPresent').innerText = String(daysPresent);
     document.getElementById('employeeDetailAbsent').innerText = String(daysAbsent);
     document.getElementById('employeeDetailLate').innerText = String(lateDates.size);
     document.getElementById('employeeDetailOvertime').innerText = String(overtimeDays);
+    const elOtHours = document.getElementById('employeeDetailOvertimeHours');
+    if (elOtHours) elOtHours.innerText = totalOvertimeHours.toFixed(2);
     document.getElementById('employeeDetailNoCheckout').innerText = String(noCheckoutDates.size);
     document.getElementById('employeeDetailLeaveRequests').innerText = String(leaveRequestsCount);
     document.getElementById('employeeDetailOvertimePay').innerText = overtimePay.toFixed(2);
@@ -1417,6 +1455,9 @@ async function generateEmployeeDetailedReport() {
                     transportDisplay = `<span style="text-decoration: line-through; color: var(--text-muted); font-size: 0.8rem;">${originalTransport.toFixed(2)}</span> <span style="color: var(--danger); font-weight: bold;">${currentTransport.toFixed(2)} ج.م</span>`;
                 }
 
+                const recOtHours = calculateOvertimeHours(record.checkIn, record.checkOut, appSettings.overtimeStartTime || "19:00");
+                const otHoursDisplay = recOtHours > 0 ? `<span style="color:#3b82f6; font-weight:bold;">${recOtHours.toFixed(2)} س</span>` : '-';
+
                 detailedHtml.push(`
                     <tr>
                         <td data-label="التاريخ">${displayDate}</td>
@@ -1424,6 +1465,7 @@ async function generateEmployeeDetailedReport() {
                         <td data-label="وقت الحضور" dir="ltr">${checkInText}</td>
                         <td data-label="وقت الانصراف" dir="ltr">${checkOutText}</td>
                         <td data-label="الحالة"><span style="color:${statusMeta.color}">${statusMeta.text}</span></td>
+                        <td data-label="ساعات إضافي">${otHoursDisplay}</td>
                         <td data-label="البدل">${transportDisplay}</td>
                         <td data-label="حالة السداد">${actionsHtml}</td>
                     </tr>
@@ -1444,6 +1486,7 @@ async function generateEmployeeDetailedReport() {
                         <td data-label="وقت الحضور">-</td>
                         <td data-label="وقت الانصراف">-</td>
                         <td data-label="الحالة"><span style="color:#10b981; font-weight:bold;">إجازة معتمدة</span></td>
+                        <td data-label="ساعات إضافي">-</td>
                         <td data-label="البدل">0.00 ج.م</td>
                         <td data-label="حالة السداد">-</td>
                     </tr>
@@ -1457,6 +1500,7 @@ async function generateEmployeeDetailedReport() {
                         <td data-label="وقت الحضور">-</td>
                         <td data-label="وقت الانصراف">-</td>
                         <td data-label="الحالة"><span style="color:var(--danger); font-weight:bold;">غائب</span></td>
+                        <td data-label="ساعات إضافي">-</td>
                         <td data-label="البدل">0.00 ج.م</td>
                         <td data-label="حالة السداد">-</td>
                     </tr>
@@ -1635,12 +1679,17 @@ async function generateReport() {
                 daysPresent: 0,
                 lates: 0,
                 overtime: 0,
+                overtimeHours: 0,
                 noCheckout: 0,
                 totalTransport: 0
             };
         }
 
         const empStats = reportAcc[empId];
+
+        // Track overtime hours after overtimeStartTime (default 19:00)
+        const recOtHours = calculateOvertimeHours(record.checkIn, record.checkOut, appSettings.overtimeStartTime || "19:00");
+        empStats.overtimeHours += recOtHours;
 
         // Determine if this is an overtime day (weekend/holiday work)
         // A day is overtime if: status is 'overtime', OR it's a weekend/holiday with any attendance
@@ -1749,7 +1798,8 @@ async function generateReport() {
                 <td data-label="أيام الحضور">${data.daysPresent} أيام</td>
                 <td data-label="أيام الغياب"><span style="color:${absentDays > 0 ? 'var(--danger)' : 'inherit'}">${absentDays > 0 ? absentDays : 0} أيام</span></td>
                 <td data-label="التأخير"><span style="color:${data.lates > 0 ? 'var(--danger)' : 'inherit'}">${data.lates} مرات</span></td>
-                <td data-label="العمل الإضافي"><span style="color:#3b82f6">${data.overtime || 0} أيام</span></td>
+                <td data-label="أيام العمل الإضافي"><span style="color:#3b82f6">${data.overtime || 0} أيام</span></td>
+                <td data-label="ساعات العمل الإضافي"><span style="color:#3b82f6; font-weight:bold;">${data.overtimeHours.toFixed(2)} س</span></td>
                 <td data-label="لم يتم الانصراف"><span style="color:${data.noCheckout > 0 ? '#f59e0b' : 'inherit'}">${data.noCheckout || 0} أيام</span></td>
                 <td data-label="مبلغ العمل الإضافي"><span style="color:#3b82f6">${data.overtimePay.toFixed(2)} ج.م</span></td>
                 <td data-label="بدل الانتقال">${data.totalTransport.toFixed(2)} ج.م</td>
@@ -1807,17 +1857,18 @@ function exportReportToExcel() {
 
     rows.forEach(row => {
         const cells = row.querySelectorAll('td');
-        if (cells.length >= 9) {
+        if (cells.length >= 10) {
             data.push({
                 'ID الموظف': cells[0].textContent.trim(),
                 'اسم الموظف': cells[1].textContent.trim(),
                 'أيام الحضور': cells[2].textContent.trim(),
                 'أيام الغياب': cells[3].textContent.trim(),
                 'التأخير': cells[4].textContent.trim(),
-                'العمل الإضافي': cells[5].textContent.trim(),
-                'لم يتم الانصراف': cells[6].textContent.trim(),
-                'مبلغ العمل الإضافي': cells[7].textContent.trim(),
-                'بدل الانتقال': cells[8].textContent.trim()
+                'أيام العمل الإضافي': cells[5].textContent.trim(),
+                'ساعات العمل الإضافي': cells[6].textContent.trim(),
+                'لم يتم الانصراف': cells[7].textContent.trim(),
+                'مبلغ العمل الإضافي': cells[8].textContent.trim(),
+                'بدل الانتقال': cells[9].textContent.trim()
             });
         }
     });
@@ -1833,6 +1884,7 @@ function exportReportToExcel() {
         daysAbsent: 0,
         lates: 0,
         overtime: 0,
+        overtimeHours: 0,
         noCheckout: 0,
         overtimePay: 0,
         transport: 0
@@ -1842,14 +1894,15 @@ function exportReportToExcel() {
         totals.daysPresent += parseInt(row['أيام الحضور']) || 0;
         totals.daysAbsent += parseInt(row['أيام الغياب']) || 0;
         totals.lates += parseInt(row['التأخير']) || 0;
-        totals.overtime += parseInt(row['العمل الإضافي']) || 0;
+        totals.overtime += parseInt(row['أيام العمل الإضافي']) || 0;
+        totals.overtimeHours += parseFloat(String(row['ساعات العمل الإضافي'] || '0').replace(/[^0-9.]/g, '')) || 0;
         totals.noCheckout += parseInt(row['لم يتم الانصراف']) || 0;
         totals.overtimePay += parseFloat(row['مبلغ العمل الإضافي'].replace(/[^0-9.]/g, '')) || 0;
         totals.transport += parseFloat(row['بدل الانتقال'].replace(/[^0-9.]/g, '')) || 0;
     });
 
     // Build sheet data
-    const headers = ['ID الموظف', 'اسم الموظف', 'أيام الحضور', 'أيام الغياب', 'التأخير', 'العمل الإضافي', 'لم يتم الانصراف', 'مبلغ العمل الإضافي', 'بدل الانتقال'];
+    const headers = ['ID الموظف', 'اسم الموظف', 'أيام الحضور', 'أيام الغياب', 'التأخير', 'أيام العمل الإضافي', 'ساعات العمل الإضافي', 'لم يتم الانصراف', 'مبلغ العمل الإضافي', 'بدل الانتقال'];
 
     const finalData = [
         ['تقرير الحضور والبدلات - نظام HR'],
@@ -1862,13 +1915,14 @@ function exportReportToExcel() {
             parseInt(row['أيام الحضور']) || 0,
             parseInt(row['أيام الغياب']) || 0,
             parseInt(row['التأخير']) || 0,
-            parseInt(row['العمل الإضافي']) || 0,
+            parseInt(row['أيام العمل الإضافي']) || 0,
+            parseFloat(String(row['ساعات العمل الإضافي'] || '0').replace(/[^0-9.]/g, '')) || 0,
             parseInt(row['لم يتم الانصراف']) || 0,
             parseFloat(row['مبلغ العمل الإضافي'].replace(/[^0-9.]/g, '')) || 0,
             parseFloat(row['بدل الانتقال'].replace(/[^0-9.]/g, '')) || 0
         ]),
         [''], // Empty row before totals
-        ['الإجمالي', '', totals.daysPresent, totals.daysAbsent, totals.lates, totals.overtime, totals.noCheckout, totals.overtimePay, totals.transport]
+        ['الإجمالي', '', totals.daysPresent, totals.daysAbsent, totals.lates, totals.overtime, parseFloat(totals.overtimeHours.toFixed(2)), totals.noCheckout, totals.overtimePay, totals.transport]
     ];
 
     const ws = XLSX.utils.aoa_to_sheet(finalData);
@@ -1880,7 +1934,8 @@ function exportReportToExcel() {
         { wch: 14 }, // Present
         { wch: 14 }, // Absent
         { wch: 12 }, // Late
-        { wch: 15 }, // Overtime
+        { wch: 15 }, // Overtime Days
+        { wch: 18 }, // Overtime Hours
         { wch: 16 }, // No Checkout
         { wch: 20 }, // Overtime Pay
         { wch: 16 }  // Transport
@@ -2188,6 +2243,7 @@ function exportEmployeeDetailedToExcel() {
     const absent = document.getElementById('employeeDetailAbsent').textContent;
     const late = document.getElementById('employeeDetailLate').textContent;
     const overtime = document.getElementById('employeeDetailOvertime').textContent;
+    const overtimeHours = document.getElementById('employeeDetailOvertimeHours')?.textContent || '0.00';
     const overtimePay = document.getElementById('employeeDetailOvertimePay').textContent;
     const transport = document.getElementById('employeeDetailTransport').textContent;
 
@@ -2197,25 +2253,26 @@ function exportEmployeeDetailedToExcel() {
 
     rows.forEach(row => {
         const cells = row.querySelectorAll('td');
-        if (cells.length >= 6) {
+        if (cells.length >= 7) {
             data.push({
                 'التاريخ': cells[0].textContent.trim(),
                 'الموقع': cells[1].textContent.trim(),
                 'وقت الحضور': cells[2].textContent.trim(),
                 'وقت الانصراف': cells[3].textContent.trim(),
                 'الحالة': cells[4].textContent.trim(),
-                'البدل': cells[5].textContent.trim()
+                'ساعات إضافي': cells[5].textContent.trim(),
+                'البدل': cells[6].textContent.trim()
             });
         }
     });
 
-    const headers = ['التاريخ', 'الموقع', 'وقت الحضور', 'وقت الانصراف', 'الحالة', 'البدل'];
+    const headers = ['التاريخ', 'الموقع', 'وقت الحضور', 'وقت الانصراف', 'الحالة', 'ساعات إضافي', 'البدل'];
 
     const finalData = [
         ['التقرير التفصيلي للموظف - نظام HR'],
         [`الموظف: ${employeeName} | الفترة: ${startStr} إلى ${endStr}`],
-        [`أيام الحضور: ${present}  |  أيام الغياب: ${absent}  |  أيام التأخير: ${late}`, '', '', '', '', ''],
-        [`أيام العمل الإضافي: ${overtime}  |  مبلغ العمل الإضافي: ${overtimePay} ج.م  |  إجمالي البدلات: ${transport} ج.م`, '', '', '', '', ''],
+        [`أيام الحضور: ${present}  |  أيام الغياب: ${absent}  |  أيام التأخير: ${late}  |  ساعات العمل الإضافي (بعد 7م): ${overtimeHours} س`, '', '', '', '', '', ''],
+        [`أيام العمل الإضافي: ${overtime}  |  مبلغ العمل الإضافي: ${overtimePay} ج.م  |  إجمالي البدلات: ${transport} ج.م`, '', '', '', '', '', ''],
         [''],
         headers,
         ...data.map(row => [
@@ -2224,6 +2281,7 @@ function exportEmployeeDetailedToExcel() {
             row['وقت الحضور'],
             row['وقت الانصراف'],
             row['الحالة'],
+            row['ساعات إضافي'],
             row['البدل']
         ])
     ];
@@ -2235,7 +2293,8 @@ function exportEmployeeDetailedToExcel() {
         { wch: 22 }, // Site
         { wch: 18 }, // Check In
         { wch: 18 }, // Check Out
-        { wch: 12 }, // Status
+        { wch: 14 }, // Status
+        { wch: 14 }, // Overtime Hours
         { wch: 15 }  // Allowance
     ];
 
@@ -3170,13 +3229,17 @@ function renderSettings(data) {
     // Ensure time values are in HH:mm format for input[type="time"]
     let start = data.workStartTime || "09:00";
     let end = data.workEndTime || "17:00";
+    let overtimeStart = data.overtimeStartTime || "19:00";
 
     // Basic normalization just in case
     if (start.match(/^\d:\d\d$/)) start = "0" + start;
     if (end.match(/^\d:\d\d$/)) end = "0" + end;
+    if (overtimeStart.match(/^\d:\d\d$/)) overtimeStart = "0" + overtimeStart;
 
     document.getElementById('setWorkStartTime').value = start;
     document.getElementById('setWorkEndTime').value = end;
+    const elOtStart = document.getElementById('setOvertimeStartTime');
+    if (elOtStart) elOtStart.value = overtimeStart;
 
     // Email Dashboard settings
     document.getElementById('setEmailDashboardEmails').value = data.emailDashboardEmails || "";
@@ -3214,6 +3277,7 @@ function getWeekendDaysFromUI() {
 async function saveSettings() {
     const workStartTime = document.getElementById('setWorkStartTime').value;
     const workEndTime = document.getElementById('setWorkEndTime').value;
+    const overtimeStartTime = document.getElementById('setOvertimeStartTime')?.value || "19:00";
     const emailDashboardEmails = document.getElementById('setEmailDashboardEmails').value;
     const emailDashboardTime = document.getElementById('setEmailDashboardTime').value;
     const emailDashboardEnabled = document.getElementById('setEmailDashboardEnabled').checked;
@@ -3228,6 +3292,7 @@ async function saveSettings() {
             settings: {
                 workStartTime: workStartTime,
                 workEndTime: workEndTime,
+                overtimeStartTime: overtimeStartTime,
                 emailDashboardEmails: emailDashboardEmails,
                 emailDashboardTime: emailDashboardTime,
                 emailDashboardEnabled: emailDashboardEnabled ? "true" : "false",
@@ -3245,6 +3310,10 @@ async function saveSettings() {
         const result = await res.json();
 
         if (result.success) {
+            appSettings.workStartTime = workStartTime;
+            appSettings.workEndTime = workEndTime;
+            appSettings.overtimeStartTime = overtimeStartTime;
+            appSettings.weekendDays = weekendDays;
             alert("✅ تم حفظ الإعدادات بنجاح");
         } else {
             alert("❌ خطأ: " + result.message);
