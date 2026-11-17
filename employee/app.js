@@ -2598,14 +2598,16 @@ function renderMyReports(data, monthStr) {
 
     let totalLates = lateDates.size; // Only count one late per unique date
     let totalOvertime = overtimeDates.size; // Only count one overtime per unique date
-    let totalOvertimeHours = 0;
+    const afterWorkOvertimeDates = new Set();
     const fullReport = [];
 
     // Add Present Records
     presentRecords.forEach(record => {
         const dateKey = record.checkIn ? record.checkIn.slice(0, 10) : null;
-        const recOtHours = calculateOvertimeHours(record.checkIn, record.checkOut, appSettings.overtimeStartTime || "19:00");
-        totalOvertimeHours += recOtHours;
+        const isAfterWork = calculateOvertimeHours(record.checkIn, record.checkOut, appSettings.overtimeStartTime || "19:00") > 0;
+        if (dateKey && isAfterWork) {
+            afterWorkOvertimeDates.add(dateKey);
+        }
 
         if (dateKey) {
             const transportValue = getCurrentTransportPrice(record);
@@ -2619,7 +2621,7 @@ function renderMyReports(data, monthStr) {
             date: record.checkIn, // Keep as ISO string
             checkIn: record.checkIn,
             checkOut: record.checkOut,
-            overtimeHours: recOtHours,
+            isAfterWorkOvertime: isAfterWork,
             siteName: record.siteName || '-',
             status: record.status, // 'present' or 'late'
             transport: getCurrentTransportPrice(record),
@@ -2700,14 +2702,14 @@ function renderMyReports(data, monthStr) {
                 transportDisplay = `0.00 ج.م`;
             }
 
-            const otDisplay = item.overtimeHours > 0 ? `<span style="color:#60a5fa; font-weight: bold;">${item.overtimeHours.toFixed(1)} س</span>` : '-';
+            const afterWorkDisplay = item.isAfterWorkOvertime ? `<span style="color:#60a5fa; font-weight: bold;">نعم ✓</span>` : '-';
 
             tbody.innerHTML += `
                 <tr style="border-bottom: 1px solid var(--card-border);">
                     <td data-label="التاريخ" style="padding: 8px 5px;">${formatCairoDate(item.checkIn)}</td>
                     <td data-label="الحضور" style="padding: 8px 5px; font-family: monospace;">${formatCairoTime(item.checkIn)}</td>
                     <td data-label="الانصراف" style="padding: 8px 5px; font-family: monospace;">${checkOutDisplay}</td>
-                    <td data-label="إضافي" style="padding: 8px 5px; font-family: monospace;">${otDisplay}</td>
+                    <td data-label="إضافي بعد العمل" style="padding: 8px 5px; font-family: monospace;">${afterWorkDisplay}</td>
                     <td data-label="الموقع" style="padding: 8px 5px; font-size: 0.8rem;">${item.siteName || '-'}</td>
                     <td data-label="الحالة" style="padding: 8px 5px;"><span style="color:${statusColor}; font-weight: bold;">${statusText}</span></td>
                 </tr>
@@ -2753,8 +2755,8 @@ function renderMyReports(data, monthStr) {
     const elTotalOvertime = document.getElementById('empTotalOvertime');
     if (elTotalOvertime) elTotalOvertime.innerText = totalOvertime;
 
-    const elTotalOvertimeHours = document.getElementById('empTotalOvertimeHours');
-    if (elTotalOvertimeHours) elTotalOvertimeHours.innerText = totalOvertimeHours.toFixed(1) + " س";
+    const elTotalAfterWorkOvertimeDays = document.getElementById('empTotalAfterWorkOvertimeDays');
+    if (elTotalAfterWorkOvertimeDays) elTotalAfterWorkOvertimeDays.innerText = afterWorkOvertimeDates.size + " أيام";
 
     const elTotalNoCheckout = document.getElementById('empTotalNoCheckout');
     if (elTotalNoCheckout) elTotalNoCheckout.innerText = totalNoCheckout;
