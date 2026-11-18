@@ -341,73 +341,6 @@ function showSection(id) {
     });
     const target = document.getElementById(id);
     if (target) target.classList.remove('hidden');
-
-    // Update bottom nav & container responsive layout
-    const isAppSection = ['dashboardSection', 'myReportsSection', 'myRequestsSection'].includes(id);
-    const bottomNav = document.getElementById('empBottomNav');
-    const container = document.querySelector('.portal-container');
-    if (bottomNav) {
-        if (isAppSection && currentUser) {
-            bottomNav.classList.remove('hidden');
-            if (container) container.classList.add('logged-in');
-        } else {
-            bottomNav.classList.add('hidden');
-            if (container) container.classList.remove('logged-in');
-        }
-    }
-
-    // Update active nav item
-    document.querySelectorAll('.emp-nav-item').forEach(el => el.classList.remove('active'));
-    if (id === 'dashboardSection') document.getElementById('empNavHome')?.classList.add('active');
-    else if (id === 'myReportsSection') document.getElementById('empNavReports')?.classList.add('active');
-    else if (id === 'myRequestsSection') document.getElementById('empNavRequests')?.classList.add('active');
-}
-
-// Live Cairo Clock for Employee Dashboard
-let liveClockInterval = null;
-function startLiveClock() {
-    if (liveClockInterval) return;
-    function updateClock() {
-        const now = new Date();
-        const timeEl = document.getElementById('empCurrentTimeText');
-        const dateEl = document.getElementById('empCurrentDateText');
-        if (timeEl) {
-            timeEl.innerText = now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        }
-        if (dateEl) {
-            dateEl.innerText = now.toLocaleDateString('ar-EG', { weekday: 'long', day: 'numeric', month: 'long' });
-        }
-    }
-    updateClock();
-    liveClockInterval = setInterval(updateClock, 1000);
-}
-
-function openProfileModal() {
-    if (!currentUser) return;
-    const modal = document.getElementById('empProfileModal');
-    if (!modal) return;
-    
-    document.getElementById('profileModalName').innerText = currentUser.name || 'الموظف';
-    document.getElementById('profileModalEmail').innerText = currentUser.email || '-';
-    document.getElementById('profileModalPhone').innerText = currentUser.phone || '-';
-
-    const bioType = currentUser.biometricType || (currentUser.faceDescriptor ? 'face' : null);
-    let bioLabel = 'غير مسجلة';
-    if (bioType === 'face') bioLabel = 'بصمة الوجه (كاميرا)';
-    else if (bioType === 'fingerprint') bioLabel = 'بصمة الإصبع (جهاز)';
-    else if (bioType === 'face_hardware') bioLabel = 'بصمة الوجه (Face ID)';
-    document.getElementById('profileModalBio').innerText = bioLabel;
-
-    modal.classList.remove('hidden');
-    modal.style.display = 'flex';
-}
-
-function closeProfileModal() {
-    const modal = document.getElementById('empProfileModal');
-    if (modal) {
-        modal.classList.add('hidden');
-        modal.style.display = 'none';
-    }
 }
 
 function checkSession() {
@@ -416,7 +349,6 @@ function checkSession() {
         currentUser = JSON.parse(userJson);
         showSection('dashboardSection');
         document.getElementById('welcomeText').innerText = `مرحباً ${currentUser.name}`;
-        startLiveClock();
         initSystem();
     } else {
         showSection('loginSection');
@@ -1068,44 +1000,16 @@ function setAppState(state, startTime) {
     const btnOut = document.getElementById('btnCheckOut');
     const timerContainer = document.getElementById('timerContainer');
 
-    // Update Smart Shift Card
-    const shiftDot = document.getElementById('empShiftStatusDot');
-    const shiftText = document.getElementById('empShiftStatusText');
-    const shiftSite = document.getElementById('empShiftSiteBadge');
-
     if (state === 'in') {
         btnIn.classList.add('hidden');
         btnOut.classList.remove('hidden');
         timerContainer.classList.remove('hidden');
         startWorkTimer(startTime);
-
-        if (shiftDot) {
-            shiftDot.style.background = '#10b981';
-            shiftDot.style.boxShadow = '0 0 10px #10b981';
-        }
-        if (shiftText) {
-            shiftText.innerText = 'حاضر الآن في العمل 🟢';
-        }
-        if (shiftSite && lastDetectedSite) {
-            shiftSite.innerText = lastDetectedSite.name || 'الفرع المعتمد';
-            shiftSite.style.display = 'inline-block';
-        }
     } else {
         btnIn.classList.remove('hidden');
         btnOut.classList.add('hidden');
         timerContainer.classList.add('hidden');
         stopWorkTimer();
-
-        if (shiftDot) {
-            shiftDot.style.background = '#94a3b8';
-            shiftDot.style.boxShadow = 'none';
-        }
-        if (shiftText) {
-            shiftText.innerText = 'خارج أوقات العمل / لم تسجل حضور ⚪';
-        }
-        if (shiftSite) {
-            shiftSite.style.display = 'none';
-        }
     }
     updateActionButtonsState();
 
